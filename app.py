@@ -26,15 +26,29 @@ st.set_page_config(page_title="No Fuss Quote Pro", page_icon="📦", layout="cen
 
 st.markdown("""
     <style>
+    /* Main Background */
     .main { background-color: #0F111A; }
+    
+    /* Global Label Color Fix - Forced to Black for visibility on light backgrounds */
+    label, .stCheckbox { color: #000000 !important; font-weight: bold !important; }
+    
+    /* Metrics Styling - Keep these bright for the dark boxes */
     [data-testid="stMetricValue"] { color: #00E676 !important; font-size: 32px !important; font-weight: bold !important; }
     [data-testid="stMetricLabel"] { color: #FFFFFF !important; font-size: 14px !important; font-weight: bold !important; }
     div.stMetric { background-color: #1A1D2D; padding: 15px; border-radius: 10px; border: 2px solid #30364D; margin-bottom: 10px; }
-    label { color: white !important; font-weight: bold !important; }
+    
+    /* Button Styling */
     div.stButton > button:first-child {
         background-color: #3D5AFE; color: white; border-radius: 10px; width: 100%; height: 50px; font-weight: bold;
     }
-    .breakdown-box { background-color: #161925; padding: 15px; border-radius: 10px; border: 1px solid #444; margin-top: 20px; }
+    
+    /* Expander/Card Styling */
+    [data-testid="stExpander"] { border: 1px solid #30364D; border-radius: 10px; background-color: #F0F2F6; }
+    
+    /* Specific fix for Section Headers inside main dark area */
+    h1, h2, h3, h4 { color: white !important; }
+    
+    .breakdown-box { background-color: #161925; padding: 15px; border-radius: 10px; border: 1px solid #444; margin-top: 20px; color: white; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -60,7 +74,7 @@ with st.expander("📍 LOGISTICS & DATES", expanded=True):
     start_date = c1.date_input("Hire Start", value=date.today(), format="DD/MM/YYYY")
     end_date = c2.date_input("Hire End", value=date.today(), format="DD/MM/YYYY")
     
-    # Explicit Label for KM
+    # KM Input with Black Label (via CSS)
     km_input = st.number_input("One-Way Distance (KM) from 9 Battery Crt", min_value=0.0, value=0.0, step=1.0)
     
     col_lab, col_cart = st.columns(2)
@@ -105,11 +119,11 @@ labour_final = sum(i["LabourCost"] for i in st.session_state.quote_items) if cha
 cartage_final = (km_input * 4 * 3.50) if charge_cartage else 0.0
 grand_total = hire_final + waiver + labour_final + cartage_final
 
-# --- TOTALS DISPLAY (GRID FIX) ---
+# --- TOTALS DISPLAY ---
 st.divider()
 st.markdown("### 💰 Totals (Ex GST)")
 
-# Use 2x2 grid for standard metrics to ensure alignment
+# Balanced 2x2 Grid
 row1_col1, row1_col2 = st.columns(2)
 row1_col1.metric("TOTAL HIRE", f"${hire_final:,.2f}")
 row1_col2.metric("WAIVER (7%)", f"${waiver:,.2f}")
@@ -120,13 +134,12 @@ row2_col2.metric("CARTAGE", f"${cartage_final:,.2f}")
 
 st.metric("GRAND TOTAL", f"${grand_total:,.2f}")
 
-# --- UNIT RATE BREAKDOWN AT BOTTOM ---
+# --- UNIT RATE BREAKDOWN ---
 if st.session_state.quote_items:
     st.markdown('<div class="breakdown-box">', unsafe_allow_html=True)
     st.markdown("#### 📏 Hire Rate Breakdown (Per SQM)")
     
     for i in st.session_state.quote_items:
-        # Per SQM logic
         first_week_sqm = i["Rate"]
         extra_weeks_sqm = i["Rate"] * (i["Weeks"] - 1)
         system_entry_rate = (i["TotalHire"] / i["Qty"])
