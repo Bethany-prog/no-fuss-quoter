@@ -51,8 +51,9 @@ PRODUCT_CATALOG = {
     "Protectall (sqm)": {"rate": 22.05, "labour": 3.25},
 }
 
-if 'quote_df' not in st.session_state:
-    st.session_state.quote_df = pd.DataFrame(columns=["Qty", "Product", "Unit Price", "Disc %", "Total", "Labour_Internal", "Weeks"])
+# Initialize the main dataframe in session state
+if 'df' not in st.session_state:
+    st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Price", "Disc %", "Total", "Weeks", "Labour_Rate"])
 
 st.title("📦 No Fuss Quoting Engine")
 
@@ -80,10 +81,11 @@ if st.button("ADD TO QUOTE"):
         days = (end_date - start_date).days
         weeks = math.ceil(days / 7) if days > 0 else 1
         base_rate = adj_rate if adj_rate > 0 else PRODUCT_CATALOG[item_choice]["rate"]
+        labour_r = PRODUCT_CATALOG[item_choice]["labour"]
         
-        # Calculate Subtotal
-        subtotal_pre_disc = (qty_in * base_rate) + (qty_in * base_rate * (weeks - 1))
-        final_total = subtotal_pre_disc * (1 - (discount_pct / 100))
+        # Calculate Initial Total
+        subtotal = (qty_in * base_rate) + (qty_in * base_rate * (weeks - 1))
+        final_total = subtotal * (1 - (discount_pct / 100))
         
         new_row = pd.DataFrame([{
             "Qty": qty_in,
@@ -91,47 +93,39 @@ if st.button("ADD TO QUOTE"):
             "Unit Price": base_rate,
             "Disc %": discount_pct,
             "Total": final_total,
-            "Labour_Internal": qty_in * PRODUCT_CATALOG[item_choice]["labour"],
-            "Weeks": weeks
+            "Weeks": weeks,
+            "Labour_Rate": labour_r
         }])
-        st.session_state.quote_df = pd.concat([st.session_state.quote_df, new_row], ignore_index=True)
+        st.session_state.df = pd.concat([st.session_state.df, new_row], ignore_index=True)
         st.rerun()
 
 # --- THE GRIDS ---
-if not st.session_state.quote_df.empty:
+if not st.session_state.df.empty:
     st.markdown("### 🏗️ FLOORING")
     
-    # Use the data editor and capture changes
+    # Capture edits directly from the grid
     edited_df = st.data_editor(
-        st.session_state.quote_df[["Qty", "Product", "Unit Price", "Disc %", "Total"]],
+        st.session_state.df,
+        column_order=("Qty", "Product", "Unit Price", "Disc %", "Total"),
         num_rows="dynamic",
         use_container_width=True,
-        key="main_editor"
+        key="editor"
     )
-    
-    # Check if a row was deleted or changed in the editor and sync back
-    if len(edited_df) != len(st.session_state.quote_df):
-        # Find which index remains to keep the internal math rows aligned
-        st.session_state.quote_df = st.session_state.quote_df.iloc[edited_df.index]
-        st.rerun()
 
-    # Recalculate Totals based on Editor changes (Discount/Qty/Price)
-    st.session_state.quote_df["Qty"] = edited_df["Qty"]
-    st.session_state.quote_items_total = [] # Temporary list for correct math
-    
-    # Update Math for all rows
-    for index, row in st.session_state.quote_df.iterrows():
-        weeks = row["Weeks"]
-        qty = edited_df.at[index, "Qty"]
-        u_price = edited_df.at[index, "Unit Price"]
-        disc = edited_df.at[index, "Disc %"]
-        
-        # Recalculate Total and Labour based on current grid values
-        new_hire = (qty * u_price) + (qty * u_price * (weeks - 1))
-        new_total = new_hire * (1 - (disc / 100))
-        
-        st.session_state.quote_df.at[index, "Total"] = new_total
-        st.session_state.quote_df.at[index, "Labour_Internal"] = qty * PRODUCT_CATALOG[row["Product"]]["labour"]
+    # MANDATORY SYNC: This ensures manual edits to Qty/Price/Discount update the totals and labour
+    if not edited_df.equals(st.session_state.df):
+        for index, row in edited_df.iterrows():
+            # Recalculate based on possibly edited values
+            w = row["Weeks"]
+            q = row["Qty"]
+            p = row["Unit Price"]
+            d = row["Disc %"]
+            
+            sub = (q * p) + (q * p * (w - 1))
+            edited_df.at[index, "Total"] = sub * (1 - (d / 100))
+            
+        st.session_state.df = edited_df
+        st.rerun()
 
     # 2. CARTAGE GRID
     if charge_cartage:
@@ -142,17 +136,19 @@ if not st.session_state.quote_df.empty:
     # 3. LABOUR GRID
     if charge_labour:
         st.markdown("### 👷 LABOUR")
-        lab_total_sum = st.session_state.quote_df["Labour_Internal"].sum()
-        st.table([{"QTY": 1, "Description": "Crew", "Price": f"${lab_total_sum:,.2f}"}])
+        # Calculate labour based on edited Qty and fixed Labour Rate
+        lab_sum = (st.session_state.df["Qty"] * st.session_state.df["Labour_Rate"]).sum()
+        st.table([{"QTY": 1, "Description": "Crew", "Price": f"${lab_sum:,.2f}"}])
 
     # FINAL CALCULATIONS
-    pure_hire = st.session_state.quote_df["Total"].sum()
+    pure_hire = st.session_state.df["Total"].sum()
     hire_final = max(300.0, pure_hire)
     waiver = hire_final * 0.07
     cart_final = (km_input * 4 * 3.50) if charge_cartage else 0.0
-    lab_final = st.session_state.quote_df["Labour_Internal"].sum() if charge_labour else 0.0
+    lab_final = (st.session_state.df["Qty"] * st.session_state.df["Labour_Rate"]).sum() if charge_labour else 0.0
     grand_total = hire_final + waiver + cart_final + lab_final
 
+    # --- TOTALS METRICS ---
     st.divider()
     st.markdown("### 💰 SUMMARY (EX GST)")
     m1, m2, m3, m4 = st.columns(4)
@@ -162,24 +158,20 @@ if not st.session_state.quote_df.empty:
     m4.metric("CARTAGE", f"${cart_final:,.2f}")
     st.metric("GRAND TOTAL", f"${grand_total:,.2f}")
     
-    # --- DYNAMIC COPY BLOCKS ---
+    # --- DYNAMIC SYSTEM TEXT (Matches Grid exactly) ---
     st.markdown("### 📋 QUOTE TEXT FOR SYSTEM")
-    for index, row in st.session_state.quote_df.iterrows():
-        # Dynamic calculation based on current edited values
-        curr_qty = row["Qty"]
-        curr_price = row["Unit Price"]
-        curr_labour = row["Labour_Internal"]
-        curr_weeks = row["Weeks"]
-        
-        initial_week = curr_price + (curr_labour / curr_qty) if curr_qty > 0 else 0
+    for index, row in st.session_state.df.iterrows():
+        # Math for the text blocks based on current row state
+        init_week = row["Unit Price"] + row["Labour_Rate"]
+        sub_week = row["Unit Price"]
         
         copy_block = (
-            f"PRICING BASED ON {curr_weeks} WEEK HIRE PERIOD\n"
-            f"Price for Initial Week's Hire including installation & removal = ${initial_week:.2f}/sqm + GST\n"
-            f"Price for each Subsequent Week's Hire = ${curr_price:.2f}/sqm + GST"
+            f"PRICING BASED ON {row['Weeks']} WEEK HIRE PERIOD\n"
+            f"Price for Initial Week's Hire including installation & removal = ${init_week:.2f}/sqm + GST\n"
+            f"Price for each Subsequent Week's Hire = ${sub_week:.2f}/sqm + GST"
         )
         st.text_area(f"Copy for {row['Product']} (Row {index+1}):", value=copy_block, height=110)
 
     if st.button("RESET ALL"):
-        st.session_state.quote_df = pd.DataFrame(columns=["Qty", "Product", "Unit Price", "Disc %", "Total", "Labour_Internal", "Weeks"])
+        st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Price", "Disc %", "Total", "Weeks", "Labour_Rate"])
         st.rerun()
