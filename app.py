@@ -40,30 +40,30 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# 3. CORRECTED & ALPHABETIZED PRODUCT CATALOG
-# Rates based on October 2025 Price List
+# 3. DYNAMIC PRICE CATALOG (Based on Oct 2025 Price List)
+# rate = Standard weekly rate | period_rate = Discounted 4-week rate
 PRODUCT_CATALOG = {
-    "Black Plastic (sqm)": {"rate": 0.90, "labour": 0.00},
-    "Carpet Tiles - Onyx (sqm)": {"rate": 8.85, "labour": 3.05},
-    "Enkamat Underlay (sqm)": {"rate": 2.60, "labour": 0.00},
-    "Geotextile Underlay (sqm)": {"rate": 2.60, "labour": 0.00},
-    "I-Trac (sqm)": {"rate": 8.95, "initial_week": 21.70, "labour": 4.65}, # Corrected I-Trac logic
-    "LD 20 Roll (3m x 20m)": {"rate": 1800.00, "labour": 0.00},
-    "No Fuss Floor - Grey/Green (sqm)": {"rate": 7.10, "labour": 3.05},
-    "No Fuss Floor Ramp 1m (ea)": {"rate": 6.60, "labour": 0.00},
-    "No Fuss Expansion Joiner 1.2m (ea)": {"rate": 6.60, "labour": 0.00},
-    "Parquetry Dance Floor (sqm)": {"rate": 20.95, "labour": 4.80},
-    "Plastorip (sqm)": {"rate": 10.15, "labour": 3.05},
-    "Plastorip Edging (lm)": {"rate": 1.65, "labour": 0.00},
-    "Plastorip Expansion Joiner 1m (ea)": {"rate": 12.15, "labour": 0.00},
-    "Protectall (sqm)": {"rate": 22.05, "labour": 3.25},
-    "Supa-Trac (sqm)": {"rate": 11.55, "labour": 4.65},
-    "Supa-Trac Edging (lm)": {"rate": 6.70, "labour": 0.00},
-    "Terratrak Plus (sqm)": {"rate": 23.40, "labour": 4.65},
-    "Trakmats (ea)": {"rate": 23.20, "labour": 5.85},
-    "Trakmat Joiners 2 hole (ea)": {"rate": 4.40, "labour": 0.00},
-    "Trakmat Joiners 4 hole (ea)": {"rate": 11.95, "labour": 0.00},
-    "Wooden Floor (sqm)": {"rate": 8.85, "labour": 7.15},
+    "Black Plastic (sqm)": {"rate": 0.90, "period_rate": 0.90, "labour": 0.00},
+    "Carpet Tiles - Onyx (sqm)": {"rate": 8.85, "period_rate": 8.85, "labour": 3.05},
+    "Enkamat Underlay (sqm)": {"rate": 2.60, "period_rate": 2.60, "labour": 0.00},
+    "Geotextile Underlay (sqm)": {"rate": 2.60, "period_rate": 2.60, "labour": 0.00},
+    "I-Trac (sqm)": {"rate": 11.75, "period_rate": 8.95, "initial_week": 21.70, "labour": 4.65},
+    "LD 20 Roll (3m x 20m)": {"rate": 1800.00, "period_rate": 1800.00, "labour": 0.00},
+    "No Fuss Floor - Grey/Green (sqm)": {"rate": 7.10, "period_rate": 7.10, "labour": 3.05},
+    "No Fuss Floor Ramp 1m (ea)": {"rate": 6.60, "period_rate": 6.60, "labour": 0.00},
+    "No Fuss Expansion Joiner 1.2m (ea)": {"rate": 6.60, "period_rate": 6.60, "labour": 0.00},
+    "Parquetry Dance Floor (sqm)": {"rate": 20.95, "period_rate": 20.95, "labour": 4.80},
+    "Plastorip (sqm)": {"rate": 10.15, "period_rate": 10.15, "labour": 3.05},
+    "Plastorip Edging (lm)": {"rate": 1.65, "period_rate": 1.65, "labour": 0.00},
+    "Plastorip Expansion Joiner 1m (ea)": {"rate": 12.15, "period_rate": 12.15, "labour": 0.00},
+    "Protectall (sqm)": {"rate": 22.05, "period_rate": 22.05, "labour": 3.25},
+    "Supa-Trac (sqm)": {"rate": 11.55, "period_rate": 11.55, "labour": 4.65},
+    "Supa-Trac Edging (lm)": {"rate": 6.70, "period_rate": 6.70, "labour": 0.00},
+    "Terratrak Plus (sqm)": {"rate": 23.40, "period_rate": 23.40, "labour": 4.65},
+    "Trakmats (ea)": {"rate": 23.20, "period_rate": 23.20, "labour": 5.85},
+    "Trakmat Joiners 2 hole (ea)": {"rate": 4.40, "period_rate": 4.40, "labour": 0.00},
+    "Trakmat Joiners 4 hole (ea)": {"rate": 11.95, "period_rate": 11.95, "labour": 0.00},
+    "Wooden Floor (sqm)": {"rate": 8.85, "period_rate": 8.85, "labour": 7.15},
 }
 
 if 'df' not in st.session_state:
@@ -82,6 +82,7 @@ with st.expander("📍 LOGISTICS & DATES", expanded=True):
     charge_labour = col_lab.checkbox("Include Labour/Crew?", value=True)
     charge_cartage = col_cart.checkbox("Include Cartage?", value=True)
 
+# LIVE WEEKS CALCULATION
 days_diff = (end_date - start_date).days
 live_weeks = math.ceil(days_diff / 7) if days_diff > 0 else 1
 
@@ -96,6 +97,7 @@ discount_pct = c_d.number_input("Discount %", min_value=0.0, max_value=100.0, va
 if st.button("ADD TO QUOTE"):
     if qty_in and qty_in > 0:
         is_itrac = "I-Trac" in item_choice
+        # Determine standard rate for initial selection
         base_rate = adj_rate if (adj_rate and adj_rate > 0) else PRODUCT_CATALOG[item_choice]["rate"]
         labour_r = PRODUCT_CATALOG[item_choice]["labour"]
         
@@ -111,19 +113,26 @@ if st.button("ADD TO QUOTE"):
         st.session_state.df = pd.concat([st.session_state.df, new_row], ignore_index=True)
         st.rerun()
 
-# --- CALCULATION LOOP ---
+# --- LIVE DYNAMIC CALCULATION LOOP ---
 if not st.session_state.df.empty:
     for idx, row in st.session_state.df.iterrows():
         q, p, d = row["Qty"], row["Unit Price"], row["Disc %"]
+        item_ref = row["Product"]
+        
+        # Determine if we use standard rate or period discount rate (4+ weeks)
+        current_rate = PRODUCT_CATALOG[item_ref]["period_rate"] if live_weeks >= 4 else PRODUCT_CATALOG[item_ref]["rate"]
         
         if row["Is_ITrac"]:
-            # Corrected I-Trac logic: $21.70 first week + $8.95 each sub week
+            # I-Trac specific tiered logic from PDF
             initial = PRODUCT_CATALOG["I-Trac (sqm)"]["initial_week"]
-            hire_val = (q * initial) + (q * p * (live_weeks - 1))
+            hire_val = (q * initial) + (q * current_rate * (live_weeks - 1))
         else:
-            hire_val = (q * p) + (q * p * (live_weeks - 1))
+            # Standard Item Logic
+            hire_val = (q * current_rate) + (q * current_rate * (live_weeks - 1))
             
         st.session_state.df.at[idx, "Total"] = hire_val * (1 - (d / 100))
+        # Keep Unit Price visually accurate in the grid
+        st.session_state.df.at[idx, "Unit Price"] = current_rate
 
     st.markdown("### 🏗️ FLOORING")
     edited_df = st.data_editor(st.session_state.df[["Qty", "Product", "Unit Price", "Disc %", "Total"]], num_rows="dynamic", use_container_width=True, key="editor")
@@ -132,7 +141,7 @@ if not st.session_state.df.empty:
         st.session_state.df.update(edited_df)
         st.rerun()
 
-    # Final Summary math
+    # Final Totals
     pure_hire = st.session_state.df["Total"].sum()
     hire_final = max(300.0, pure_hire)
     waiver = hire_final * 0.07
@@ -150,13 +159,17 @@ if not st.session_state.df.empty:
     
     # --- DYNAMIC SYSTEM TEXT ---
     st.markdown("### 📋 QUOTE TEXT FOR SYSTEM")
+    st.caption(f"Pricing dynamically adjusted for a {live_weeks} week hire period.")
     for idx, row in st.session_state.df.iterrows():
+        item_ref = row["Product"]
+        current_rate = PRODUCT_CATALOG[item_ref]["period_rate"] if live_weeks >= 4 else PRODUCT_CATALOG[item_ref]["rate"]
+        
         if row["Is_ITrac"]:
             init = PRODUCT_CATALOG["I-Trac (sqm)"]["initial_week"]
-            sub = row["Unit Price"]
+            sub = current_rate
         else:
-            init = row["Unit Price"] + row["Labour_Rate"]
-            sub = row["Unit Price"]
+            init = current_rate + row["Labour_Rate"]
+            sub = current_rate
             
         copy_block = (
             f"PRICING BASED ON {live_weeks} WEEK HIRE PERIOD\n"
