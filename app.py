@@ -51,7 +51,6 @@ PRODUCT_CATALOG = {
     "Protectall (sqm)": {"rate": 22.05, "labour": 3.25},
 }
 
-# Initialize the main dataframe in session state
 if 'df' not in st.session_state:
     st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Price", "Disc %", "Total", "Weeks", "Labour_Rate"])
 
@@ -83,7 +82,6 @@ if st.button("ADD TO QUOTE"):
         base_rate = adj_rate if adj_rate > 0 else PRODUCT_CATALOG[item_choice]["rate"]
         labour_r = PRODUCT_CATALOG[item_choice]["labour"]
         
-        # Calculate Initial Total
         subtotal = (qty_in * base_rate) + (qty_in * base_rate * (weeks - 1))
         final_total = subtotal * (1 - (discount_pct / 100))
         
@@ -103,7 +101,7 @@ if st.button("ADD TO QUOTE"):
 if not st.session_state.df.empty:
     st.markdown("### 🏗️ FLOORING")
     
-    # Capture edits directly from the grid
+    # Grid Editor - Syncs directly to session state
     edited_df = st.data_editor(
         st.session_state.df,
         column_order=("Qty", "Product", "Unit Price", "Disc %", "Total"),
@@ -112,35 +110,30 @@ if not st.session_state.df.empty:
         key="editor"
     )
 
-    # MANDATORY SYNC: This ensures manual edits to Qty/Price/Discount update the totals and labour
+    # RE-SYNC AND RE-CALC ON EVERY CHANGE
     if not edited_df.equals(st.session_state.df):
         for index, row in edited_df.iterrows():
-            # Recalculate based on possibly edited values
             w = row["Weeks"]
             q = row["Qty"]
             p = row["Unit Price"]
             d = row["Disc %"]
-            
             sub = (q * p) + (q * p * (w - 1))
             edited_df.at[index, "Total"] = sub * (1 - (d / 100))
-            
         st.session_state.df = edited_df
         st.rerun()
 
-    # 2. CARTAGE GRID
+    # CARTAGE AND LABOUR TABLES
     if charge_cartage:
         st.markdown("### 🚚 CARTAGE")
         cart_price = km_input * 4 * 3.50
         st.table([{"QTY": 1, "Description": "Cartage", "Price": f"${cart_price:,.2f}"}])
 
-    # 3. LABOUR GRID
     if charge_labour:
         st.markdown("### 👷 LABOUR")
-        # Calculate labour based on edited Qty and fixed Labour Rate
         lab_sum = (st.session_state.df["Qty"] * st.session_state.df["Labour_Rate"]).sum()
         st.table([{"QTY": 1, "Description": "Crew", "Price": f"${lab_sum:,.2f}"}])
 
-    # FINAL CALCULATIONS
+    # SUMMARY CALCULATIONS
     pure_hire = st.session_state.df["Total"].sum()
     hire_final = max(300.0, pure_hire)
     waiver = hire_final * 0.07
@@ -148,7 +141,6 @@ if not st.session_state.df.empty:
     lab_final = (st.session_state.df["Qty"] * st.session_state.df["Labour_Rate"]).sum() if charge_labour else 0.0
     grand_total = hire_final + waiver + cart_final + lab_final
 
-    # --- TOTALS METRICS ---
     st.divider()
     st.markdown("### 💰 SUMMARY (EX GST)")
     m1, m2, m3, m4 = st.columns(4)
@@ -161,7 +153,7 @@ if not st.session_state.df.empty:
     # --- DYNAMIC SYSTEM TEXT (Matches Grid exactly) ---
     st.markdown("### 📋 QUOTE TEXT FOR SYSTEM")
     for index, row in st.session_state.df.iterrows():
-        # Math for the text blocks based on current row state
+        # Text math based on currently edited Unit Price and Labour Rate
         init_week = row["Unit Price"] + row["Labour_Rate"]
         sub_week = row["Unit Price"]
         
