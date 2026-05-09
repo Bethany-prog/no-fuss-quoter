@@ -26,40 +26,43 @@ st.set_page_config(page_title="No Fuss Quote Pro", page_icon="📦", layout="cen
 
 st.markdown("""
     <style>
-    /* Main Background */
     .main { background-color: #0F111A; }
-    
-    /* Global Label Color Fix - Forced to Black for visibility on light backgrounds */
     label, .stCheckbox { color: #000000 !important; font-weight: bold !important; }
-    
-    /* Metrics Styling - Keep these bright for the dark boxes */
     [data-testid="stMetricValue"] { color: #00E676 !important; font-size: 32px !important; font-weight: bold !important; }
     [data-testid="stMetricLabel"] { color: #FFFFFF !important; font-size: 14px !important; font-weight: bold !important; }
     div.stMetric { background-color: #1A1D2D; padding: 15px; border-radius: 10px; border: 2px solid #30364D; margin-bottom: 10px; }
-    
-    /* Button Styling */
     div.stButton > button:first-child {
         background-color: #3D5AFE; color: white; border-radius: 10px; width: 100%; height: 50px; font-weight: bold;
     }
-    
-    /* Expander/Card Styling */
     [data-testid="stExpander"] { border: 1px solid #30364D; border-radius: 10px; background-color: #F0F2F6; }
-    
-    /* Specific fix for Section Headers inside main dark area */
     h1, h2, h3, h4 { color: white !important; }
-    
     .breakdown-box { background-color: #161925; padding: 15px; border-radius: 10px; border: 1px solid #444; margin-top: 20px; color: white; }
     </style>
     """, unsafe_allow_html=True)
 
-# 3. PRODUCT DATA
+# 3. FULL PRODUCT CATALOG (RESTORING ALL ITEMS)
 PRODUCT_CATALOG = {
     "I-Trac (sqm)": {"rate": 23.40, "labour": 4.65},
+    "Ramp for I-Trac (ea)": {"rate": 42.00, "labour": 0.00},
     "Supa-Trac (sqm)": {"rate": 11.55, "labour": 4.65},
+    "Supa-Trac Edging (lm)": {"rate": 6.70, "labour": 0.00},
+    "Trakmats (ea)": {"rate": 23.20, "labour": 5.85},
+    "Trakmat Joiners 4 hole (ea)": {"rate": 11.95, "labour": 0.00},
+    "Trakmat Joiners 2 hole (ea)": {"rate": 4.40, "labour": 0.00},
+    "LD 20 Roll (3m x 20m)": {"rate": 1800.00, "labour": 0.00},
     "No Fuss Floor - Grey/Green (sqm)": {"rate": 7.10, "labour": 3.05},
+    "No Fuss Floor Ramp 1m (ea)": {"rate": 6.60, "labour": 0.00},
+    "No Fuss Expansion Joiner 1.2m (ea)": {"rate": 6.60, "labour": 0.00},
+    "Plastorip (sqm)": {"rate": 10.15, "labour": 3.05},
+    "Plastorip Edging (lm)": {"rate": 1.65, "labour": 0.00},
+    "Plastorip Expansion Joiner 1m (ea)": {"rate": 12.15, "labour": 0.00},
     "Terratrak Plus (sqm)": {"rate": 23.40, "labour": 4.65},
+    "Enkamat Underlay (sqm)": {"rate": 2.60, "labour": 0.00},
+    "Geotextile Underlay (sqm)": {"rate": 2.60, "labour": 0.00},
+    "Black Plastic (sqm)": {"rate": 0.90, "labour": 0.00},
     "Wooden Floor (sqm)": {"rate": 8.85, "labour": 7.15},
     "Parquetry Dance Floor (sqm)": {"rate": 20.95, "labour": 4.80},
+    "Carpet Tiles - Onyx (sqm)": {"rate": 8.85, "labour": 3.05},
     "Protectall (sqm)": {"rate": 22.05, "labour": 3.25},
 }
 
@@ -74,7 +77,6 @@ with st.expander("📍 LOGISTICS & DATES", expanded=True):
     start_date = c1.date_input("Hire Start", value=date.today(), format="DD/MM/YYYY")
     end_date = c2.date_input("Hire End", value=date.today(), format="DD/MM/YYYY")
     
-    # KM Input with Black Label (via CSS)
     km_input = st.number_input("One-Way Distance (KM) from 9 Battery Crt", min_value=0.0, value=0.0, step=1.0)
     
     col_lab, col_cart = st.columns(2)
@@ -84,7 +86,7 @@ with st.expander("📍 LOGISTICS & DATES", expanded=True):
 # --- ADD ITEM ---
 st.markdown("### ➕ Add Line Item")
 item_choice = st.selectbox("Select Product", sorted(PRODUCT_CATALOG.keys()))
-qty = st.number_input("Quantity (sqm)", min_value=0.0, value=0.0)
+qty = st.number_input("Quantity (sqm/ea/lm)", min_value=0.0, value=0.0)
 
 if st.button("ADD TO QUOTE"):
     if qty > 0:
@@ -111,7 +113,7 @@ if st.session_state.quote_items:
         st.session_state.quote_items = []
         st.rerun()
 
-# --- TOTALS CALCULATION ---
+# --- TOTALS ---
 raw_hire = sum(i["TotalHire"] for i in st.session_state.quote_items)
 hire_final = max(300.0, raw_hire) if st.session_state.quote_items else 0.0
 waiver = hire_final * 0.07
@@ -119,35 +121,33 @@ labour_final = sum(i["LabourCost"] for i in st.session_state.quote_items) if cha
 cartage_final = (km_input * 4 * 3.50) if charge_cartage else 0.0
 grand_total = hire_final + waiver + labour_final + cartage_final
 
-# --- TOTALS DISPLAY ---
 st.divider()
 st.markdown("### 💰 Totals (Ex GST)")
 
-# Balanced 2x2 Grid
-row1_col1, row1_col2 = st.columns(2)
-row1_col1.metric("TOTAL HIRE", f"${hire_final:,.2f}")
-row1_col2.metric("WAIVER (7%)", f"${waiver:,.2f}")
+r1c1, r1c2 = st.columns(2)
+r1c1.metric("TOTAL HIRE", f"${hire_final:,.2f}")
+r1c2.metric("WAIVER (7%)", f"${waiver:,.2f}")
 
-row2_col1, row2_col2 = st.columns(2)
-row2_col1.metric("LABOUR", f"${labour_final:,.2f}")
-row2_col2.metric("CARTAGE", f"${cartage_final:,.2f}")
+r2c1, r2c2 = st.columns(2)
+r2c1.metric("LABOUR", f"${labour_final:,.2f}")
+r2c2.metric("CARTAGE", f"${cartage_final:,.2f}")
 
 st.metric("GRAND TOTAL", f"${grand_total:,.2f}")
 
-# --- UNIT RATE BREAKDOWN ---
+# --- BREAKDOWN ---
 if st.session_state.quote_items:
     st.markdown('<div class="breakdown-box">', unsafe_allow_html=True)
-    st.markdown("#### 📏 Hire Rate Breakdown (Per SQM)")
+    st.markdown("#### 📏 Hire Rate Breakdown (Per Unit)")
     
     for i in st.session_state.quote_items:
-        first_week_sqm = i["Rate"]
-        extra_weeks_sqm = i["Rate"] * (i["Weeks"] - 1)
+        first_week_unit = i["Rate"]
+        extra_weeks_unit = i["Rate"] * (i["Weeks"] - 1)
         system_entry_rate = (i["TotalHire"] / i["Qty"])
         
         st.write(f"**{i['Item']}**")
-        st.write(f"- First week of hire: **${first_week_sqm:,.2f} per sqm**")
+        st.write(f"- First week rate: **${first_week_unit:,.2f}**")
         if i["Weeks"] > 1:
-            st.write(f"- Additional {i['Weeks']-1} weeks total: **${extra_weeks_sqm:,.2f} per sqm**")
+            st.write(f"- Additional {i['Weeks']-1} weeks total: **${extra_weeks_unit:,.2f}**")
         
         st.success(f"**RATE TO ENTER IN SYSTEM: ${system_entry_rate:.2f}**")
         st.markdown("---")
