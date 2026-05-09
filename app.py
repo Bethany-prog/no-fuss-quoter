@@ -52,7 +52,7 @@ PRODUCT_CATALOG = {
 }
 
 if 'df' not in st.session_state:
-    st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Price", "Disc %", "Total", "Weeks", "Labour_Rate"])
+    st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Price", "Disc %", "Total", "Labour_Rate"])
 
 st.title("📦 No Fuss Quoting Engine")
 
@@ -61,86 +61,75 @@ with st.expander("📍 LOGISTICS & DATES", expanded=True):
     c1, c2, c3 = st.columns(3)
     start_date = c1.date_input("Hire Start", value=date.today(), format="DD/MM/YYYY")
     end_date = c2.date_input("Hire End", value=date.today(), format="DD/MM/YYYY")
-    km_input = c3.number_input("Distance (KM)", min_value=0.0, value=0.0)
+    # value=None removes the 0.00 default
+    km_input = c3.number_input("Distance (KM)", min_value=0.0, value=None, placeholder="Type KM...")
     
     col_lab, col_cart = st.columns(2)
     charge_labour = col_lab.checkbox("Include Labour/Crew?", value=True)
     charge_cartage = col_cart.checkbox("Include Cartage?", value=True)
 
+# Calculate live weeks based on currently selected dates
+days_diff = (end_date - start_date).days
+live_weeks = math.ceil(days_diff / 7) if days_diff > 0 else 1
+
 # --- ADD PRODUCT ---
 st.markdown("### ➕ ADD PRODUCT")
 item_choice = st.selectbox("Select Product", sorted(PRODUCT_CATALOG.keys()))
 c_q, c_a, c_d = st.columns([2, 2, 2])
-qty_in = c_q.number_input("Quantity", min_value=0.0, value=0.0)
-adj_rate = c_a.number_input("Override Rate", min_value=0.0, value=0.0)
-discount_pct = c_d.number_input("Discount %", min_value=0.0, max_value=100.0, value=0.0)
+# value=None removes the 0.00 default for faster filling
+qty_in = c_q.number_input("Quantity", min_value=0.0, value=None, placeholder="Type Qty...")
+adj_rate = c_a.number_input("Override Rate", min_value=0.0, value=None, placeholder="Standard Rate...")
+discount_pct = c_d.number_input("Discount %", min_value=0.0, max_value=100.0, value=None, placeholder="0%")
 
 if st.button("ADD TO QUOTE"):
-    if qty_in > 0:
-        days = (end_date - start_date).days
-        weeks = math.ceil(days / 7) if days > 0 else 1
-        base_rate = adj_rate if adj_rate > 0 else PRODUCT_CATALOG[item_choice]["rate"]
+    if qty_in and qty_in > 0:
+        base_rate = adj_rate if (adj_rate and adj_rate > 0) else PRODUCT_CATALOG[item_choice]["rate"]
         labour_r = PRODUCT_CATALOG[item_choice]["labour"]
-        
-        subtotal = (qty_in * base_rate) + (qty_in * base_rate * (weeks - 1))
-        final_total = subtotal * (1 - (discount_pct / 100))
+        final_disc = discount_pct if discount_pct else 0.0
         
         new_row = pd.DataFrame([{
             "Qty": qty_in,
             "Product": item_choice,
             "Unit Price": base_rate,
-            "Disc %": discount_pct,
-            "Total": final_total,
-            "Weeks": weeks,
+            "Disc %": final_disc,
+            "Total": 0.0, 
             "Labour_Rate": labour_r
         }])
         st.session_state.df = pd.concat([st.session_state.df, new_row], ignore_index=True)
         st.rerun()
 
-# --- THE GRIDS ---
+# --- LIVE SYNC AND CALCULATION LOOP ---
 if not st.session_state.df.empty:
+    for index, row in st.session_state.df.iterrows():
+        q = row["Qty"]
+        p = row["Unit Price"]
+        d = row["Disc %"]
+        hire_pre_disc = (q * p) + (q * p * (live_weeks - 1))
+        st.session_state.df.at[index, "Total"] = hire_pre_disc * (1 - (d / 100))
+
     st.markdown("### 🏗️ FLOORING")
-    
-    # Grid Editor - Syncs directly to session state
     edited_df = st.data_editor(
         st.session_state.df,
         column_order=("Qty", "Product", "Unit Price", "Disc %", "Total"),
         num_rows="dynamic",
         use_container_width=True,
-        key="editor"
+        key="live_editor"
     )
 
-    # RE-SYNC AND RE-CALC ON EVERY CHANGE
     if not edited_df.equals(st.session_state.df):
-        for index, row in edited_df.iterrows():
-            w = row["Weeks"]
-            q = row["Qty"]
-            p = row["Unit Price"]
-            d = row["Disc %"]
-            sub = (q * p) + (q * p * (w - 1))
-            edited_df.at[index, "Total"] = sub * (1 - (d / 100))
         st.session_state.df = edited_df
         st.rerun()
 
-    # CARTAGE AND LABOUR TABLES
-    if charge_cartage:
-        st.markdown("### 🚚 CARTAGE")
-        cart_price = km_input * 4 * 3.50
-        st.table([{"QTY": 1, "Description": "Cartage", "Price": f"${cart_price:,.2f}"}])
-
-    if charge_labour:
-        st.markdown("### 👷 LABOUR")
-        lab_sum = (st.session_state.df["Qty"] * st.session_state.df["Labour_Rate"]).sum()
-        st.table([{"QTY": 1, "Description": "Crew", "Price": f"${lab_sum:,.2f}"}])
-
-    # SUMMARY CALCULATIONS
+    # Final math
+    km_val = km_input if km_input else 0.0
+    cart_final = (km_val * 4 * 3.50) if charge_cartage else 0.0
+    lab_final = (st.session_state.df["Qty"] * st.session_state.df["Labour_Rate"]).sum() if charge_labour else 0.0
     pure_hire = st.session_state.df["Total"].sum()
     hire_final = max(300.0, pure_hire)
     waiver = hire_final * 0.07
-    cart_final = (km_input * 4 * 3.50) if charge_cartage else 0.0
-    lab_final = (st.session_state.df["Qty"] * st.session_state.df["Labour_Rate"]).sum() if charge_labour else 0.0
     grand_total = hire_final + waiver + cart_final + lab_final
 
+    # --- TOTALS METRICS ---
     st.divider()
     st.markdown("### 💰 SUMMARY (EX GST)")
     m1, m2, m3, m4 = st.columns(4)
@@ -150,20 +139,20 @@ if not st.session_state.df.empty:
     m4.metric("CARTAGE", f"${cart_final:,.2f}")
     st.metric("GRAND TOTAL", f"${grand_total:,.2f}")
     
-    # --- DYNAMIC SYSTEM TEXT (Matches Grid exactly) ---
+    # --- DYNAMIC SYSTEM TEXT ---
     st.markdown("### 📋 QUOTE TEXT FOR SYSTEM")
+    st.info(f"Pricing below is calculated based on a **{live_weeks} week** hire period.")
+    
     for index, row in st.session_state.df.iterrows():
-        # Text math based on currently edited Unit Price and Labour Rate
         init_week = row["Unit Price"] + row["Labour_Rate"]
         sub_week = row["Unit Price"]
-        
         copy_block = (
-            f"PRICING BASED ON {row['Weeks']} WEEK HIRE PERIOD\n"
+            f"PRICING BASED ON {live_weeks} WEEK HIRE PERIOD\n"
             f"Price for Initial Week's Hire including installation & removal = ${init_week:.2f}/sqm + GST\n"
             f"Price for each Subsequent Week's Hire = ${sub_week:.2f}/sqm + GST"
         )
         st.text_area(f"Copy for {row['Product']} (Row {index+1}):", value=copy_block, height=110)
 
     if st.button("RESET ALL"):
-        st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Price", "Disc %", "Total", "Weeks", "Labour_Rate"])
+        st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Price", "Disc %", "Total", "Labour_Rate"])
         st.rerun()
