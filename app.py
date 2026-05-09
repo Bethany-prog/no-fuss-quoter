@@ -35,8 +35,7 @@ st.markdown("""
         background-color: #3D5AFE; color: white; border-radius: 8px; width: 100%; font-weight: bold;
     }
     [data-testid="stExpander"] { border: 2px solid #3D5AFE; border-radius: 12px; background-color: #FFFFFF; }
-    h3 { color: #00E676 !important; border-bottom: 2px solid #00E676; padding-bottom: 5px; }
-    .stDataFrame { background-color: #FFFFFF; border-radius: 10px; }
+    h3 { color: #00E676 !important; border-bottom: 2px solid #00E676; padding-bottom: 5px; margin-top: 20px; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -90,9 +89,9 @@ if st.button("ADD TO QUOTE"):
             "Product": item_choice,
             "Unit Price": base_rate,
             "Disc %": discount_pct,
-            "Weeks": weeks,
             "Total": final_item_hire,
-            "Labour": qty * PRODUCT_CATALOG[item_choice]["labour"]
+            "Labour_Internal": qty * PRODUCT_CATALOG[item_choice]["labour"],
+            "Weeks": weeks
         })
         st.rerun()
 
@@ -100,9 +99,12 @@ if st.button("ADD TO QUOTE"):
 if st.session_state.quote_items:
     # 1. FLOORING GRID
     st.markdown("### 🏗️ FLOORING")
-    flooring_df = st.data_editor(st.session_state.quote_items, 
-                                 column_order=("Qty", "Product", "Unit Price", "Disc %", "Total"),
-                                 num_rows="dynamic", key="floor_editor")
+    # We strip the internal math out of the view to prevent the KeyError
+    view_data = [
+        {"Qty": i["Qty"], "Product": i["Product"], "Unit Price": i["Unit Price"], "Disc %": i["Disc %"], "Total": i["Total"]} 
+        for i in st.session_state.quote_items
+    ]
+    st.data_editor(view_data, num_rows="dynamic", key="floor_editor", use_container_width=True)
     
     # 2. CARTAGE GRID
     if charge_cartage:
@@ -113,15 +115,16 @@ if st.session_state.quote_items:
     # 3. LABOUR GRID
     if charge_labour:
         st.markdown("### 👷 LABOUR")
-        labour_total = sum(i["Labour"] for i in flooring_df)
-        st.table([{"QTY": 1, "Description": "Crew", "Price": f"${labour_total:,.2f}"}])
+        # Pulling from the hidden session state to avoid the KeyError
+        lab_total_sum = sum(i["Labour_Internal"] for i in st.session_state.quote_items)
+        st.table([{"QTY": 1, "Description": "Crew", "Price": f"${lab_total_sum:,.2f}"}])
 
     # CALCULATIONS
-    pure_hire = sum(i["Total"] for i in flooring_df)
+    pure_hire = sum(i["Total"] for i in st.session_state.quote_items)
     hire_final = max(300.0, pure_hire)
     waiver = hire_final * 0.07
     cart_final = (km_input * 4 * 3.50) if charge_cartage else 0.0
-    lab_final = sum(i["Labour"] for i in flooring_df) if charge_labour else 0.0
+    lab_final = sum(i["Labour_Internal"] for i in st.session_state.quote_items) if charge_labour else 0.0
     grand_total = hire_final + waiver + cart_final + lab_final
 
     # --- TOTALS METRICS ---
@@ -135,6 +138,20 @@ if st.session_state.quote_items:
     
     st.metric("GRAND TOTAL", f"${grand_total:,.2f}")
     
+    # --- UNIT RATE BREAKDOWN (COPY BLOCK) ---
+    st.markdown("### 📋 QUOTE TEXT FOR SYSTEM")
+    for i in st.session_state.quote_items:
+        # Standard PDF Text Format
+        weeks = i["Weeks"]
+        initial_week = i["Unit Price"] + (i["Labour_Internal"] / i["Qty"])
+        subsequent = i["Unit Price"]
+        copy_block = (
+            f"PRICING BASED ON {weeks} WEEK HIRE PERIOD\n"
+            f"Price for Initial Week's Hire including installation & removal = ${initial_week:.2f}/sqm + GST\n"
+            f"Price for each Subsequent Week's Hire = ${subsequent:.2f}/sqm + GST"
+        )
+        st.text_area(f"Copy for {i['Product']}:", value=copy_block, height=110)
+
     if st.button("RESET ALL"):
         st.session_state.quote_items = []
         st.rerun()
