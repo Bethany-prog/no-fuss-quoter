@@ -40,13 +40,13 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# 3. AUDITED CATALOG (MATCHING YOUR PDF)
+# 3. PUBLIC ADVERTISED CATALOG (OCT 2025)
 PRODUCT_CATALOG = {
     "Black Plastic (sqm)": {"subsequent": 0.90, "labour": 0.00},
     "Carpet Tiles - Onyx (sqm)": {"subsequent": 8.85, "labour": 3.05},
     "Enkamat Underlay (sqm)": {"subsequent": 2.60, "labour": 0.00},
     "Geotextile Underlay (sqm)": {"subsequent": 2.60, "labour": 0.00},
-    "I-Trac (sqm)": {"subsequent": 8.95, "initial_total": 21.70, "labour": 0.00}, # Initial is fixed at 21.70
+    "I-Trac (sqm)": {"subsequent": 23.40, "labour": 4.65}, # Restored to Public Rate
     "LD 20 Roll (3m x 20m)": {"subsequent": 1800.00, "labour": 0.00},
     "No Fuss Floor - Grey/Green (sqm)": {"subsequent": 7.10, "labour": 3.05},
     "No Fuss Floor Ramp 1m (ea)": {"subsequent": 6.60, "labour": 0.00},
@@ -66,7 +66,7 @@ PRODUCT_CATALOG = {
 }
 
 if 'df' not in st.session_state:
-    st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Price", "Disc %", "Total", "Labour_Rate", "Initial_Fixed"])
+    st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Price", "Disc %", "Total", "Labour_Rate"])
 
 st.title("📦 No Fuss Quoting Engine")
 
@@ -81,6 +81,7 @@ with st.expander("📍 LOGISTICS & DATES", expanded=True):
     charge_labour = col_lab.checkbox("Include Labour/Crew?", value=True)
     charge_cartage = col_cart.checkbox("Include Cartage?", value=True)
 
+# Determine weeks LIVE
 days_diff = (end_date - start_date).days
 live_weeks = math.ceil(days_diff / 7) if days_diff > 0 else 1
 
@@ -89,14 +90,13 @@ st.markdown("### ➕ ADD PRODUCT")
 item_choice = st.selectbox("Select Product", sorted(PRODUCT_CATALOG.keys()))
 c_q, c_a, c_d = st.columns([2, 2, 2])
 qty_in = c_q.number_input("Quantity", min_value=0.0, value=None, placeholder="Type Qty...")
-adj_rate = c_a.number_input("Override Subsequent Rate", min_value=0.0, value=None, placeholder="Adjust Rate...")
+adj_rate = c_a.number_input("Override Sub Rate", min_value=0.0, value=None, placeholder="Adjust Rate...")
 discount_pct = c_d.number_input("Discount %", min_value=0.0, max_value=100.0, value=None, placeholder="0%")
 
 if st.button("ADD TO QUOTE"):
     if qty_in and qty_in > 0:
         base_sub_rate = adj_rate if (adj_rate and adj_rate > 0) else PRODUCT_CATALOG[item_choice]["subsequent"]
         labour_r = PRODUCT_CATALOG[item_choice]["labour"]
-        initial_fixed = PRODUCT_CATALOG[item_choice].get("initial_total", 0.0)
         
         new_row = pd.DataFrame([{
             "Qty": qty_in,
@@ -104,36 +104,34 @@ if st.button("ADD TO QUOTE"):
             "Unit Price": base_sub_rate,
             "Disc %": discount_pct if discount_pct else 0.0,
             "Total": 0.0, 
-            "Labour_Rate": labour_r,
-            "Initial_Fixed": initial_fixed
+            "Labour_Rate": labour_r
         }])
         st.session_state.df = pd.concat([st.session_state.df, new_row], ignore_index=True)
         st.rerun()
 
-# --- CALCULATION LOOP ---
+# --- LIVE RE-CALCULATION BLOCK ---
 if not st.session_state.df.empty:
+    # Always recalculate every row when the page renders to catch date changes
     for idx, row in st.session_state.df.iterrows():
         q, p, d = row["Qty"], row["Unit Price"], row["Disc %"]
+        l_rate = row["Labour_Rate"]
         
-        # Calculate Initial Week Rate
-        # For I-Trac, it uses the fixed 21.70. For others, it's Sub Rate + Labour.
-        if row["Initial_Fixed"] > 0:
-            init_rate = row["Initial_Fixed"]
-        else:
-            init_rate = p + row["Labour_Rate"]
-            
-        hire_val = (q * init_rate) + (q * p * (live_weeks - 1))
+        # Initial = Sub Rate + Labour | Hire = (Qty * Initial) + (Qty * Sub * (Weeks - 1))
+        initial_rate = p + l_rate
+        hire_val = (q * initial_rate) + (q * p * (live_weeks - 1))
+        
         st.session_state.df.at[idx, "Total"] = hire_val * (1 - (d / 100))
 
     st.markdown("### 🏗️ FLOORING")
-    # Show Qty, Product, Subsequent Rate (Unit Price), Disc, and Total
     edited_df = st.data_editor(st.session_state.df[["Qty", "Product", "Unit Price", "Disc %", "Total"]], num_rows="dynamic", use_container_width=True, key="editor")
 
     if not edited_df.equals(st.session_state.df[["Qty", "Product", "Unit Price", "Disc %", "Total"]]):
-        st.session_state.df.update(edited_df)
+        # Syncing edits back to main session storage
+        for col in ["Qty", "Unit Price", "Disc %"]:
+            st.session_state.df[col] = edited_df[col]
         st.rerun()
 
-    # Final Summary Math
+    # Final Totals
     pure_hire = st.session_state.df["Total"].sum()
     hire_final = max(300.0, pure_hire)
     waiver = hire_final * 0.07
@@ -151,12 +149,10 @@ if not st.session_state.df.empty:
     
     # --- DYNAMIC SYSTEM TEXT ---
     st.markdown("### 📋 QUOTE TEXT FOR SYSTEM")
+    st.caption(f"Pricing dynamically adjusted for a **{live_weeks} week** hire period.")
     for idx, row in st.session_state.df.iterrows():
         p = row["Unit Price"]
-        if row["Initial_Fixed"] > 0:
-            init = row["Initial_Fixed"]
-        else:
-            init = p + row["Labour_Rate"]
+        init = p + row["Labour_Rate"]
             
         copy_block = (
             f"PRICING BASED ON {live_weeks} WEEK HIRE PERIOD\n"
@@ -166,5 +162,5 @@ if not st.session_state.df.empty:
         st.text_area(f"Copy for {row['Product']}:", value=copy_block, height=110)
 
     if st.button("RESET ALL"):
-        st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Price", "Disc %", "Total", "Labour_Rate", "Initial_Fixed"])
+        st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Price", "Disc %", "Total", "Labour_Rate"])
         st.rerun()
