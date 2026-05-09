@@ -41,7 +41,6 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 # 3. OFFICIAL CATALOG (OCTOBER 2025 PDF)
-# sub = Standard Weekly | block_weekly = (4 Week Block Price / 4)
 PRODUCT_CATALOG = {
     "Black Plastic (sqm)": {"sub": 0.90, "block_weekly": 0.90, "labour": 0.00},
     "Carpet Tiles - Onyx 1m x 1m": {"sub": 8.85, "block_weekly": 8.85, "labour": 3.05},
@@ -103,7 +102,7 @@ if st.button("ADD TO QUOTE"):
         new_row = pd.DataFrame([{
             "Qty": qty_in,
             "Product": item_choice,
-            "Unit Price": initial_base,
+            "Unit Price": initial_base, # This stores the STANDARD base rate
             "Disc %": discount_pct if discount_pct else 0.0,
             "Total": 0.0, 
             "Labour_Rate": labour_r
@@ -118,21 +117,20 @@ if not st.session_state.df.empty:
         l_rate = row["Labour_Rate"]
         item_key = row["Product"]
         
-        # SPECIAL LOGIC: LD 20 Roll
         if PRODUCT_CATALOG[item_key].get("special_ld20"):
-            initial_week_rate = 1800.00
-            sub_rate_to_use = 500.00
+            init_rate = 1800.00
+            sub_rate = 500.00
         else:
-            # BLOCK LOGIC: If hire is 5+ weeks (1 initial + 4 subsequent), use the discounted block rate
-            sub_rate_to_use = PRODUCT_CATALOG[item_key]["block_weekly"] if live_weeks >= 5 else p
-            initial_week_rate = sub_rate_to_use + l_rate
+            # First week is ALWAYS standard Base Rate (p) + Labour
+            init_rate = p + l_rate
+            # Subsequent rate drops to block pricing ONLY if >= 5 weeks
+            sub_rate = PRODUCT_CATALOG[item_key]["block_weekly"] if live_weeks >= 5 else p
             
-        hire_val = (q * initial_week_rate) + (q * sub_rate_to_use * (live_weeks - 1))
-        
+        hire_val = (q * init_rate) + (q * sub_rate * (live_weeks - 1))
         st.session_state.df.at[idx, "Total"] = hire_val * (1 - (d / 100))
-        st.session_state.df.at[idx, "Unit Price"] = sub_rate_to_use
 
     st.markdown("### 🏗️ FLOORING")
+    # Display the Base Unit Price in the grid so it doesn't confusingly drop to 11.70 when changing dates
     edited_df = st.data_editor(st.session_state.df[["Qty", "Product", "Unit Price", "Disc %", "Total"]], num_rows="dynamic", use_container_width=True, key="editor")
 
     if not edited_df.equals(st.session_state.df[["Qty", "Product", "Unit Price", "Disc %", "Total"]]):
@@ -164,13 +162,15 @@ if not st.session_state.df.empty:
         
         if PRODUCT_CATALOG[item_key].get("special_ld20"):
             init = 1800.00
+            sub = 500.00
         else:
             init = p + row["Labour_Rate"]
+            sub = PRODUCT_CATALOG[item_key]["block_weekly"] if live_weeks >= 5 else p
             
         copy_block = (
             f"PRICING BASED ON {live_weeks} WEEK HIRE PERIOD\n"
             f"Price for Initial Week's Hire including installation & removal = ${init:,.2f}/sqm + GST\n"
-            f"Price for each Subsequent Week's Hire = ${p:,.2f}/sqm + GST"
+            f"Price for each Subsequent Week's Hire = ${sub:,.2f}/sqm + GST"
         )
         st.text_area(f"Copy for {row['Product']}:", value=copy_block, height=110)
 
