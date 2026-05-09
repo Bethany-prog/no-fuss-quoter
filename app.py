@@ -40,19 +40,34 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# 3. PRODUCT CATALOG
+# 3. CORRECTED & ALPHABETIZED PRODUCT CATALOG
+# Rates based on October 2025 Price List
 PRODUCT_CATALOG = {
-    "I-Trac (sqm)": {"rate": 23.40, "labour": 4.65},
-    "Supa-Trac (sqm)": {"rate": 11.55, "labour": 4.65},
+    "Black Plastic (sqm)": {"rate": 0.90, "labour": 0.00},
+    "Carpet Tiles - Onyx (sqm)": {"rate": 8.85, "labour": 3.05},
+    "Enkamat Underlay (sqm)": {"rate": 2.60, "labour": 0.00},
+    "Geotextile Underlay (sqm)": {"rate": 2.60, "labour": 0.00},
+    "I-Trac (sqm)": {"rate": 8.95, "initial_week": 21.70, "labour": 4.65}, # Corrected I-Trac logic
+    "LD 20 Roll (3m x 20m)": {"rate": 1800.00, "labour": 0.00},
     "No Fuss Floor - Grey/Green (sqm)": {"rate": 7.10, "labour": 3.05},
-    "Terratrak Plus (sqm)": {"rate": 23.40, "labour": 4.65},
-    "Wooden Floor (sqm)": {"rate": 8.85, "labour": 7.15},
+    "No Fuss Floor Ramp 1m (ea)": {"rate": 6.60, "labour": 0.00},
+    "No Fuss Expansion Joiner 1.2m (ea)": {"rate": 6.60, "labour": 0.00},
     "Parquetry Dance Floor (sqm)": {"rate": 20.95, "labour": 4.80},
+    "Plastorip (sqm)": {"rate": 10.15, "labour": 3.05},
+    "Plastorip Edging (lm)": {"rate": 1.65, "labour": 0.00},
+    "Plastorip Expansion Joiner 1m (ea)": {"rate": 12.15, "labour": 0.00},
     "Protectall (sqm)": {"rate": 22.05, "labour": 3.25},
+    "Supa-Trac (sqm)": {"rate": 11.55, "labour": 4.65},
+    "Supa-Trac Edging (lm)": {"rate": 6.70, "labour": 0.00},
+    "Terratrak Plus (sqm)": {"rate": 23.40, "labour": 4.65},
+    "Trakmats (ea)": {"rate": 23.20, "labour": 5.85},
+    "Trakmat Joiners 2 hole (ea)": {"rate": 4.40, "labour": 0.00},
+    "Trakmat Joiners 4 hole (ea)": {"rate": 11.95, "labour": 0.00},
+    "Wooden Floor (sqm)": {"rate": 8.85, "labour": 7.15},
 }
 
 if 'df' not in st.session_state:
-    st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Price", "Disc %", "Total", "Labour_Rate"])
+    st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Price", "Disc %", "Total", "Labour_Rate", "Is_ITrac"])
 
 st.title("📦 No Fuss Quoting Engine")
 
@@ -61,14 +76,12 @@ with st.expander("📍 LOGISTICS & DATES", expanded=True):
     c1, c2, c3 = st.columns(3)
     start_date = c1.date_input("Hire Start", value=date.today(), format="DD/MM/YYYY")
     end_date = c2.date_input("Hire End", value=date.today(), format="DD/MM/YYYY")
-    # value=None removes the 0.00 default
     km_input = c3.number_input("Distance (KM)", min_value=0.0, value=None, placeholder="Type KM...")
     
     col_lab, col_cart = st.columns(2)
     charge_labour = col_lab.checkbox("Include Labour/Crew?", value=True)
     charge_cartage = col_cart.checkbox("Include Cartage?", value=True)
 
-# Calculate live weeks based on currently selected dates
 days_diff = (end_date - start_date).days
 live_weeks = math.ceil(days_diff / 7) if days_diff > 0 else 1
 
@@ -76,60 +89,56 @@ live_weeks = math.ceil(days_diff / 7) if days_diff > 0 else 1
 st.markdown("### ➕ ADD PRODUCT")
 item_choice = st.selectbox("Select Product", sorted(PRODUCT_CATALOG.keys()))
 c_q, c_a, c_d = st.columns([2, 2, 2])
-# value=None removes the 0.00 default for faster filling
 qty_in = c_q.number_input("Quantity", min_value=0.0, value=None, placeholder="Type Qty...")
-adj_rate = c_a.number_input("Override Rate", min_value=0.0, value=None, placeholder="Standard Rate...")
+adj_rate = c_a.number_input("Override Rate", min_value=0.0, value=None, placeholder="Adjust Rate...")
 discount_pct = c_d.number_input("Discount %", min_value=0.0, max_value=100.0, value=None, placeholder="0%")
 
 if st.button("ADD TO QUOTE"):
     if qty_in and qty_in > 0:
+        is_itrac = "I-Trac" in item_choice
         base_rate = adj_rate if (adj_rate and adj_rate > 0) else PRODUCT_CATALOG[item_choice]["rate"]
         labour_r = PRODUCT_CATALOG[item_choice]["labour"]
-        final_disc = discount_pct if discount_pct else 0.0
         
         new_row = pd.DataFrame([{
             "Qty": qty_in,
             "Product": item_choice,
             "Unit Price": base_rate,
-            "Disc %": final_disc,
+            "Disc %": discount_pct if discount_pct else 0.0,
             "Total": 0.0, 
-            "Labour_Rate": labour_r
+            "Labour_Rate": labour_r,
+            "Is_ITrac": is_itrac
         }])
         st.session_state.df = pd.concat([st.session_state.df, new_row], ignore_index=True)
         st.rerun()
 
-# --- LIVE SYNC AND CALCULATION LOOP ---
+# --- CALCULATION LOOP ---
 if not st.session_state.df.empty:
-    for index, row in st.session_state.df.iterrows():
-        q = row["Qty"]
-        p = row["Unit Price"]
-        d = row["Disc %"]
-        hire_pre_disc = (q * p) + (q * p * (live_weeks - 1))
-        st.session_state.df.at[index, "Total"] = hire_pre_disc * (1 - (d / 100))
+    for idx, row in st.session_state.df.iterrows():
+        q, p, d = row["Qty"], row["Unit Price"], row["Disc %"]
+        
+        if row["Is_ITrac"]:
+            # Corrected I-Trac logic: $21.70 first week + $8.95 each sub week
+            initial = PRODUCT_CATALOG["I-Trac (sqm)"]["initial_week"]
+            hire_val = (q * initial) + (q * p * (live_weeks - 1))
+        else:
+            hire_val = (q * p) + (q * p * (live_weeks - 1))
+            
+        st.session_state.df.at[idx, "Total"] = hire_val * (1 - (d / 100))
 
     st.markdown("### 🏗️ FLOORING")
-    edited_df = st.data_editor(
-        st.session_state.df,
-        column_order=("Qty", "Product", "Unit Price", "Disc %", "Total"),
-        num_rows="dynamic",
-        use_container_width=True,
-        key="live_editor"
-    )
+    edited_df = st.data_editor(st.session_state.df[["Qty", "Product", "Unit Price", "Disc %", "Total"]], num_rows="dynamic", use_container_width=True, key="editor")
 
-    if not edited_df.equals(st.session_state.df):
-        st.session_state.df = edited_df
+    if not edited_df.equals(st.session_state.df[["Qty", "Product", "Unit Price", "Disc %", "Total"]]):
+        st.session_state.df.update(edited_df)
         st.rerun()
 
-    # Final math
-    km_val = km_input if km_input else 0.0
-    cart_final = (km_val * 4 * 3.50) if charge_cartage else 0.0
-    lab_final = (st.session_state.df["Qty"] * st.session_state.df["Labour_Rate"]).sum() if charge_labour else 0.0
+    # Final Summary math
     pure_hire = st.session_state.df["Total"].sum()
     hire_final = max(300.0, pure_hire)
     waiver = hire_final * 0.07
-    grand_total = hire_final + waiver + cart_final + lab_final
-
-    # --- TOTALS METRICS ---
+    cart_final = (km_input * 4 * 3.50) if km_input and charge_cartage else 0.0
+    lab_final = (st.session_state.df["Qty"] * st.session_state.df["Labour_Rate"]).sum() if charge_labour else 0.0
+    
     st.divider()
     st.markdown("### 💰 SUMMARY (EX GST)")
     m1, m2, m3, m4 = st.columns(4)
@@ -137,22 +146,25 @@ if not st.session_state.df.empty:
     m2.metric("WAIVER (7%)", f"${waiver:,.2f}")
     m3.metric("LABOUR", f"${lab_final:,.2f}")
     m4.metric("CARTAGE", f"${cart_final:,.2f}")
-    st.metric("GRAND TOTAL", f"${grand_total:,.2f}")
+    st.metric("GRAND TOTAL", f"${(hire_final + waiver + cart_final + lab_final):,.2f}")
     
     # --- DYNAMIC SYSTEM TEXT ---
     st.markdown("### 📋 QUOTE TEXT FOR SYSTEM")
-    st.info(f"Pricing below is calculated based on a **{live_weeks} week** hire period.")
-    
-    for index, row in st.session_state.df.iterrows():
-        init_week = row["Unit Price"] + row["Labour_Rate"]
-        sub_week = row["Unit Price"]
+    for idx, row in st.session_state.df.iterrows():
+        if row["Is_ITrac"]:
+            init = PRODUCT_CATALOG["I-Trac (sqm)"]["initial_week"]
+            sub = row["Unit Price"]
+        else:
+            init = row["Unit Price"] + row["Labour_Rate"]
+            sub = row["Unit Price"]
+            
         copy_block = (
             f"PRICING BASED ON {live_weeks} WEEK HIRE PERIOD\n"
-            f"Price for Initial Week's Hire including installation & removal = ${init_week:.2f}/sqm + GST\n"
-            f"Price for each Subsequent Week's Hire = ${sub_week:.2f}/sqm + GST"
+            f"Price for Initial Week's Hire including installation & removal = ${init:.2f}/sqm + GST\n"
+            f"Price for each Subsequent Week's Hire = ${sub:.2f}/sqm + GST"
         )
-        st.text_area(f"Copy for {row['Product']} (Row {index+1}):", value=copy_block, height=110)
+        st.text_area(f"Copy for {row['Product']}:", value=copy_block, height=110)
 
     if st.button("RESET ALL"):
-        st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Price", "Disc %", "Total", "Labour_Rate"])
+        st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Price", "Disc %", "Total", "Labour_Rate", "Is_ITrac"])
         st.rerun()
