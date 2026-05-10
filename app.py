@@ -40,34 +40,47 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# 3. OFFICIAL CATALOG (OCTOBER 2025 PDF)
+# 3. EXCEL-ALIGNED PRODUCT GROUPS & PRICING
+# logic: 'w1_3' = Base price for weeks 1-3 | 'block' = Rate for 4+ weeks
 PRODUCT_CATALOG = {
-    "Black Plastic (sqm)": {"sub": 0.90, "block_weekly": 0.90, "labour": 0.00},
-    "Carpet Tiles - Onyx 1m x 1m": {"sub": 8.85, "block_weekly": 8.85, "labour": 3.05},
-    "Enkamat Underlay (sqm)": {"sub": 2.60, "block_weekly": 2.60, "labour": 0.00},
-    "Geotextile Underlay (sqm)": {"sub": 2.60, "block_weekly": 2.60, "labour": 0.00},
-    "I-Trac (sqm)": {"sub": 23.40, "block_weekly": 11.70, "labour": 4.65},
-    "LD 20 Roll-3m x 20m": {"sub": 1800.00, "block_weekly": 500.00, "labour": 0.00, "special_ld20": True},
-    "No Fuss Expansion Joiner 1.2m": {"sub": 6.60, "block_weekly": 3.30, "labour": 0.00},
-    "No Fuss Floor (Grey or Green)": {"sub": 7.10, "block_weekly": 3.75, "labour": 3.05},
-    "No Fuss Floor Ramp 1m": {"sub": 6.60, "block_weekly": 3.30, "labour": 0.00},
-    "Parquetry Dance Floor": {"sub": 20.95, "block_weekly": 20.95, "labour": 4.80},
-    "Plastorip": {"sub": 10.15, "block_weekly": 5.075, "labour": 3.05},
-    "Plastorip Edging (per lineal metre)": {"sub": 1.65, "block_weekly": 1.65, "labour": 0.00},
-    "Plastorip Expansion Joiners 1m": {"sub": 12.15, "block_weekly": 12.15, "labour": 0.00},
-    "Protectall": {"sub": 22.05, "block_weekly": 22.05, "labour": 3.25},
-    "Ramp for I-Trac (1.07m x 1.18m)": {"sub": 42.00, "block_weekly": 21.00, "labour": 0.00},
-    "Supa-Trac (per sqm)": {"sub": 11.55, "block_weekly": 6.25, "labour": 4.65},
-    "Supa-Trac Edging (per lineal metre)": {"sub": 6.70, "block_weekly": 6.70, "labour": 0.00},
-    "Terratrak Plus": {"sub": 23.40, "block_weekly": 11.70, "labour": 4.65},
-    "Trakmat Joiners 2 hole": {"sub": 4.40, "block_weekly": 4.40, "labour": 0.00},
-    "Trakmat Joiners 4 hole": {"sub": 11.95, "block_weekly": 11.95, "labour": 0.00},
-    "Trakmats": {"sub": 23.20, "block_weekly": 11.25, "labour": 5.85},
-    "Wooden Floor": {"sub": 8.85, "block_weekly": 8.85, "labour": 7.15},
+    "I-TRAC": {
+        "I-Trac flooring (sqm)": {"w1_3": 23.40, "block": 46.80, "labour": 4.65},
+        "I-Trac ramps (ea)": {"w1_3": 42.00, "block": 84.00, "labour": 0.00}
+    },
+    "SUPA-TRAC": {
+        "Supa-Trac flooring (sqm)": {"w1_3": 11.55, "block": 25.00, "labour": 4.65},
+        "Supa-Trac Edging (lm)": {"w1_3": 6.70, "block": 6.70, "labour": 0.00}
+    },
+    "TRAKMATS": {
+        "Trakmats (ea)": {"w1_3": 23.20, "block": 45.00, "labour": 5.85},
+        "Trakmat Joiners 4 hole (ea)": {"w1_3": 11.95, "block": 11.95, "labour": 0.00},
+        "Trakmat Joiners 2 hole (ea)": {"w1_3": 4.40, "block": 4.40, "labour": 0.00},
+        "LD 20 Roll - 3m x 20m": {"w1_3": 1800.00, "block": 3300.00, "labour": 0.00}
+    },
+    "NO FUSS FLOORING": {
+        "No Fuss Floor (Grey/Green) (sqm)": {"w1_3": 7.10, "block": 15.00, "labour": 3.05},
+        "No Fuss Floor Ramp 1m (ea)": {"w1_3": 6.60, "block": 13.20, "labour": 0.00},
+        "Expansion Joiner 1.2m (ea)": {"w1_3": 6.60, "block": 13.20, "labour": 0.00}
+    },
+    "PLASTORIP": {
+        "Plastorip (sqm)": {"w1_3": 10.15, "block": 20.30, "labour": 3.05},
+        "Plastorip Edging (lm)": {"w1_3": 1.65, "block": 1.65, "labour": 0.00},
+        "Plastorip Expansion Joiner 1m": {"w1_3": 12.15, "block": 12.15, "labour": 0.00}
+    },
+    "OTHER": {
+        "Terratrak Plus (sqm)": {"w1_3": 23.40, "block": 46.80, "labour": 4.65},
+        "Enkamat Underlay (sqm)": {"w1_3": 2.60, "block": 2.60, "labour": 0.00},
+        "Geotextile Underlay (sqm)": {"w1_3": 2.60, "block": 2.60, "labour": 0.00},
+        "Black Plastic (sqm)": {"w1_3": 0.90, "block": 0.90, "labour": 0.00},
+        "Wooden Floor (sqm)": {"w1_3": 8.85, "block": 8.85, "labour": 7.15},
+        "Parquetry Dance Floor (sqm)": {"w1_3": 20.95, "block": 20.95, "labour": 4.80},
+        "Carpet Tiles - Onyx (sqm)": {"w1_3": 8.85, "block": 8.85, "labour": 3.05},
+        "Protectall (sqm)": {"w1_3": 22.05, "block": 22.05, "labour": 3.25}
+    }
 }
 
 if 'df' not in st.session_state:
-    st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Price", "Disc %", "Total", "Labour_Rate"])
+    st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Disc %", "Total", "Labour_Rate", "Block_Rate"])
 
 st.title("📦 No Fuss Quoting Engine")
 
@@ -88,57 +101,57 @@ live_weeks = math.ceil(days_diff / 7) if days_diff > 0 else 1
 
 # --- ADD PRODUCT ---
 st.markdown("### ➕ ADD PRODUCT")
-item_choice = st.selectbox("Select Product", sorted(PRODUCT_CATALOG.keys()))
+cat_choice = st.selectbox("Select Category", sorted(PRODUCT_CATALOG.keys()))
+item_choice = st.selectbox("Select Item", sorted(PRODUCT_CATALOG[cat_choice].keys()))
+
 c_q, c_a, c_d = st.columns([2, 2, 2])
 qty_in = c_q.number_input("Quantity", min_value=0.0, value=None, placeholder="Type Qty...")
-adj_rate = c_a.number_input("Override Sub Rate", min_value=0.0, value=None, placeholder="Adjust Rate...")
+adj_rate = c_a.number_input("Override Wk 1-3 Rate", min_value=0.0, value=None, placeholder="Adjust Rate...")
 discount_pct = c_d.number_input("Discount %", min_value=0.0, max_value=100.0, value=None, placeholder="0%")
 
 if st.button("ADD TO QUOTE"):
     if qty_in and qty_in > 0:
-        labour_r = PRODUCT_CATALOG[item_choice]["labour"]
-        initial_base = adj_rate if (adj_rate and adj_rate > 0) else PRODUCT_CATALOG[item_choice]["sub"]
+        ref = PRODUCT_CATALOG[cat_choice][item_choice]
+        base_rate = adj_rate if (adj_rate and adj_rate > 0) else ref["w1_3"]
         
         new_row = pd.DataFrame([{
             "Qty": qty_in,
             "Product": item_choice,
-            "Unit Price": initial_base, # This stores the STANDARD base rate
+            "Unit Rate": base_rate,
             "Disc %": discount_pct if discount_pct else 0.0,
             "Total": 0.0, 
-            "Labour_Rate": labour_r
+            "Labour_Rate": ref["labour"],
+            "Block_Rate": ref["block"]
         }])
         st.session_state.df = pd.concat([st.session_state.df, new_row], ignore_index=True)
         st.rerun()
 
-# --- LIVE RE-CALCULATION BLOCK ---
+# --- NEW 1-3 vs 4+ CALCULATION LOGIC ---
 if not st.session_state.df.empty:
     for idx, row in st.session_state.df.iterrows():
-        q, p, d = row["Qty"], row["Unit Price"], row["Disc %"]
-        l_rate = row["Labour_Rate"]
-        item_key = row["Product"]
+        q, rate_1_3, d = row["Qty"], row["Unit Rate"], row["Disc %"]
+        block = row["Block_Rate"]
+        labour = row["Labour_Rate"]
         
-        if PRODUCT_CATALOG[item_key].get("special_ld20"):
-            init_rate = 1800.00
-            sub_rate = 500.00
-        else:
-            # First week is ALWAYS standard Base Rate (p) + Labour
-            init_rate = p + l_rate
-            # Subsequent rate drops to block pricing ONLY if >= 5 weeks
-            sub_rate = PRODUCT_CATALOG[item_key]["block_weekly"] if live_weeks >= 5 else p
-            
-        hire_val = (q * init_rate) + (q * sub_rate * (live_weeks - 1))
-        st.session_state.df.at[idx, "Total"] = hire_val * (1 - (d / 100))
+        # 1. Mandatory 1-3 Week Charge (Hire x 3 + Labour)
+        mandatory_base = (q * rate_1_3 * 3) + (q * labour)
+        
+        # 2. Add Block Rate ONLY if hire is 4 weeks or more
+        # If live_weeks is 4, we add the block. If 1-3, we stay at mandatory_base.
+        total_hire_val = mandatory_base + (q * block if live_weeks >= 4 else 0)
+        
+        st.session_state.df.at[idx, "Total"] = total_hire_val * (1 - (d / 100))
 
     st.markdown("### 🏗️ FLOORING")
-    # Display the Base Unit Price in the grid so it doesn't confusingly drop to 11.70 when changing dates
-    edited_df = st.data_editor(st.session_state.df[["Qty", "Product", "Unit Price", "Disc %", "Total"]], num_rows="dynamic", use_container_width=True, key="editor")
+    # Grid displays the Week 1-3 rate for easy system entry
+    edited_df = st.data_editor(st.session_state.df[["Qty", "Product", "Unit Rate", "Disc %", "Total"]], num_rows="dynamic", use_container_width=True, key="editor")
 
-    if not edited_df.equals(st.session_state.df[["Qty", "Product", "Unit Price", "Disc %", "Total"]]):
-        for col in ["Qty", "Unit Price", "Disc %"]:
+    if not edited_df.equals(st.session_state.df[["Qty", "Product", "Unit Rate", "Disc %", "Total"]]):
+        for col in ["Qty", "Unit Rate", "Disc %"]:
             st.session_state.df[col] = edited_df[col]
         st.rerun()
 
-    # Final Summary Math
+    # Final Totals
     pure_hire = st.session_state.df["Total"].sum()
     hire_final = max(300.0, pure_hire)
     waiver = hire_final * 0.07
@@ -157,23 +170,17 @@ if not st.session_state.df.empty:
     # --- DYNAMIC SYSTEM TEXT ---
     st.markdown("### 📋 QUOTE TEXT FOR SYSTEM")
     for idx, row in st.session_state.df.iterrows():
-        item_key = row["Product"]
-        p = row["Unit Price"]
+        p = row["Unit Rate"]
+        init = p + row["Labour_Rate"]
         
-        if PRODUCT_CATALOG[item_key].get("special_ld20"):
-            init = 1800.00
-            sub = 500.00
-        else:
-            init = p + row["Labour_Rate"]
-            sub = PRODUCT_CATALOG[item_key]["block_weekly"] if live_weeks >= 5 else p
-            
         copy_block = (
             f"PRICING BASED ON {live_weeks} WEEK HIRE PERIOD\n"
+            f"Note: Standard Hire Period is 1-3 Weeks minimum.\n"
             f"Price for Initial Week's Hire including installation & removal = ${init:,.2f}/sqm + GST\n"
-            f"Price for each Subsequent Week's Hire = ${sub:,.2f}/sqm + GST"
+            f"Price for each Subsequent Week's Hire = ${p:,.2f}/sqm + GST"
         )
-        st.text_area(f"Copy for {row['Product']}:", value=copy_block, height=110)
+        st.text_area(f"Copy for {row['Product']}:", value=copy_block, height=125)
 
     if st.button("RESET ALL"):
-        st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Price", "Disc %", "Total", "Labour_Rate"])
+        st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Disc %", "Total", "Labour_Rate", "Block_Rate"])
         st.rerun()
