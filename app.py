@@ -177,19 +177,26 @@ if not st.session_state.df.empty:
     st.markdown("### 📋 SYSTEM DESCRIPTION BLOCKS")
     for idx, row in st.session_state.df.iterrows():
         p, lab_r = row["Unit Rate"], row["Labour_Rate"]
-        
-        # COMBINED LOGIC FOR WEEKS 1-3
         init_price = p if split_labour else p + lab_r
         
         copy_block = f"PRICING BASED ON {live_weeks} WEEK HIRE PERIOD\n"
         
-        # If Initial Price is the same as the Weekly Price (Weeks 2 & 3)
+        # DASH NOTATION LOGIC
         if init_price == p:
-            copy_block += f"Price for weeks 1, 2 & 3 = ${p:,.2f}/sqm per week + GST\n"
+            # Determine end week for standard rate (max 3)
+            end_wk = min(live_weeks, 3)
+            if end_wk > 1:
+                copy_block += f"Price for weeks 1-{end_wk} = ${p:,.2f}/sqm per week + GST\n"
+            else:
+                copy_block += f"Price for week 1 = ${p:,.2f}/sqm + GST\n"
         else:
-            # Keep separate if labour is baked into only the first week
             copy_block += f"Price for Initial Week's Hire including installation & removal = ${init_price:,.2f}/sqm + GST\n"
-            copy_block += f"Price for weeks 2 & 3 = ${p:,.2f}/sqm per week + GST\n"
+            if live_weeks > 1:
+                end_wk = min(live_weeks, 3)
+                if end_wk == 2:
+                    copy_block += f"Price for week 2 = ${p:,.2f}/sqm per week + GST\n"
+                else:
+                    copy_block += f"Price for weeks 2-{end_wk} = ${p:,.2f}/sqm per week + GST\n"
             
         if live_weeks >= 4:
             copy_block += f"Price for weeks 4+ = ${row['Block_Rate'] / 4:,.2f}/sqm per week + GST"
