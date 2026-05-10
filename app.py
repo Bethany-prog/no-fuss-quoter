@@ -40,8 +40,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# 3. EXCEL-ALIGNED PRODUCT GROUPS & PRICING
-# logic: 'w1_3' = Base price for weeks 1-3 | 'block' = Rate for 4+ weeks
+# 3. OFFICIAL CATALOG 
 PRODUCT_CATALOG = {
     "I-TRAC": {
         "I-Trac flooring (sqm)": {"w1_3": 23.40, "block": 46.80, "labour": 4.65},
@@ -95,7 +94,6 @@ with st.expander("📍 LOGISTICS & DATES", expanded=True):
     charge_labour = col_lab.checkbox("Include Labour/Crew?", value=True)
     charge_cartage = col_cart.checkbox("Include Cartage?", value=True)
 
-# LIVE WEEKS CALC
 days_diff = (end_date - start_date).days
 live_weeks = math.ceil(days_diff / 7) if days_diff > 0 else 1
 
@@ -126,24 +124,24 @@ if st.button("ADD TO QUOTE"):
         st.session_state.df = pd.concat([st.session_state.df, new_row], ignore_index=True)
         st.rerun()
 
-# --- NEW 1-3 vs 4+ CALCULATION LOGIC ---
+# --- CALCULATION LOGIC ---
 if not st.session_state.df.empty:
     for idx, row in st.session_state.df.iterrows():
-        q, rate_1_3, d = row["Qty"], row["Unit Rate"], row["Disc %"]
+        q, r1_3, d = row["Qty"], row["Unit Rate"], row["Disc %"]
         block = row["Block_Rate"]
         labour = row["Labour_Rate"]
         
-        # 1. Mandatory 1-3 Week Charge (Hire x 3 + Labour)
-        mandatory_base = (q * rate_1_3 * 3) + (q * labour)
-        
-        # 2. Add Block Rate ONLY if hire is 4 weeks or more
-        # If live_weeks is 4, we add the block. If 1-3, we stay at mandatory_base.
-        total_hire_val = mandatory_base + (q * block if live_weeks >= 4 else 0)
+        # Calculate exactly based on week count
+        if live_weeks <= 3:
+            total_hire_val = (q * r1_3 * live_weeks) + (q * labour)
+        else:
+            # First 3 weeks at standard rate + 4th week/onwards uses the Block Rate logic
+            # Spreadsheet shows Block Rate as a flat fee for a 4-week period
+            total_hire_val = (q * r1_3 * 3) + (q * labour) + (q * block)
         
         st.session_state.df.at[idx, "Total"] = total_hire_val * (1 - (d / 100))
 
     st.markdown("### 🏗️ FLOORING")
-    # Grid displays the Week 1-3 rate for easy system entry
     edited_df = st.data_editor(st.session_state.df[["Qty", "Product", "Unit Rate", "Disc %", "Total"]], num_rows="dynamic", use_container_width=True, key="editor")
 
     if not edited_df.equals(st.session_state.df[["Qty", "Product", "Unit Rate", "Disc %", "Total"]]):
@@ -151,7 +149,6 @@ if not st.session_state.df.empty:
             st.session_state.df[col] = edited_df[col]
         st.rerun()
 
-    # Final Totals
     pure_hire = st.session_state.df["Total"].sum()
     hire_final = max(300.0, pure_hire)
     waiver = hire_final * 0.07
@@ -167,19 +164,22 @@ if not st.session_state.df.empty:
     m4.metric("CARTAGE", f"${cart_final:,.2f}")
     st.metric("GRAND TOTAL", f"${(hire_final + waiver + cart_final + lab_final):,.2f}")
     
-    # --- DYNAMIC SYSTEM TEXT ---
+    # --- FIXED SYSTEM TEXT ---
     st.markdown("### 📋 QUOTE TEXT FOR SYSTEM")
     for idx, row in st.session_state.df.iterrows():
         p = row["Unit Rate"]
         init = p + row["Labour_Rate"]
+        block_weekly = row["Block_Rate"] / 4
         
         copy_block = (
             f"PRICING BASED ON {live_weeks} WEEK HIRE PERIOD\n"
-            f"Note: Standard Hire Period is 1-3 Weeks minimum.\n"
             f"Price for Initial Week's Hire including installation & removal = ${init:,.2f}/sqm + GST\n"
-            f"Price for each Subsequent Week's Hire = ${p:,.2f}/sqm + GST"
+            f"Price for weeks 2 & 3 = ${p:,.2f}/sqm per week + GST\n"
         )
-        st.text_area(f"Copy for {row['Product']}:", value=copy_block, height=125)
+        if live_weeks >= 4:
+            copy_block += f"Price for weeks 4+ = ${block_weekly:,.2f}/sqm per week + GST"
+            
+        st.text_area(f"Copy for {row['Product']}:", value=copy_block, height=140)
 
     if st.button("RESET ALL"):
         st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Disc %", "Total", "Labour_Rate", "Block_Rate"])
