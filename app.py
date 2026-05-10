@@ -37,7 +37,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# 3. MASTER CATALOG
+# 3. MASTER CATALOG (October 2025 Standard)
 PRODUCT_CATALOG = {
     "FLOORING": {
         "I-Trac flooring (sqm)": {"w1_3": 23.40, "block": 46.80, "labour": 4.65},
@@ -99,11 +99,11 @@ if st.button("ADD TO QUOTE"):
         is_gs = ref.get("is_gs", False)
         
         if is_gs:
-            # UPDATED RATIOS v19.4
+            # Corrected Ratios v19.4
             if qty_in <= 40: s, h = 2, 4
             elif qty_in <= 100: s, h = 3, 5
-            elif qty_in <= 149: s, h = 4, 5 # Increased to 4 Staff
-            elif qty_in <= 199: s, h = 5, 5 # Increased to 5 Staff
+            elif qty_in <= 149: s, h = 4, 5
+            elif qty_in <= 199: s, h = 5, 5
             elif qty_in <= 299: s, h = 5, 6
             else: s, h = 6, 10
             
@@ -126,9 +126,9 @@ if st.button("ADD TO QUOTE"):
 # --- 3. DYNAMIC ENGINEER TICK OPTION ---
 if has_gs:
     st.divider()
-    if st.checkbox("👷 Add Engineer Sign-off ($750)", value=any(st.session_state.df["Product"] == "Engineer Sign-off")):
+    if st.checkbox("👷 Add Engineer Sign-off ($750.00)", value=any(st.session_state.df["Product"] == "Engineer Sign-off")):
         if not any(st.session_state.df["Product"] == "Engineer Sign-off"):
-            new_row = pd.DataFrame([{"Qty": 1, "Product": "Engineer Sign-off", "Unit Rate": 750.0, "Disc %": 0.0, "Total": 750.0, "Labour_Rate": 0.0, "Block_Rate": 750.0, "SYSTEM RATE": 750.0, "No_Waiver": True, "Is_GS": False}])
+            new_row = pd.DataFrame([{"Qty": 1, "Product": "Engineer Sign-off", "Unit Rate": 750.00, "Disc %": 0.0, "Total": 750.00, "Labour_Rate": 0.0, "Block_Rate": 750.00, "SYSTEM RATE": 750.00, "No_Waiver": True, "Is_GS": False}])
             st.session_state.df = pd.concat([st.session_state.df, new_row], ignore_index=True)
             st.rerun()
     elif any(st.session_state.df["Product"] == "Engineer Sign-off"):
@@ -155,14 +155,25 @@ if not st.session_state.df.empty:
         st.session_state.df.at[idx, "SYSTEM RATE"] = final_tot / q if q > 0 else 0.0
 
     st.markdown("### 🏗️ QUOTED ITEMS")
-    edited_df = st.data_editor(st.session_state.df[["Qty", "Product", "SYSTEM RATE", "Unit Rate", "Disc %", "Total"]], num_rows="dynamic", use_container_width=True, key="editor")
+    # UPDATED COLUMN CONFIG FOR FORCED CENTS
+    edited_df = st.data_editor(
+        st.session_state.df[["Qty", "Product", "SYSTEM RATE", "Unit Rate", "Disc %", "Total"]], 
+        num_rows="dynamic", 
+        use_container_width=True, 
+        key="editor",
+        column_config={
+            "SYSTEM RATE": st.column_config.NumberColumn("🔢 SYSTEM RATE", format="$%.2f"),
+            "Unit Rate": st.column_config.NumberColumn("Unit Rate", format="$%.2f"),
+            "Total": st.column_config.NumberColumn("Total", format="$%.2f")
+        }
+    )
 
     if not edited_df.equals(st.session_state.df[["Qty", "Product", "SYSTEM RATE", "Unit Rate", "Disc %", "Total"]]):
         for col in ["Qty", "Unit Rate", "Disc %"]: st.session_state.df[col] = edited_df[col]
         st.rerun()
 
     pure_hire = st.session_state.df["Total"].sum()
-    subtotal = max(2000.0 if has_gs else 300.0, pure_hire + lab_total_standalone)
+    subtotal = max(2000.00 if has_gs else 300.00, pure_hire + lab_total_standalone)
     
     waiver_base = st.session_state.df[st.session_state.df["No_Waiver"] == False]["Total"].sum()
     waiver = (waiver_base + (lab_total_standalone if labour_mode == "Show Labour as Separate Line Item" else 0)) * 0.07
