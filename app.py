@@ -29,16 +29,11 @@ st.markdown("""
     <style>
     .main { background-color: #0F111A; }
     [data-testid="stCheckbox"] {
-        background-color: #1A1D2D;
-        padding: 12px;
-        border-radius: 10px;
-        border: 1px solid #3D5AFE;
-        margin-bottom: 8px;
+        background-color: #1A1D2D; padding: 12px; border-radius: 10px;
+        border: 1px solid #3D5AFE; margin-bottom: 8px;
     }
     [data-testid="stCheckbox"] label p {
-        font-size: 18px !important;
-        font-weight: bold !important;
-        color: #00E676 !important;
+        font-size: 18px !important; font-weight: bold !important; color: #00E676 !important;
     }
     label { color: #000000 !important; font-weight: 800 !important; font-size: 16px !important; }
     [data-testid="stMetricValue"] { color: #00E676 !important; font-size: 30px !important; font-weight: bold !important; }
@@ -52,7 +47,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# 3. MASTER CATALOG WITH GRANDSTAND ADDITIONS
+# 3. UPDATED CATALOG
 PRODUCT_CATALOG = {
     "FLOORING": {
         "I-Trac flooring (sqm)": {"w1_3": 23.40, "block": 46.80, "labour": 4.65},
@@ -63,8 +58,7 @@ PRODUCT_CATALOG = {
         "No Fuss Floor (Grey/Green) (sqm)": {"w1_3": 7.10, "block": 15.00, "labour": 3.05}
     },
     "GRANDSTANDS": {
-        "Grandstand Seating (per seat)": {"is_grandstand": True, "labour": 0.00},
-        "Engineer Sign-off": {"w1_3": 750.00, "block": 750.00, "labour": 0.00, "no_waiver": True},
+        "Grandstand Seating (per seat)": {"is_gs": True, "labour": 0.00},
         "Shade Cloth / Scrim (per lm)": {"w1_3": 6.00, "block": 12.00, "labour": 0.00}
     },
     "MOJO BARRIERS": {
@@ -74,55 +68,63 @@ PRODUCT_CATALOG = {
 }
 
 if 'df' not in st.session_state:
-    st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Disc %", "Total", "Labour_Rate", "Block_Rate", "SYSTEM RATE", "No_Waiver"])
+    st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Disc %", "Total", "Labour_Rate", "Block_Rate", "SYSTEM RATE", "No_Waiver", "Is_GS"])
 
 st.title("📦 No Fuss Quote Pro")
 
-# --- LOGISTICS ---
-st.markdown("### 📍 LOGISTICS & DATES")
+# --- 1. LOGISTICS ---
+st.markdown("### 📍 LOGISTICS & LABOUR MODE")
 c1, c2, c3 = st.columns(3)
 start_date = c1.date_input("Hire Start", value=date.today(), format="DD/MM/YYYY")
 end_date = c2.date_input("Hire End", value=date.today(), format="DD/MM/YYYY")
 km_input = c3.number_input("Distance (KM)", min_value=0.0, value=None, placeholder="Type KM...")
 
-charge_labour = st.checkbox("👷 INCLUDE LABOUR COST IN QUOTE", value=True)
-split_labour = st.checkbox("✂️ SPLIT LABOUR TO SEPARATE LINE ITEM", value=False)
-charge_cartage = st.checkbox("🚚 INCLUDE CARTAGE / TRANSPORT COSTS", value=True)
+# Check if Grandstand is in the current quote
+has_gs = st.session_state.df["Is_GS"].any()
+
+if has_gs:
+    st.info("💡 Grandstand detected: Labour is automatically built-in and locked.")
+    charge_labour = True
+    split_labour = False
+else:
+    lab_col1, lab_col2 = st.columns(2)
+    charge_labour = lab_col1.checkbox("👷 Include Labour Costs", value=True)
+    split_labour = lab_col2.checkbox("✂️ Split Labour as Line Item", value=False)
+
+charge_cartage = st.checkbox("🚚 Include Cartage Costs", value=True)
 
 days_diff = (end_date - start_date).days
 live_weeks = math.ceil(days_diff / 7) if days_diff > 0 else 1
 
-# --- ADD PRODUCT ---
+# --- 2. ADD PRODUCT ---
 st.markdown("### ➕ ADD PRODUCT")
 dept_col, item_col = st.columns(2)
 dept_choice = dept_col.selectbox("Department", sorted(PRODUCT_CATALOG.keys()))
 item_choice = item_col.selectbox("Select Product", sorted(PRODUCT_CATALOG[dept_choice].keys()))
 
 c_q, c_a, c_d = st.columns([2, 2, 2])
-qty_in = c_q.number_input("Quantity / Seats", min_value=0.0, value=None, placeholder="Type Qty...")
-adj_rate = c_a.number_input("Override Rate", min_value=0.0, value=None, placeholder="Adjust Rate...")
+qty_in = c_q.number_input("Quantity / Seats", min_value=0.0, value=None, placeholder="Qty...")
+adj_rate = c_a.number_input("Override Rate", min_value=0.0, value=None, placeholder="Rate...")
 discount_pct = c_d.number_input("Discount %", min_value=0.0, max_value=100.0, value=None, placeholder="0%")
 
 if st.button("ADD TO QUOTE ENGINE"):
     if qty_in and qty_in > 0:
         ref = PRODUCT_CATALOG[dept_choice][item_choice]
-        no_waiver = ref.get("no_waiver", False)
+        is_gs = ref.get("is_gs", False)
         
-        # GRANDSTAND CALCULATOR
-        if ref.get("is_grandstand"):
-            if qty_in <= 40: staff, hours = 2, 4
-            elif qty_in <= 100: staff, hours = 3, 4
-            elif qty_in <= 149: staff, hours = 3, 5
-            elif qty_in <= 199: staff, hours = 4, 5
-            elif qty_in <= 299: staff, hours = 5, 6
-            else: staff, hours = 6, 10
+        if is_gs:
+            # Corrected Formula: ((Staff * Hours * $55) * 2 (Bump In/Out) * 2 (Margin)) / Seats
+            if qty_in <= 40: s, h = 2, 4
+            elif qty_in <= 100: s, h = 3, 4
+            elif qty_in <= 149: s, h = 3, 5
+            elif qty_in <= 199: s, h = 4, 5
+            elif qty_in <= 299: s, h = 5, 6
+            else: s, h = 6, 10
             
-            labour_val = staff * hours * 55.00
-            # Formula: (Labour x 2) / Seats
-            calculated_rate = (labour_val * 2) / qty_in
-            base_rate = adj_rate if (adj_rate and adj_rate > 0) else calculated_rate
-            labour_r = 0.0 # Labour is already built in
-            block_r = base_rate * 2 # Standard doubling for 4-week block
+            calc_rate = ((s * h * 55.0) * 2 * 2) / qty_in
+            base_rate = adj_rate if (adj_rate and adj_rate > 0) else calc_rate
+            labour_r = 0.0 # Locked into rate
+            block_r = base_rate * 2
         else:
             base_rate = adj_rate if (adj_rate and adj_rate > 0) else ref.get("w1_3", 0.0)
             labour_r = ref.get("labour", 0.0)
@@ -131,12 +133,26 @@ if st.button("ADD TO QUOTE ENGINE"):
         new_row = pd.DataFrame([{
             "Qty": qty_in, "Product": item_choice, "Unit Rate": base_rate,
             "Disc %": discount_pct if discount_pct else 0.0, "Total": 0.0, 
-            "Labour_Rate": labour_r, "Block_Rate": block_r, "SYSTEM RATE": 0.0, "No_Waiver": no_waiver
+            "Labour_Rate": labour_r, "Block_Rate": block_r, "SYSTEM RATE": 0.0, 
+            "No_Waiver": False, "Is_GS": is_gs
         }])
         st.session_state.df = pd.concat([st.session_state.df, new_row], ignore_index=True)
         st.rerun()
 
-# --- CALCULATION LOOP ---
+# --- 3. DYNAMIC ENGINEER OPTION ---
+if has_gs:
+    st.divider()
+    if st.checkbox("🏗️ Add Engineer Sign-off ($750)", value=False):
+        if not any(st.session_state.df["Product"] == "Engineer Sign-off"):
+            new_row = pd.DataFrame([{
+                "Qty": 1, "Product": "Engineer Sign-off", "Unit Rate": 750.0,
+                "Disc %": 0.0, "Total": 750.0, "Labour_Rate": 0.0, "Block_Rate": 750.0,
+                "SYSTEM RATE": 750.0, "No_Waiver": True, "Is_GS": False
+            }])
+            st.session_state.df = pd.concat([st.session_state.df, new_row], ignore_index=True)
+            st.rerun()
+
+# --- 4. CALCULATION & DATA GRID ---
 if not st.session_state.df.empty:
     lab_total_standalone = 0.0
     for idx, row in st.session_state.df.iterrows():
@@ -153,7 +169,7 @@ if not st.session_state.df.empty:
         st.session_state.df.at[idx, "Total"] = final_tot
         st.session_state.df.at[idx, "SYSTEM RATE"] = final_tot / q if q > 0 else 0.0
 
-    st.markdown("### 🏗️ QUOTED ITEMS & SYSTEM RATES")
+    st.markdown("### 🏗️ QUOTED ITEMS")
     edited_df = st.data_editor(st.session_state.df[["Qty", "Product", "SYSTEM RATE", "Unit Rate", "Disc %", "Total"]], 
                                num_rows="dynamic", use_container_width=True, key="editor")
 
@@ -163,23 +179,22 @@ if not st.session_state.df.empty:
         st.rerun()
 
     pure_hire = st.session_state.df["Total"].sum()
-    grand_hire = max(2000.0, pure_hire + lab_total_standalone) # Minimum $2000 ex GST
+    grand_hire = max(2000.0 if has_gs else 300.0, pure_hire + lab_total_standalone)
     
-    # Waiver calculation (excludes Engineer Sign-off)
     waiver_base = st.session_state.df[st.session_state.df["No_Waiver"] == False]["Total"].sum()
     waiver = (waiver_base + lab_total_standalone) * 0.07
     cart_final = (km_input * 4 * 3.50) if km_input and charge_cartage else 0.0
     
     st.divider()
-    st.markdown("### 💰 FINANCIAL SUMMARY (EX GST)")
+    st.markdown("### 💰 FINANCIAL SUMMARY")
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("SUBTOTAL", f"${grand_hire:,.2f}")
-    m2.metric("LABOUR (Standalone)", f"${lab_total_standalone:,.2f}")
-    m3.metric("WAIVER (7%)", f"${waiver:,.2f}")
-    m4.metric("CARTAGE TOTAL", f"${cart_final:,.2f}")
-    st.metric("GRAND TOTAL QUOTE", f"${(grand_hire + waiver + cart_final):,.2f}")
+    m2.metric("LABOUR", f"${lab_total_standalone:,.2f}")
+    m3.metric("WAIVER", f"${waiver:,.2f}")
+    m4.metric("CARTAGE", f"${cart_final:,.2f}")
+    st.metric("GRAND TOTAL", f"${(grand_hire + waiver + cart_final):,.2f}")
     
-    st.markdown("### 📋 SYSTEM DESCRIPTION BLOCKS")
+    st.markdown("### 📋 DESCRIPTION BLOCKS")
     for idx, row in st.session_state.df.iterrows():
         p, lab_r = row["Unit Rate"], row["Labour_Rate"]
         init_p = p if (split_labour or lab_r == 0) else p + lab_r
@@ -193,8 +208,8 @@ if not st.session_state.df.empty:
                 copy_block += f"Price for weeks 2-3 = ${p:,.2f}/unit week + GST\n"
         if live_weeks >= 4:
             copy_block += f"Price for weeks 4+ = ${row['Block_Rate'] / 4:,.2f}/unit week + GST"
-        st.text_area(f"Line Item {idx+1}: {row['Product']}", value=copy_block, height=140)
+        st.text_area(f"Line Item {idx+1}: {row['Product']}", value=copy_block, height=125)
 
-    if st.button("⚠️ RESET ENTIRE QUOTE"):
-        st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Disc %", "Total", "Labour_Rate", "Block_Rate", "SYSTEM RATE", "No_Waiver"])
+    if st.button("⚠️ RESET QUOTE"):
+        st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Disc %", "Total", "Labour_Rate", "Block_Rate", "SYSTEM RATE", "No_Waiver", "Is_GS"])
         st.rerun()
