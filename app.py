@@ -28,16 +28,37 @@ st.set_page_config(page_title="No Fuss Quote Pro", page_icon="📦", layout="wid
 st.markdown("""
     <style>
     .main { background-color: #0F111A; }
-    label, .stCheckbox { color: #000000 !important; font-weight: 800 !important; }
-    [data-testid="stMetricValue"] { color: #00E676 !important; font-size: 24px !important; font-weight: bold !important; }
-    [data-testid="stMetricLabel"] { color: #FFFFFF !important; font-size: 14px !important; }
-    div.stMetric { background-color: #1A1D2D; padding: 15px; border-radius: 10px; border: 1px solid #3D5AFE; }
-    div.stButton > button:first-child {
-        background-color: #3D5AFE; color: white; border-radius: 8px; width: 100%; font-weight: bold;
+    
+    /* Bigger Checkboxes */
+    [data-testid="stCheckbox"] {
+        background-color: #1A1D2D;
+        padding: 15px;
+        border-radius: 10px;
+        border: 1px solid #3D5AFE;
+        margin-bottom: 10px;
     }
-    [data-testid="stExpander"] { border: 2px solid #3D5AFE; border-radius: 12px; background-color: #FFFFFF; }
-    h3 { color: #00E676 !important; border-bottom: 2px solid #00E676; padding-bottom: 5px; margin-top: 20px; }
-    .stDataFrame { border: 2px solid #00E676 !important; border-radius: 10px; }
+    [data-testid="stCheckbox"] label p {
+        font-size: 20px !important;
+        font-weight: bold !important;
+        color: #00E676 !important;
+    }
+    
+    /* Metrics and Header Styling */
+    label { color: #000000 !important; font-weight: 800 !important; font-size: 16px !important; }
+    [data-testid="stMetricValue"] { color: #00E676 !important; font-size: 32px !important; font-weight: bold !important; }
+    [data-testid="stMetricLabel"] { color: #FFFFFF !important; font-size: 16px !important; }
+    div.stMetric { background-color: #1A1D2D; padding: 20px; border-radius: 12px; border: 2px solid #3D5AFE; }
+    
+    /* Button Styling */
+    div.stButton > button:first-child {
+        background-color: #3D5AFE; color: white; border-radius: 10px; height: 55px; font-weight: bold; font-size: 18px;
+    }
+    
+    /* Section Headers */
+    h3 { color: #00E676 !important; border-left: 5px solid #00E676; padding-left: 15px; margin-top: 30px; margin-bottom: 20px; }
+    
+    /* Data Grid Styling */
+    .stDataFrame { border: 2px solid #00E676 !important; border-radius: 12px; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -82,33 +103,35 @@ PRODUCT_CATALOG = {
 if 'df' not in st.session_state:
     st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Disc %", "Total", "Labour_Rate", "Block_Rate", "SYSTEM RATE"])
 
-st.title("📦 No Fuss Quoting Engine")
+st.title("📦 No Fuss Quoting Pro")
 
-# --- LOGISTICS ---
-with st.expander("📍 LOGISTICS & DATES", expanded=True):
-    c1, c2, c3 = st.columns(3)
-    start_date = c1.date_input("Hire Start", value=date.today(), format="DD/MM/YYYY")
-    end_date = c2.date_input("Hire End", value=date.today(), format="DD/MM/YYYY")
-    km_input = c3.number_input("Distance (KM)", min_value=0.0, value=None, placeholder="Type KM...")
-    
-    col_lab, col_cart = st.columns(2)
-    charge_labour = col_lab.checkbox("Include Labour/Crew?", value=True)
-    charge_cartage = col_cart.checkbox("Include Cartage?", value=True)
+# --- 📍 LOGISTICS (FIXED SECTION) ---
+st.markdown("### 📍 LOGISTICS & DATES")
+c1, c2, c3 = st.columns(3)
+start_date = c1.date_input("Hire Start", value=date.today(), format="DD/MM/YYYY")
+end_date = c2.date_input("Hire End", value=date.today(), format="DD/MM/YYYY")
+km_input = c3.number_input("Distance (KM) from 9 Battery Crt", min_value=0.0, value=None, placeholder="Type KM...")
 
+st.markdown("<br>", unsafe_allow_html=True)
+charge_labour = st.checkbox("👷 INCLUDE LABOUR / CREW COSTS", value=True)
+charge_cartage = st.checkbox("🚚 INCLUDE CARTAGE / TRANSPORT COSTS", value=True)
+
+# LIVE WEEKS CALC
 days_diff = (end_date - start_date).days
 live_weeks = math.ceil(days_diff / 7) if days_diff > 0 else 1
 
-# --- ADD PRODUCT ---
+# --- ➕ ADD PRODUCT ---
 st.markdown("### ➕ ADD PRODUCT")
-cat_choice = st.selectbox("Select Category", sorted(PRODUCT_CATALOG.keys()))
-item_choice = st.selectbox("Select Item", sorted(PRODUCT_CATALOG[cat_choice].keys()))
+cat_col, item_col = st.columns(2)
+cat_choice = cat_col.selectbox("Product Category", sorted(PRODUCT_CATALOG.keys()))
+item_choice = item_col.selectbox("Specific Item", sorted(PRODUCT_CATALOG[cat_choice].keys()))
 
 c_q, c_a, c_d = st.columns([2, 2, 2])
 qty_in = c_q.number_input("Quantity", min_value=0.0, value=None, placeholder="Type Qty...")
-adj_rate = c_a.number_input("Override Wk 1-3 Rate", min_value=0.0, value=None, placeholder="Adjust Rate...")
-discount_pct = c_d.number_input("Discount %", min_value=0.0, max_value=100.0, value=None, placeholder="0%")
+adj_rate = c_a.number_input("Override Base Rate", min_value=0.0, value=None, placeholder="Adjust Rate...")
+discount_pct = c_d.number_input("Special Discount %", min_value=0.0, max_value=100.0, value=None, placeholder="0%")
 
-if st.button("ADD TO QUOTE"):
+if st.button("ADD TO QUOTE ENGINE"):
     if qty_in and qty_in > 0:
         ref = PRODUCT_CATALOG[cat_choice][item_choice]
         base_rate = adj_rate if (adj_rate and adj_rate > 0) else ref["w1_3"]
@@ -126,35 +149,30 @@ if st.button("ADD TO QUOTE"):
         st.session_state.df = pd.concat([st.session_state.df, new_row], ignore_index=True)
         st.rerun()
 
-# --- CALCULATION LOGIC ---
+# --- CALCULATION LOOP ---
 if not st.session_state.df.empty:
     for idx, row in st.session_state.df.iterrows():
         q, r1_3, d = row["Qty"], row["Unit Rate"], row["Disc %"]
         block = row["Block_Rate"]
         labour = row["Labour_Rate"]
         
-        # Calculate Hire Component
+        # Calculate Hire + Optional Labour
         if live_weeks <= 3:
             hire_component = (q * r1_3 * live_weeks)
         else:
             hire_component = (q * r1_3 * 3) + (q * block)
         
-        # Calculate Labour separately so we can toggle it
         labour_component = (q * labour) if charge_labour else 0.0
-        
-        # Apply discount to everything
         final_total = (hire_component + labour_component) * (1 - (d / 100))
         
         st.session_state.df.at[idx, "Total"] = final_total
-        # CRITICAL: This is the rate you punch into the system
         st.session_state.df.at[idx, "SYSTEM RATE"] = final_total / q if q > 0 else 0.0
 
-    st.markdown("### 🏗️ FLOORING")
-    # THE SYSTEM RATE is now the most prominent column
+    st.markdown("### 🏗️ QUOTED ITEMS & SYSTEM RATES")
     edited_df = st.data_editor(st.session_state.df[["Qty", "Product", "SYSTEM RATE", "Unit Rate", "Disc %", "Total"]], 
                                num_rows="dynamic", use_container_width=True, key="editor",
                                column_config={
-                                   "SYSTEM RATE": st.column_config.NumberColumn("🔢 SYSTEM RATE", format="$%.2f", help="Copy this value into your work software.")
+                                   "SYSTEM RATE": st.column_config.NumberColumn("🔢 COPY TO SYSTEM", format="$%.2f")
                                })
 
     if not edited_df.equals(st.session_state.df[["Qty", "Product", "SYSTEM RATE", "Unit Rate", "Disc %", "Total"]]):
@@ -162,21 +180,22 @@ if not st.session_state.df.empty:
             st.session_state.df[col] = edited_df[col]
         st.rerun()
 
+    # Summary Totals
     pure_hire = st.session_state.df["Total"].sum()
     hire_final = max(300.0, pure_hire)
     waiver = hire_final * 0.07
     cart_final = (km_input * 4 * 3.50) if km_input and charge_cartage else 0.0
     
     st.divider()
-    st.markdown("### 💰 SUMMARY (EX GST)")
+    st.markdown("### 💰 FINANCIAL SUMMARY (EX GST)")
     m1, m2, m3 = st.columns(3)
-    m1.metric("TOTAL HIRE (Incl Labour)", f"${pure_hire:,.2f}")
+    m1.metric("TOTAL LINE ITEMS", f"${pure_hire:,.2f}")
     m2.metric("WAIVER (7%)", f"${waiver:,.2f}")
-    m3.metric("CARTAGE", f"${cart_final:,.2f}")
-    st.metric("GRAND TOTAL", f"${(hire_final + waiver + cart_final):,.2f}")
+    m3.metric("CARTAGE TOTAL", f"${cart_final:,.2f}")
+    st.metric("GRAND TOTAL QUOTE", f"${(hire_final + waiver + cart_final):,.2f}")
     
     # --- DYNAMIC SYSTEM TEXT ---
-    st.markdown("### 📋 QUOTE TEXT FOR SYSTEM")
+    st.markdown("### 📋 SYSTEM DESCRIPTION BLOCKS")
     for idx, row in st.session_state.df.iterrows():
         p = row["Unit Rate"]
         init = p + row["Labour_Rate"]
@@ -190,8 +209,8 @@ if not st.session_state.df.empty:
         if live_weeks >= 4:
             copy_block += f"Price for weeks 4+ = ${block_weekly:,.2f}/sqm per week + GST"
             
-        st.text_area(f"Copy for {row['Product']}:", value=copy_block, height=140)
+        st.text_area(f"Line Item {idx+1}: {row['Product']}", value=copy_block, height=140)
 
-    if st.button("RESET ALL"):
+    if st.button("⚠️ RESET ENTIRE QUOTE"):
         st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Disc %", "Total", "Labour_Rate", "Block_Rate", "SYSTEM RATE"])
         st.rerun()
