@@ -28,26 +28,16 @@ st.set_page_config(page_title="No Fuss Quote Pro", page_icon="📦", layout="wid
 st.markdown("""
     <style>
     .main { background-color: #0F111A; }
-    [data-testid="stCheckbox"] {
-        background-color: #1A1D2D; padding: 12px; border-radius: 10px;
-        border: 1px solid #3D5AFE; margin-bottom: 8px;
-    }
-    [data-testid="stCheckbox"] label p {
-        font-size: 18px !important; font-weight: bold !important; color: #00E676 !important;
-    }
-    label { color: #000000 !important; font-weight: 800 !important; font-size: 16px !important; }
-    [data-testid="stMetricValue"] { color: #00E676 !important; font-size: 30px !important; font-weight: bold !important; }
-    [data-testid="stMetricLabel"] { color: #FFFFFF !important; font-size: 14px !important; }
+    div[data-testid="stSelectbox"] label p { font-size: 18px !important; color: #00E676 !important; font-weight: bold !important; }
+    div[data-testid="stMetricValue"] { color: #00E676 !important; font-size: 32px !important; font-weight: bold !important; }
     div.stMetric { background-color: #1A1D2D; padding: 20px; border-radius: 12px; border: 2px solid #3D5AFE; }
-    div.stButton > button:first-child {
-        background-color: #3D5AFE; color: white; border-radius: 10px; height: 50px; font-weight: bold;
-    }
+    div.stButton > button:first-child { background-color: #3D5AFE; color: white; border-radius: 10px; height: 50px; font-weight: bold; }
     h3 { color: #00E676 !important; border-left: 5px solid #00E676; padding-left: 15px; margin-top: 25px; }
     .stDataFrame { border: 2px solid #00E676 !important; border-radius: 12px; }
     </style>
     """, unsafe_allow_html=True)
 
-# 3. UPDATED CATALOG
+# 3. MASTER CATALOG
 PRODUCT_CATALOG = {
     "FLOORING": {
         "I-Trac flooring (sqm)": {"w1_3": 23.40, "block": 46.80, "labour": 4.65},
@@ -72,26 +62,22 @@ if 'df' not in st.session_state:
 
 st.title("📦 No Fuss Quote Pro")
 
-# --- 1. LOGISTICS ---
-st.markdown("### 📍 LOGISTICS & LABOUR MODE")
+# --- 1. LOGISTICS & LABOUR ---
+st.markdown("### 📍 LOGISTICS & LABOUR")
 c1, c2, c3 = st.columns(3)
 start_date = c1.date_input("Hire Start", value=date.today(), format="DD/MM/YYYY")
 end_date = c2.date_input("Hire End", value=date.today(), format="DD/MM/YYYY")
 km_input = c3.number_input("Distance (KM)", min_value=0.0, value=None, placeholder="Type KM...")
 
-# Check if Grandstand is in the current quote
 has_gs = st.session_state.df["Is_GS"].any()
-
 if has_gs:
-    st.info("💡 Grandstand detected: Labour is automatically built-in and locked.")
-    charge_labour = True
-    split_labour = False
+    st.info("💡 Grandstand pricing automatically includes built-in installation labour.")
+    labour_mode = "Bake Labour into Unit Rate"
 else:
-    lab_col1, lab_col2 = st.columns(2)
-    charge_labour = lab_col1.checkbox("👷 Include Labour Costs", value=True)
-    split_labour = lab_col2.checkbox("✂️ Split Labour as Line Item", value=False)
+    labour_mode = st.selectbox("How should Labour be handled?", 
+                               ["Bake Labour into Unit Rate", "Show Labour as Separate Line Item", "No Labour (Delivery Only)"])
 
-charge_cartage = st.checkbox("🚚 Include Cartage Costs", value=True)
+charge_cartage = st.checkbox("🚚 Include Cartage Costs ($3.50/km x 4 trips)", value=True)
 
 days_diff = (end_date - start_date).days
 live_weeks = math.ceil(days_diff / 7) if days_diff > 0 else 1
@@ -100,57 +86,54 @@ live_weeks = math.ceil(days_diff / 7) if days_diff > 0 else 1
 st.markdown("### ➕ ADD PRODUCT")
 dept_col, item_col = st.columns(2)
 dept_choice = dept_col.selectbox("Department", sorted(PRODUCT_CATALOG.keys()))
-item_choice = item_col.selectbox("Select Product", sorted(PRODUCT_CATALOG[dept_choice].keys()))
+item_choice = item_col.selectbox("Product", sorted(PRODUCT_CATALOG[dept_choice].keys()))
 
 c_q, c_a, c_d = st.columns([2, 2, 2])
 qty_in = c_q.number_input("Quantity / Seats", min_value=0.0, value=None, placeholder="Qty...")
-adj_rate = c_a.number_input("Override Rate", min_value=0.0, value=None, placeholder="Rate...")
-discount_pct = c_d.number_input("Discount %", min_value=0.0, max_value=100.0, value=None, placeholder="0%")
+adj_rate = c_a.number_input("Override Rate", min_value=0.0, value=None, placeholder="Manual Price...")
+discount_pct = c_d.number_input("Special Discount %", min_value=0.0, max_value=100.0, value=None, placeholder="0%")
 
-if st.button("ADD TO QUOTE ENGINE"):
+if st.button("ADD TO QUOTE"):
     if qty_in and qty_in > 0:
         ref = PRODUCT_CATALOG[dept_choice][item_choice]
         is_gs = ref.get("is_gs", False)
         
         if is_gs:
-            # Corrected Formula: ((Staff * Hours * $55) * 2 (Bump In/Out) * 2 (Margin)) / Seats
+            # UPDATED RATIOS v19.4
             if qty_in <= 40: s, h = 2, 4
-            elif qty_in <= 100: s, h = 3, 4
-            elif qty_in <= 149: s, h = 3, 5
-            elif qty_in <= 199: s, h = 4, 5
+            elif qty_in <= 100: s, h = 3, 5
+            elif qty_in <= 149: s, h = 4, 5 # Increased to 4 Staff
+            elif qty_in <= 199: s, h = 5, 5 # Increased to 5 Staff
             elif qty_in <= 299: s, h = 5, 6
             else: s, h = 6, 10
             
-            calc_rate = ((s * h * 55.0) * 2 * 2) / qty_in
+            calc_rate = (s * h * 55.0 * 4) / qty_in
             base_rate = adj_rate if (adj_rate and adj_rate > 0) else calc_rate
-            labour_r = 0.0 # Locked into rate
-            block_r = base_rate * 2
+            lab_r, block_r = 0.0, base_rate * 2
         else:
             base_rate = adj_rate if (adj_rate and adj_rate > 0) else ref.get("w1_3", 0.0)
-            labour_r = ref.get("labour", 0.0)
-            block_r = ref.get("block", 0.0)
+            lab_r, block_r = ref.get("labour", 0.0), ref.get("block", 0.0)
 
         new_row = pd.DataFrame([{
             "Qty": qty_in, "Product": item_choice, "Unit Rate": base_rate,
             "Disc %": discount_pct if discount_pct else 0.0, "Total": 0.0, 
-            "Labour_Rate": labour_r, "Block_Rate": block_r, "SYSTEM RATE": 0.0, 
+            "Labour_Rate": lab_r, "Block_Rate": block_r, "SYSTEM RATE": 0.0, 
             "No_Waiver": False, "Is_GS": is_gs
         }])
         st.session_state.df = pd.concat([st.session_state.df, new_row], ignore_index=True)
         st.rerun()
 
-# --- 3. DYNAMIC ENGINEER OPTION ---
+# --- 3. DYNAMIC ENGINEER TICK OPTION ---
 if has_gs:
     st.divider()
-    if st.checkbox("🏗️ Add Engineer Sign-off ($750)", value=False):
+    if st.checkbox("👷 Add Engineer Sign-off ($750)", value=any(st.session_state.df["Product"] == "Engineer Sign-off")):
         if not any(st.session_state.df["Product"] == "Engineer Sign-off"):
-            new_row = pd.DataFrame([{
-                "Qty": 1, "Product": "Engineer Sign-off", "Unit Rate": 750.0,
-                "Disc %": 0.0, "Total": 750.0, "Labour_Rate": 0.0, "Block_Rate": 750.0,
-                "SYSTEM RATE": 750.0, "No_Waiver": True, "Is_GS": False
-            }])
+            new_row = pd.DataFrame([{"Qty": 1, "Product": "Engineer Sign-off", "Unit Rate": 750.0, "Disc %": 0.0, "Total": 750.0, "Labour_Rate": 0.0, "Block_Rate": 750.0, "SYSTEM RATE": 750.0, "No_Waiver": True, "Is_GS": False}])
             st.session_state.df = pd.concat([st.session_state.df, new_row], ignore_index=True)
             st.rerun()
+    elif any(st.session_state.df["Product"] == "Engineer Sign-off"):
+        st.session_state.df = st.session_state.df[st.session_state.df["Product"] != "Engineer Sign-off"]
+        st.rerun()
 
 # --- 4. CALCULATION & DATA GRID ---
 if not st.session_state.df.empty:
@@ -159,9 +142,11 @@ if not st.session_state.df.empty:
         q, r1_3, d, block, lab_r = row["Qty"], row["Unit Rate"], row["Disc %"], row["Block_Rate"], row["Labour_Rate"]
         hire_comp = (q * r1_3 * live_weeks) if live_weeks <= 3 else (q * r1_3 * 3) + (q * block)
         
-        if not charge_labour or split_labour:
+        if labour_mode == "No Labour (Delivery Only)":
             item_lab = 0.0
-            if charge_labour: lab_total_standalone += (q * lab_r) * (1 - (d / 100))
+        elif labour_mode == "Show Labour as Separate Line Item":
+            item_lab = 0.0
+            lab_total_standalone += (q * lab_r) * (1 - (d / 100))
         else:
             item_lab = q * lab_r
             
@@ -170,44 +155,40 @@ if not st.session_state.df.empty:
         st.session_state.df.at[idx, "SYSTEM RATE"] = final_tot / q if q > 0 else 0.0
 
     st.markdown("### 🏗️ QUOTED ITEMS")
-    edited_df = st.data_editor(st.session_state.df[["Qty", "Product", "SYSTEM RATE", "Unit Rate", "Disc %", "Total"]], 
-                               num_rows="dynamic", use_container_width=True, key="editor")
+    edited_df = st.data_editor(st.session_state.df[["Qty", "Product", "SYSTEM RATE", "Unit Rate", "Disc %", "Total"]], num_rows="dynamic", use_container_width=True, key="editor")
 
     if not edited_df.equals(st.session_state.df[["Qty", "Product", "SYSTEM RATE", "Unit Rate", "Disc %", "Total"]]):
-        for col in ["Qty", "Unit Rate", "Disc %"]:
-            st.session_state.df[col] = edited_df[col]
+        for col in ["Qty", "Unit Rate", "Disc %"]: st.session_state.df[col] = edited_df[col]
         st.rerun()
 
     pure_hire = st.session_state.df["Total"].sum()
-    grand_hire = max(2000.0 if has_gs else 300.0, pure_hire + lab_total_standalone)
+    subtotal = max(2000.0 if has_gs else 300.0, pure_hire + lab_total_standalone)
     
     waiver_base = st.session_state.df[st.session_state.df["No_Waiver"] == False]["Total"].sum()
-    waiver = (waiver_base + lab_total_standalone) * 0.07
-    cart_final = (km_input * 4 * 3.50) if km_input and charge_cartage else 0.0
+    waiver = (waiver_base + (lab_total_standalone if labour_mode == "Show Labour as Separate Line Item" else 0)) * 0.07
+    cartage = (km_input * 4 * 3.50) if km_input and charge_cartage else 0.0
     
     st.divider()
     st.markdown("### 💰 FINANCIAL SUMMARY")
     m1, m2, m3, m4 = st.columns(4)
-    m1.metric("SUBTOTAL", f"${grand_hire:,.2f}")
-    m2.metric("LABOUR", f"${lab_total_standalone:,.2f}")
-    m3.metric("WAIVER", f"${waiver:,.2f}")
-    m4.metric("CARTAGE", f"${cart_final:,.2f}")
-    st.metric("GRAND TOTAL", f"${(grand_hire + waiver + cart_final):,.2f}")
+    m1.metric("SUBTOTAL", f"${subtotal:,.2f}")
+    m2.metric("LABOUR (Split)", f"${lab_total_standalone:,.2f}")
+    m3.metric("WAIVER (7%)", f"${waiver:,.2f}")
+    m4.metric("CARTAGE", f"${cartage:,.2f}")
+    st.metric("GRAND TOTAL (EX GST)", f"${(subtotal + waiver + cartage):,.2f}")
     
     st.markdown("### 📋 DESCRIPTION BLOCKS")
     for idx, row in st.session_state.df.iterrows():
         p, lab_r = row["Unit Rate"], row["Labour_Rate"]
-        init_p = p if (split_labour or lab_r == 0) else p + lab_r
+        init_p = p if (labour_mode != "Bake Labour into Unit Rate" or lab_r == 0) else p + lab_r
         copy_block = f"PRICING BASED ON {live_weeks} WEEK HIRE PERIOD\n"
         if init_p == p:
             end_wk = min(live_weeks, 3)
-            copy_block += f"Price for weeks 1-{end_wk} = ${p:,.2f}/unit week + GST\n"
+            copy_block += f"Price for weeks 1-{end_wk} = ${p:,.2f} per unit/week + GST\n"
         else:
-            copy_block += f"Price for Initial Week (Incl. Install) = ${init_p:,.2f}/unit + GST\n"
-            if live_weeks > 1:
-                copy_block += f"Price for weeks 2-3 = ${p:,.2f}/unit week + GST\n"
-        if live_weeks >= 4:
-            copy_block += f"Price for weeks 4+ = ${row['Block_Rate'] / 4:,.2f}/unit week + GST"
+            copy_block += f"Price for Initial Week (Incl. Install) = ${init_p:,.2f} per unit + GST\n"
+            if live_weeks > 1: copy_block += f"Price for weeks 2-3 = ${p:,.2f} per unit/week + GST\n"
+        if live_weeks >= 4: copy_block += f"Price for weeks 4+ = ${row['Block_Rate'] / 4:,.2f} per unit/week + GST"
         st.text_area(f"Line Item {idx+1}: {row['Product']}", value=copy_block, height=125)
 
     if st.button("⚠️ RESET QUOTE"):
