@@ -178,17 +178,22 @@ if not st.session_state.df.empty:
     for idx, row in st.session_state.df.iterrows():
         p, lab_r = row["Unit Rate"], row["Labour_Rate"]
         
-        # AMENDED DESCRIPTION LOGIC
-        if split_labour:
-            init_line = f"Price for Initial Week's Hire = ${p:,.2f}/sqm + GST\n"
+        # COMBINED LOGIC FOR WEEKS 1-3
+        init_price = p if split_labour else p + lab_r
+        
+        copy_block = f"PRICING BASED ON {live_weeks} WEEK HIRE PERIOD\n"
+        
+        # If Initial Price is the same as the Weekly Price (Weeks 2 & 3)
+        if init_price == p:
+            copy_block += f"Price for weeks 1, 2 & 3 = ${p:,.2f}/sqm per week + GST\n"
         else:
-            init_line = f"Price for Initial Week's Hire including installation & removal = ${p + lab_r:,.2f}/sqm + GST\n"
+            # Keep separate if labour is baked into only the first week
+            copy_block += f"Price for Initial Week's Hire including installation & removal = ${init_price:,.2f}/sqm + GST\n"
+            copy_block += f"Price for weeks 2 & 3 = ${p:,.2f}/sqm per week + GST\n"
             
-        copy_block = (f"PRICING BASED ON {live_weeks} WEEK HIRE PERIOD\n"
-                      f"{init_line}"
-                      f"Price for weeks 2 & 3 = ${p:,.2f}/sqm per week + GST\n")
         if live_weeks >= 4:
             copy_block += f"Price for weeks 4+ = ${row['Block_Rate'] / 4:,.2f}/sqm per week + GST"
+            
         st.text_area(f"Line Item {idx+1}: {row['Product']}", value=copy_block, height=140)
 
     if st.button("⚠️ RESET ENTIRE QUOTE"):
