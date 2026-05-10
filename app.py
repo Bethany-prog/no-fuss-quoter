@@ -37,6 +37,7 @@ st.markdown("""
     }
     [data-testid="stExpander"] { border: 2px solid #3D5AFE; border-radius: 12px; background-color: #FFFFFF; }
     h3 { color: #00E676 !important; border-bottom: 2px solid #00E676; padding-bottom: 5px; margin-top: 20px; }
+    .stDataFrame { border: 2px solid #00E676 !important; border-radius: 10px; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -79,7 +80,7 @@ PRODUCT_CATALOG = {
 }
 
 if 'df' not in st.session_state:
-    st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Disc %", "Total", "Labour_Rate", "Block_Rate"])
+    st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Disc %", "Total", "Labour_Rate", "Block_Rate", "SYSTEM RATE"])
 
 st.title("📦 No Fuss Quoting Engine")
 
@@ -119,7 +120,8 @@ if st.button("ADD TO QUOTE"):
             "Disc %": discount_pct if discount_pct else 0.0,
             "Total": 0.0, 
             "Labour_Rate": ref["labour"],
-            "Block_Rate": ref["block"]
+            "Block_Rate": ref["block"],
+            "SYSTEM RATE": 0.0
         }])
         st.session_state.df = pd.concat([st.session_state.df, new_row], ignore_index=True)
         st.rerun()
@@ -131,20 +133,31 @@ if not st.session_state.df.empty:
         block = row["Block_Rate"]
         labour = row["Labour_Rate"]
         
-        # Calculate exactly based on week count
+        # Calculate Hire Component
         if live_weeks <= 3:
-            total_hire_val = (q * r1_3 * live_weeks) + (q * labour)
+            hire_component = (q * r1_3 * live_weeks)
         else:
-            # First 3 weeks at standard rate + 4th week/onwards uses the Block Rate logic
-            # Spreadsheet shows Block Rate as a flat fee for a 4-week period
-            total_hire_val = (q * r1_3 * 3) + (q * labour) + (q * block)
+            hire_component = (q * r1_3 * 3) + (q * block)
         
-        st.session_state.df.at[idx, "Total"] = total_hire_val * (1 - (d / 100))
+        # Calculate Labour separately so we can toggle it
+        labour_component = (q * labour) if charge_labour else 0.0
+        
+        # Apply discount to everything
+        final_total = (hire_component + labour_component) * (1 - (d / 100))
+        
+        st.session_state.df.at[idx, "Total"] = final_total
+        # CRITICAL: This is the rate you punch into the system
+        st.session_state.df.at[idx, "SYSTEM RATE"] = final_total / q if q > 0 else 0.0
 
     st.markdown("### 🏗️ FLOORING")
-    edited_df = st.data_editor(st.session_state.df[["Qty", "Product", "Unit Rate", "Disc %", "Total"]], num_rows="dynamic", use_container_width=True, key="editor")
+    # THE SYSTEM RATE is now the most prominent column
+    edited_df = st.data_editor(st.session_state.df[["Qty", "Product", "SYSTEM RATE", "Unit Rate", "Disc %", "Total"]], 
+                               num_rows="dynamic", use_container_width=True, key="editor",
+                               column_config={
+                                   "SYSTEM RATE": st.column_config.NumberColumn("🔢 SYSTEM RATE", format="$%.2f", help="Copy this value into your work software.")
+                               })
 
-    if not edited_df.equals(st.session_state.df[["Qty", "Product", "Unit Rate", "Disc %", "Total"]]):
+    if not edited_df.equals(st.session_state.df[["Qty", "Product", "SYSTEM RATE", "Unit Rate", "Disc %", "Total"]]):
         for col in ["Qty", "Unit Rate", "Disc %"]:
             st.session_state.df[col] = edited_df[col]
         st.rerun()
@@ -153,18 +166,16 @@ if not st.session_state.df.empty:
     hire_final = max(300.0, pure_hire)
     waiver = hire_final * 0.07
     cart_final = (km_input * 4 * 3.50) if km_input and charge_cartage else 0.0
-    lab_final = (st.session_state.df["Qty"] * st.session_state.df["Labour_Rate"]).sum() if charge_labour else 0.0
     
     st.divider()
     st.markdown("### 💰 SUMMARY (EX GST)")
-    m1, m2, m3, m4 = st.columns(4)
-    m1.metric("HIRE COST", f"${pure_hire:,.2f}")
+    m1, m2, m3 = st.columns(3)
+    m1.metric("TOTAL HIRE (Incl Labour)", f"${pure_hire:,.2f}")
     m2.metric("WAIVER (7%)", f"${waiver:,.2f}")
-    m3.metric("LABOUR", f"${lab_final:,.2f}")
-    m4.metric("CARTAGE", f"${cart_final:,.2f}")
-    st.metric("GRAND TOTAL", f"${(hire_final + waiver + cart_final + lab_final):,.2f}")
+    m3.metric("CARTAGE", f"${cart_final:,.2f}")
+    st.metric("GRAND TOTAL", f"${(hire_final + waiver + cart_final):,.2f}")
     
-    # --- FIXED SYSTEM TEXT ---
+    # --- DYNAMIC SYSTEM TEXT ---
     st.markdown("### 📋 QUOTE TEXT FOR SYSTEM")
     for idx, row in st.session_state.df.iterrows():
         p = row["Unit Rate"]
@@ -182,5 +193,5 @@ if not st.session_state.df.empty:
         st.text_area(f"Copy for {row['Product']}:", value=copy_block, height=140)
 
     if st.button("RESET ALL"):
-        st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Disc %", "Total", "Labour_Rate", "Block_Rate"])
+        st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Disc %", "Total", "Labour_Rate", "Block_Rate", "SYSTEM RATE"])
         st.rerun()
