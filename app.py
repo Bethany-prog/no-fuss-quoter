@@ -32,32 +32,30 @@ st.markdown("""
     /* Bigger Checkboxes */
     [data-testid="stCheckbox"] {
         background-color: #1A1D2D;
-        padding: 15px;
+        padding: 12px;
         border-radius: 10px;
         border: 1px solid #3D5AFE;
-        margin-bottom: 10px;
+        margin-bottom: 8px;
     }
     [data-testid="stCheckbox"] label p {
-        font-size: 20px !important;
+        font-size: 18px !important;
         font-weight: bold !important;
         color: #00E676 !important;
     }
     
     /* Metrics and Header Styling */
     label { color: #000000 !important; font-weight: 800 !important; font-size: 16px !important; }
-    [data-testid="stMetricValue"] { color: #00E676 !important; font-size: 32px !important; font-weight: bold !important; }
-    [data-testid="stMetricLabel"] { color: #FFFFFF !important; font-size: 16px !important; }
+    [data-testid="stMetricValue"] { color: #00E676 !important; font-size: 30px !important; font-weight: bold !important; }
+    [data-testid="stMetricLabel"] { color: #FFFFFF !important; font-size: 14px !important; }
     div.stMetric { background-color: #1A1D2D; padding: 20px; border-radius: 12px; border: 2px solid #3D5AFE; }
     
     /* Button Styling */
     div.stButton > button:first-child {
-        background-color: #3D5AFE; color: white; border-radius: 10px; height: 55px; font-weight: bold; font-size: 18px;
+        background-color: #3D5AFE; color: white; border-radius: 10px; height: 50px; font-weight: bold;
     }
     
     /* Section Headers */
-    h3 { color: #00E676 !important; border-left: 5px solid #00E676; padding-left: 15px; margin-top: 30px; margin-bottom: 20px; }
-    
-    /* Data Grid Styling */
+    h3 { color: #00E676 !important; border-left: 5px solid #00E676; padding-left: 15px; margin-top: 25px; }
     .stDataFrame { border: 2px solid #00E676 !important; border-radius: 12px; }
     </style>
     """, unsafe_allow_html=True)
@@ -105,22 +103,22 @@ if 'df' not in st.session_state:
 
 st.title("📦 No Fuss Quoting Pro")
 
-# --- 📍 LOGISTICS (FIXED SECTION) ---
+# --- LOGISTICS ---
 st.markdown("### 📍 LOGISTICS & DATES")
 c1, c2, c3 = st.columns(3)
 start_date = c1.date_input("Hire Start", value=date.today(), format="DD/MM/YYYY")
 end_date = c2.date_input("Hire End", value=date.today(), format="DD/MM/YYYY")
-km_input = c3.number_input("Distance (KM) from 9 Battery Crt", min_value=0.0, value=None, placeholder="Type KM...")
+km_input = c3.number_input("Distance (KM)", min_value=0.0, value=None, placeholder="Type KM...")
 
-st.markdown("<br>", unsafe_allow_html=True)
-charge_labour = st.checkbox("👷 INCLUDE LABOUR / CREW COSTS", value=True)
+# NEW LABOUR LOGIC BOXES
+charge_labour = st.checkbox("👷 INCLUDE LABOUR COST IN QUOTE", value=True)
+split_labour = st.checkbox("✂️ SPLIT LABOUR TO SEPARATE LINE ITEM", value=False)
 charge_cartage = st.checkbox("🚚 INCLUDE CARTAGE / TRANSPORT COSTS", value=True)
 
-# LIVE WEEKS CALC
 days_diff = (end_date - start_date).days
 live_weeks = math.ceil(days_diff / 7) if days_diff > 0 else 1
 
-# --- ➕ ADD PRODUCT ---
+# --- ADD PRODUCT ---
 st.markdown("### ➕ ADD PRODUCT")
 cat_col, item_col = st.columns(2)
 cat_choice = cat_col.selectbox("Product Category", sorted(PRODUCT_CATALOG.keys()))
@@ -137,43 +135,39 @@ if st.button("ADD TO QUOTE ENGINE"):
         base_rate = adj_rate if (adj_rate and adj_rate > 0) else ref["w1_3"]
         
         new_row = pd.DataFrame([{
-            "Qty": qty_in,
-            "Product": item_choice,
-            "Unit Rate": base_rate,
-            "Disc %": discount_pct if discount_pct else 0.0,
-            "Total": 0.0, 
-            "Labour_Rate": ref["labour"],
-            "Block_Rate": ref["block"],
-            "SYSTEM RATE": 0.0
+            "Qty": qty_in, "Product": item_choice, "Unit Rate": base_rate,
+            "Disc %": discount_pct if discount_pct else 0.0, "Total": 0.0, 
+            "Labour_Rate": ref["labour"], "Block_Rate": ref["block"], "SYSTEM RATE": 0.0
         }])
         st.session_state.df = pd.concat([st.session_state.df, new_row], ignore_index=True)
         st.rerun()
 
 # --- CALCULATION LOOP ---
 if not st.session_state.df.empty:
+    labour_total_standalone = 0.0
     for idx, row in st.session_state.df.iterrows():
         q, r1_3, d = row["Qty"], row["Unit Rate"], row["Disc %"]
         block = row["Block_Rate"]
         labour = row["Labour_Rate"]
         
-        # Calculate Hire + Optional Labour
-        if live_weeks <= 3:
-            hire_component = (q * r1_3 * live_weeks)
+        hire_component = (q * r1_3 * live_weeks) if live_weeks <= 3 else (q * r1_3 * 3) + (q * block)
+        
+        # Logic for splitting labour
+        if not charge_labour:
+            item_labour = 0.0
+        elif split_labour:
+            item_labour = 0.0 # Don't add to unit price
+            labour_total_standalone += (q * labour) * (1 - (d / 100)) # Add to standalone bucket
         else:
-            hire_component = (q * r1_3 * 3) + (q * block)
-        
-        labour_component = (q * labour) if charge_labour else 0.0
-        final_total = (hire_component + labour_component) * (1 - (d / 100))
-        
+            item_labour = q * labour # Built into unit price
+            
+        final_total = (hire_component + item_labour) * (1 - (d / 100))
         st.session_state.df.at[idx, "Total"] = final_total
         st.session_state.df.at[idx, "SYSTEM RATE"] = final_total / q if q > 0 else 0.0
 
     st.markdown("### 🏗️ QUOTED ITEMS & SYSTEM RATES")
     edited_df = st.data_editor(st.session_state.df[["Qty", "Product", "SYSTEM RATE", "Unit Rate", "Disc %", "Total"]], 
-                               num_rows="dynamic", use_container_width=True, key="editor",
-                               column_config={
-                                   "SYSTEM RATE": st.column_config.NumberColumn("🔢 COPY TO SYSTEM", format="$%.2f")
-                               })
+                               num_rows="dynamic", use_container_width=True, key="editor")
 
     if not edited_df.equals(st.session_state.df[["Qty", "Product", "SYSTEM RATE", "Unit Rate", "Disc %", "Total"]]):
         for col in ["Qty", "Unit Rate", "Disc %"]:
@@ -182,35 +176,18 @@ if not st.session_state.df.empty:
 
     # Summary Totals
     pure_hire = st.session_state.df["Total"].sum()
-    hire_final = max(300.0, pure_hire)
-    waiver = hire_final * 0.07
+    waiver = max(300.0, pure_hire + labour_total_standalone) * 0.07
     cart_final = (km_input * 4 * 3.50) if km_input and charge_cartage else 0.0
     
     st.divider()
     st.markdown("### 💰 FINANCIAL SUMMARY (EX GST)")
-    m1, m2, m3 = st.columns(3)
-    m1.metric("TOTAL LINE ITEMS", f"${pure_hire:,.2f}")
-    m2.metric("WAIVER (7%)", f"${waiver:,.2f}")
-    m3.metric("CARTAGE TOTAL", f"${cart_final:,.2f}")
-    st.metric("GRAND TOTAL QUOTE", f"${(hire_final + waiver + cart_final):,.2f}")
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("HIRE TOTAL", f"${pure_hire:,.2f}")
+    m2.metric("LABOUR TOTAL", f"${labour_total_standalone:,.2f}")
+    m3.metric("WAIVER (7%)", f"${waiver:,.2f}")
+    m4.metric("CARTAGE TOTAL", f"${cart_final:,.2f}")
+    st.metric("GRAND TOTAL QUOTE", f"${(pure_hire + labour_total_standalone + waiver + cart_final):,.2f}")
     
-    # --- DYNAMIC SYSTEM TEXT ---
-    st.markdown("### 📋 SYSTEM DESCRIPTION BLOCKS")
-    for idx, row in st.session_state.df.iterrows():
-        p = row["Unit Rate"]
-        init = p + row["Labour_Rate"]
-        block_weekly = row["Block_Rate"] / 4
-        
-        copy_block = (
-            f"PRICING BASED ON {live_weeks} WEEK HIRE PERIOD\n"
-            f"Price for Initial Week's Hire including installation & removal = ${init:,.2f}/sqm + GST\n"
-            f"Price for weeks 2 & 3 = ${p:,.2f}/sqm per week + GST\n"
-        )
-        if live_weeks >= 4:
-            copy_block += f"Price for weeks 4+ = ${block_weekly:,.2f}/sqm per week + GST"
-            
-        st.text_area(f"Line Item {idx+1}: {row['Product']}", value=copy_block, height=140)
-
     if st.button("⚠️ RESET ENTIRE QUOTE"):
         st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Disc %", "Total", "Labour_Rate", "Block_Rate", "SYSTEM RATE"])
         st.rerun()
