@@ -52,48 +52,36 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# 3. OFFICIAL CATALOG 
+# 3. EXPANDED MASTER CATALOG
 PRODUCT_CATALOG = {
-    "I-TRAC": {
+    "FLOORING": {
         "I-Trac flooring (sqm)": {"w1_3": 23.40, "block": 46.80, "labour": 4.65},
-        "I-Trac ramps (ea)": {"w1_3": 42.00, "block": 84.00, "labour": 0.00}
-    },
-    "SUPA-TRAC": {
+        "I-Trac ramps (ea)": {"w1_3": 42.00, "block": 84.00, "labour": 0.00},
         "Supa-Trac flooring (sqm)": {"w1_3": 11.55, "block": 25.00, "labour": 4.65},
-        "Supa-Trac Edging (lm)": {"w1_3": 6.70, "block": 6.70, "labour": 0.00}
-    },
-    "TRAKMATS": {
+        "Supa-Trac Edging (lm)": {"w1_3": 6.70, "block": 6.70, "labour": 0.00},
         "Trakmats (ea)": {"w1_3": 23.20, "block": 45.00, "labour": 5.85},
-        "Trakmat Joiners 4 hole (ea)": {"w1_3": 11.95, "block": 11.95, "labour": 0.00},
-        "Trakmat Joiners 2 hole (ea)": {"w1_3": 4.40, "block": 4.40, "labour": 0.00},
-        "LD 20 Roll - 3m x 20m": {"w1_3": 1800.00, "block": 3300.00, "labour": 0.00}
+        "No Fuss Floor (Grey/Green) (sqm)": {"w1_3": 7.10, "block": 15.00, "labour": 3.05}
     },
-    "NO FUSS FLOORING": {
-        "No Fuss Floor (Grey/Green) (sqm)": {"w1_3": 7.10, "block": 15.00, "labour": 3.05},
-        "No Fuss Floor Ramp 1m (ea)": {"w1_3": 6.60, "block": 13.20, "labour": 0.00},
-        "Expansion Joiner 1.2m (ea)": {"w1_3": 6.60, "block": 13.20, "labour": 0.00}
+    "MOJO BARRIERS": {
+        "Mojo Straight (1m Bay)": {"w1_3": 0.00, "block": 0.00, "labour": 0.00},
+        "Mojo Corner / Flex": {"w1_3": 0.00, "block": 0.00, "labour": 0.00},
+        "Mojo Gate Bay": {"w1_3": 0.00, "block": 0.00, "labour": 0.00}
     },
-    "PLASTORIP": {
-        "Plastorip (sqm)": {"w1_3": 10.15, "block": 20.30, "labour": 3.05},
-        "Plastorip Edging (lm)": {"w1_3": 1.65, "block": 1.65, "labour": 0.00},
-        "Plastorip Expansion Joiner 1m": {"w1_3": 12.15, "block": 12.15, "labour": 0.00}
+    "MARQUEES": {
+        "6m x 6m Pagoda": {"w1_3": 0.00, "block": 0.00, "labour": 0.00},
+        "10m Structure (per sqm)": {"w1_3": 0.00, "block": 0.00, "labour": 0.00},
+        "Weights / Anchoring": {"w1_3": 0.00, "block": 0.00, "labour": 0.00}
     },
-    "OTHER": {
-        "Terratrak Plus (sqm)": {"w1_3": 23.40, "block": 46.80, "labour": 4.65},
-        "Enkamat Underlay (sqm)": {"w1_3": 2.60, "block": 2.60, "labour": 0.00},
-        "Geotextile Underlay (sqm)": {"w1_3": 2.60, "block": 2.60, "labour": 0.00},
-        "Black Plastic (sqm)": {"w1_3": 0.90, "block": 0.90, "labour": 0.00},
-        "Wooden Floor (sqm)": {"w1_3": 8.85, "block": 8.85, "labour": 7.15},
-        "Parquetry Dance Floor (sqm)": {"w1_3": 20.95, "block": 20.95, "labour": 4.80},
-        "Carpet Tiles - Onyx (sqm)": {"w1_3": 8.85, "block": 8.85, "labour": 3.05},
-        "Protectall (sqm)": {"w1_3": 22.05, "block": 22.05, "labour": 3.25}
+    "GRANDSTANDS": {
+        "3-Tier Seating (per bay)": {"w1_3": 0.00, "block": 0.00, "labour": 0.00},
+        "Grandstand Staircase": {"w1_3": 0.00, "block": 0.00, "labour": 0.00}
     }
 }
 
 if 'df' not in st.session_state:
     st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Disc %", "Total", "Labour_Rate", "Block_Rate", "SYSTEM RATE"])
 
-st.title("📦 No Fuss Quoting Pro")
+st.title("📦 No Fuss Quote Pro")
 
 # --- LOGISTICS ---
 st.markdown("### 📍 LOGISTICS & DATES")
@@ -111,18 +99,19 @@ live_weeks = math.ceil(days_diff / 7) if days_diff > 0 else 1
 
 # --- ADD PRODUCT ---
 st.markdown("### ➕ ADD PRODUCT")
-cat_col, item_col = st.columns(2)
-cat_choice = cat_col.selectbox("Product Category", sorted(PRODUCT_CATALOG.keys()))
-item_choice = item_col.selectbox("Specific Item", sorted(PRODUCT_CATALOG[cat_choice].keys()))
+dept_col, item_col = st.columns(2)
+dept_choice = dept_col.selectbox("Department", sorted(PRODUCT_CATALOG.keys()))
+item_choice = item_col.selectbox("Select Product", sorted(PRODUCT_CATALOG[dept_choice].keys()))
 
 c_q, c_a, c_d = st.columns([2, 2, 2])
 qty_in = c_q.number_input("Quantity", min_value=0.0, value=None, placeholder="Type Qty...")
-adj_rate = c_a.number_input("Override Base Rate", min_value=0.0, value=None, placeholder="Adjust Rate...")
-discount_pct = c_d.number_input("Special Discount %", min_value=0.0, max_value=100.0, value=None, placeholder="0%")
+adj_rate = c_a.number_input("Override Wk 1-3 Rate", min_value=0.0, value=None, placeholder="Adjust Rate...")
+discount_pct = c_d.number_input("Discount %", min_value=0.0, max_value=100.0, value=None, placeholder="0%")
 
 if st.button("ADD TO QUOTE ENGINE"):
     if qty_in and qty_in > 0:
-        ref = PRODUCT_CATALOG[cat_choice][item_choice]
+        ref = PRODUCT_CATALOG[dept_choice][item_choice]
+        # Fallback to 0.0 if rate cards aren't in yet
         base_rate = adj_rate if (adj_rate and adj_rate > 0) else ref["w1_3"]
         
         new_row = pd.DataFrame([{
@@ -177,29 +166,20 @@ if not st.session_state.df.empty:
     st.markdown("### 📋 SYSTEM DESCRIPTION BLOCKS")
     for idx, row in st.session_state.df.iterrows():
         p, lab_r = row["Unit Rate"], row["Labour_Rate"]
-        init_price = p if split_labour else p + lab_r
-        
+        init_p = p if split_labour else p + lab_r
         copy_block = f"PRICING BASED ON {live_weeks} WEEK HIRE PERIOD\n"
         
-        # DASH NOTATION LOGIC
-        if init_price == p:
-            # Determine end week for standard rate (max 3)
+        if init_p == p:
             end_wk = min(live_weeks, 3)
-            if end_wk > 1:
-                copy_block += f"Price for weeks 1-{end_wk} = ${p:,.2f}/sqm per week + GST\n"
-            else:
-                copy_block += f"Price for week 1 = ${p:,.2f}/sqm + GST\n"
+            copy_block += f"Price for weeks 1-{end_wk} = ${p:,.2f} per unit/week + GST\n" if end_wk > 1 else f"Price for week 1 = ${p:,.2f} per unit + GST\n"
         else:
-            copy_block += f"Price for Initial Week's Hire including installation & removal = ${init_price:,.2f}/sqm + GST\n"
+            copy_block += f"Price for Initial Week including install/removal = ${init_p:,.2f} per unit + GST\n"
             if live_weeks > 1:
                 end_wk = min(live_weeks, 3)
-                if end_wk == 2:
-                    copy_block += f"Price for week 2 = ${p:,.2f}/sqm per week + GST\n"
-                else:
-                    copy_block += f"Price for weeks 2-{end_wk} = ${p:,.2f}/sqm per week + GST\n"
-            
+                copy_block += f"Price for week 2 = ${p:,.2f}/unit week + GST\n" if end_wk == 2 else f"Price for weeks 2-{end_wk} = ${p:,.2f}/unit week + GST\n"
+        
         if live_weeks >= 4:
-            copy_block += f"Price for weeks 4+ = ${row['Block_Rate'] / 4:,.2f}/sqm per week + GST"
+            copy_block += f"Price for weeks 4+ = ${row['Block_Rate'] / 4:,.2f} per unit/week + GST"
             
         st.text_area(f"Line Item {idx+1}: {row['Product']}", value=copy_block, height=140)
 
