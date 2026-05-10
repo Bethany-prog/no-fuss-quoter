@@ -177,8 +177,15 @@ if not st.session_state.df.empty:
     st.markdown("### 📋 SYSTEM DESCRIPTION BLOCKS")
     for idx, row in st.session_state.df.iterrows():
         p, lab_r = row["Unit Rate"], row["Labour_Rate"]
+        
+        # AMENDED DESCRIPTION LOGIC
+        if split_labour:
+            init_line = f"Price for Initial Week's Hire = ${p:,.2f}/sqm + GST\n"
+        else:
+            init_line = f"Price for Initial Week's Hire including installation & removal = ${p + lab_r:,.2f}/sqm + GST\n"
+            
         copy_block = (f"PRICING BASED ON {live_weeks} WEEK HIRE PERIOD\n"
-                      f"Price for Initial Week's Hire including installation & removal = ${p + lab_r:,.2f}/sqm + GST\n"
+                      f"{init_line}"
                       f"Price for weeks 2 & 3 = ${p:,.2f}/sqm per week + GST\n")
         if live_weeks >= 4:
             copy_block += f"Price for weeks 4+ = ${row['Block_Rate'] / 4:,.2f}/sqm per week + GST"
