@@ -250,5 +250,3 @@ if not st.session_state.df.empty:
     if st.button("⚠️ RESET QUOTE"):
         st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Disc %", "Total", "Labour_Rate", "Block_Rate", "SYSTEM RATE", "No_Waiver", "Is_GS", "Is_Mojo"])
         st.rerun()
-
-Your slide deck and the updated code are ready! Let me know if you need any other adjustments to the workflow.
