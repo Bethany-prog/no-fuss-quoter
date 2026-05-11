@@ -53,7 +53,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# 3. MASTER CATALOG (Grouped for Bundling)
+# 3. MASTER CATALOG
 CATALOG = {
     "FLOORING": {
         "I-Trac System": [
@@ -108,10 +108,11 @@ st.markdown("### 📍 HIRE DATES & DISTANCE")
 c1, c2, c3 = st.columns(3)
 start_date = c1.date_input("Hire Start", value=date.today())
 end_date = c2.date_input("Hire End", value=date.today())
-km_input = c3.number_input("Distance (KM)", min_value=0.0, value=None, placeholder="KM...")
+# Blank Default Distance
+km_input = c3.number_input("Distance (KM)", min_value=0.0, value=None, placeholder="Type KM...")
 live_weeks = math.ceil(((end_date - start_date).days) / 7) if (end_date - start_date).days > 0 else 1
 
-# --- 2. ADD PRODUCT (NEW BUNDLE LAYOUT) ---
+# --- 2. ADD PRODUCT ---
 st.markdown("### ➕ ADD PRODUCT")
 dept_col, bundle_col = st.columns(2)
 dept_choice = dept_col.selectbox("Department", sorted(CATALOG.keys()))
@@ -122,35 +123,37 @@ bundle_results = []
 
 st.markdown('<div class="bundle-box">', unsafe_allow_html=True)
 for item in selected_bundle:
-    # Logic for Plastorip Auto-Perimeter
     if item.get("is_p"):
         p_mode = st.radio("Input Mode", ["Manual SQM", "Dimensions (WxL)"], key="p_mode")
         if p_mode == "Dimensions (WxL)":
             w_col, l_col = st.columns(2)
-            w = w_col.number_input("Width (m)", min_value=0.0, key="p_w")
-            l = l_col.number_input("Length (m)", min_value=0.0, key="p_l")
-            q_val = w * l
+            # Blank Default Dimensions
+            w = w_col.number_input("Width (m)", min_value=0.0, value=None, placeholder="Width...", key="p_w")
+            l = l_col.number_input("Length (m)", min_value=0.0, value=None, placeholder="Length...", key="p_l")
+            q_val = (w * l) if (w and l) else 0.0
         else:
-            q_val = st.number_input(f"Qty ({item['unit']})", min_value=0.0, key=f"q_{item['Product']}")
+            # Blank Default SQM
+            q_val = st.number_input(f"Qty ({item['unit']})", min_value=0.0, value=None, placeholder="Enter SQM...", key=f"q_{item['Product']}")
             w, l = 0, 0
     else:
-        # Default Auto-calc for Edging if Dimensions were used in Plastorip
-        default_q = 0.0
-        if "Edging (pc)" in item['Product'] and 'w' in locals() and w > 0:
-            default_q = math.ceil(((w + l) * 2) / 0.4)
-        elif "Corner (ea)" in item['Product'] and 'w' in locals() and w > 0:
+        # Default Auto-calc for Edging logic
+        default_q = None
+        if "Edging (pc)" in item['Product'] and 'w' in locals() and w:
+            default_q = float(math.ceil(((w + l) * 2) / 0.4))
+        elif "Corner (ea)" in item['Product'] and 'w' in locals() and w:
             default_q = 4.0
             
-        q_val = st.number_input(f"Qty: {item['Product']} ({item['unit']})", min_value=0.0, value=default_q, key=f"q_{item['Product']}")
+        q_val = st.number_input(f"Qty: {item['Product']} ({item['unit']})", min_value=0.0, value=default_q, placeholder="Enter Qty...", key=f"q_{item['Product']}")
     
-    if q_val > 0:
+    if q_val and q_val > 0:
         bundle_results.append({"item": item, "qty": q_val})
 
 st.markdown('</div>', unsafe_allow_html=True)
 
 c_a, c_d = st.columns(2)
-adj_rate = c_a.number_input("Global Override Rate (Applied to primary item only)", min_value=0.0, value=None)
-discount_pct = c_d.number_input("Discount %", min_value=0.0, max_value=100.0, value=None)
+# Blank Default Override/Discount
+adj_rate = c_a.number_input("Global Override Rate", min_value=0.0, value=None, placeholder="Manual Rate...")
+discount_pct = c_d.number_input("Discount %", min_value=0.0, max_value=100.0, value=None, placeholder="Discount %...")
 
 if st.button("ADD SELECTED ITEMS TO QUOTE"):
     new_rows = []
@@ -159,7 +162,6 @@ if st.button("ADD SELECTED ITEMS TO QUOTE"):
         is_gs, is_mojo = it.get("is_gs", False), it.get("is_mojo", False)
         
         if is_gs:
-            # Grandstand Logic
             if q <= 40: s, h = 2, 4
             elif q <= 100: s, h = 3, 5
             elif q <= 149: s, h = 4, 5
@@ -169,7 +171,6 @@ if st.button("ADD SELECTED ITEMS TO QUOTE"):
             calc_rate = (s * h * 55.0 * 4) / q
             base_r, lab_r, block_r = (adj_rate if adj_rate else calc_rate), 0.0, (adj_rate if adj_rate else calc_rate) * 2
         else:
-            # Standard Logic
             base_r, lab_r, block_r = (adj_rate if (adj_rate and it == selected_bundle[0]) else it.get("w1_3", 0.0)), it.get("labour", 0.0), it.get("block", 0.0)
 
         new_rows.append({
@@ -237,7 +238,6 @@ if not st.session_state.df.empty:
     cartage = (km_input * 4 * 3.50) if km_input and charge_cartage else 0.0
     
     st.divider()
-    st.markdown("### 💰 FINANCIAL SUMMARY")
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("SUBTOTAL (HIRE)", f"${subtotal:,.2f}"); m2.metric("LABOUR", f"${lab_total_only:,.2f}"); m3.metric("WAIVER", f"${waiver:,.2f}"); m4.metric("CARTAGE", f"${cartage:,.2f}")
     st.metric("GRAND TOTAL (EX GST)", f"${(subtotal + lab_total_only + waiver + cartage):,.2f}")
