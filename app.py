@@ -49,8 +49,6 @@ PRODUCT_CATALOG = {
         "Trakmats (ea)": {"w1_3": 23.20, "block": 45.00, "labour": 5.85},
         "No Fuss Floor (Grey/Green) (sqm)": {"w1_3": 7.10, "block": 15.00, "labour": 3.05},
         "Plastorip (sqm)": {"w1_3": 10.15, "block": 20.30, "labour": 3.05, "is_plastorip": True},
-        "Plastorip Edging (pc)": {"w1_3": 1.65, "block": 1.65, "labour": 0.00},
-        "Plastorip Corner (ea)": {"w1_3": 0.00, "block": 0.00, "labour": 0.00},
         "Plastorip Expansion Joiner 1m": {"w1_3": 12.15, "block": 12.15, "labour": 0.00}
     },
     "GRANDSTANDS": {
@@ -63,7 +61,6 @@ PRODUCT_CATALOG = {
     }
 }
 
-# Initialize DataFrame with strict columns to prevent KeyErrors
 if 'df' not in st.session_state:
     st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Disc %", "Total", "Labour_Rate", "Block_Rate", "SYSTEM RATE", "No_Waiver", "Is_GS"])
 
@@ -93,11 +90,17 @@ if is_p_sqm:
         w = p_col2.number_input("Width (m)", min_value=0.1)
         l = p_col3.number_input("Length (m)", min_value=0.1)
         qty_in = w * l
-        st.caption(f"Calculated Area: {qty_in:.2f} sqm | Perimeter: {(w+l)*2:.2f}m")
     else:
         qty_in = p_col2.number_input("Total SQM", min_value=0.0)
+    
+    # Tick box options for Plastorip Accessories
+    st.markdown("#### Plastorip Accessories")
+    ac_col1, ac_col2 = st.columns(2)
+    add_p_edges = ac_col1.checkbox("Add Edging (Automatic Calculation)", value=True)
+    add_p_corners = ac_col2.checkbox("Add Corners (4pcs - Free)", value=True)
 else:
     qty_in = st.number_input("Quantity / Seats", min_value=0.0, value=None)
+    add_p_edges, add_p_corners = False, False
 
 c_a, c_d = st.columns(2)
 adj_rate = c_a.number_input("Override Rate", min_value=0.0, value=None)
@@ -108,7 +111,6 @@ if st.button("ADD TO QUOTE ENGINE"):
         ref = PRODUCT_CATALOG[dept_choice][item_choice]
         is_gs = ref.get("is_gs", False)
         
-        # Grandstand Logic
         if is_gs:
             if qty_in <= 40: s, h = 2, 4
             elif qty_in <= 100: s, h = 3, 5
@@ -123,11 +125,13 @@ if st.button("ADD TO QUOTE ENGINE"):
 
         new_items = [{"Qty": qty_in, "Product": item_choice, "Unit Rate": base_r, "Disc %": discount_pct if discount_pct else 0.0, "Total": 0.0, "Labour_Rate": lab_r, "Block_Rate": block_r, "SYSTEM RATE": 0.0, "No_Waiver": False, "Is_GS": is_gs}]
 
-        # Auto-Add Edging & Corners
-        if is_p_sqm and w > 0 and l > 0:
-            edge_qty = math.ceil(((w + l) * 2) / 0.4)
-            new_items.append({"Qty": edge_qty, "Product": "Plastorip Edging (pc)", "Unit Rate": 1.65, "Disc %": discount_pct if discount_pct else 0.0, "Total": 0.0, "Labour_Rate": 0.0, "Block_Rate": 1.65, "SYSTEM RATE": 0.0, "No_Waiver": False, "Is_GS": False})
-            new_items.append({"Qty": 4, "Product": "Plastorip Corner (ea)", "Unit Rate": 0.00, "Disc %": 0.0, "Total": 0.0, "Labour_Rate": 0.0, "Block_Rate": 0.0, "SYSTEM RATE": 0.0, "No_Waiver": False, "Is_GS": False})
+        if is_p_sqm:
+            if add_p_edges:
+                edge_qty = math.ceil(((w + l) * 2) / 0.4) if (w > 0 and l > 0) else 0
+                if edge_qty > 0:
+                    new_items.append({"Qty": edge_qty, "Product": "Plastorip Edging (pc)", "Unit Rate": 1.65, "Disc %": discount_pct if discount_pct else 0.0, "Total": 0.0, "Labour_Rate": 0.0, "Block_Rate": 1.65, "SYSTEM RATE": 0.0, "No_Waiver": False, "Is_GS": False})
+            if add_p_corners:
+                new_items.append({"Qty": 4, "Product": "Plastorip Corner (ea)", "Unit Rate": 0.00, "Disc %": 0.0, "Total": 0.0, "Labour_Rate": 0.0, "Block_Rate": 0.0, "SYSTEM RATE": 0.0, "No_Waiver": False, "Is_GS": False})
         
         st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame(new_items)], ignore_index=True)
         st.rerun()
@@ -165,13 +169,9 @@ if not st.session_state.df.empty:
         final = (hire + item_l) * (1 - (d / 100))
         st.session_state.df.at[idx, "Total"], st.session_state.df.at[idx, "SYSTEM RATE"] = final, (final / q if q > 0 else 0)
 
-    # SECURE CALCULATION (Prevents KeyError)
     subtotal = max(2000.0 if has_gs else 300.0, st.session_state.df["Total"].sum() + lab_total)
-    
-    # Filter for waiver (excludes products with No_Waiver flag)
     waiver_eligible = st.session_state.df[st.session_state.df["No_Waiver"] == False]["Total"].sum()
     waiver = (waiver_eligible + (lab_total if labour_mode == "Show Labour as Separate Line Item" else 0)) * 0.07
-    
     cartage = (km_input * 4 * 3.50) if km_input and charge_cartage else 0.0
     
     st.divider()
