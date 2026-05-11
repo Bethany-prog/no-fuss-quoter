@@ -73,37 +73,37 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# 3. MASTER CATALOG
+# 3. MASTER CATALOG (Synced with Unit Types)
 PRODUCT_CATALOG = {
     "FLOORING": {
-        "I-Trac flooring (sqm)": {"w1_3": 23.40, "block": 46.80, "labour": 4.65, "waiver": True},
-        "I-Trac ramps (ea)": {"w1_3": 42.00, "block": 84.00, "labour": 0.00, "waiver": True},
-        "Supa-Trac flooring (sqm)": {"w1_3": 11.55, "block": 25.00, "labour": 4.65, "waiver": True},
-        "Supa-Trac Edging (lm)": {"w1_3": 6.70, "block": 6.70, "labour": 0.00, "waiver": True},
-        "Trakmats (ea)": {"w1_3": 23.20, "block": 45.00, "labour": 5.85, "waiver": True},
-        "Trakmat Joiners (ea)": {"w1_3": 11.95, "block": 11.95, "labour": 0.00, "waiver": True},
-        "No Fuss Floor (Grey/Green) (sqm)": {"w1_3": 7.10, "block": 15.00, "labour": 3.05, "waiver": True},
-        "Plastorip (sqm)": {"w1_3": 10.15, "block": 20.30, "labour": 3.05, "is_plastorip": True, "waiver": True},
-        "Terratrak Plus (sqm)": {"w1_3": 23.40, "block": 46.80, "labour": 4.65, "waiver": True},
-        "Wooden Floor (sqm)": {"w1_3": 8.85, "block": 17.70, "labour": 7.15, "waiver": True},
-        "Parquetry Dance Floor (sqm)": {"w1_3": 20.95, "block": 41.90, "labour": 4.80, "waiver": True},
-        "Carpet Tiles - Onyx (sqm)": {"w1_3": 8.85, "block": 17.70, "labour": 3.05, "waiver": True},
-        "Protectall (sqm)": {"w1_3": 22.05, "block": 44.10, "labour": 3.25, "waiver": True},
-        "Enkamat Underlay (sqm)": {"w1_3": 2.60, "block": 5.20, "labour": 0.00, "waiver": True},
-        "Black Plastic (sqm)": {"w1_3": 0.90, "block": 0.90, "labour": 0.00, "waiver": True}
+        "I-Trac flooring (sqm)": {"w1_3": 23.40, "block": 46.80, "labour": 4.65, "waiver": True, "unit": "SQM"},
+        "I-Trac ramps (ea)": {"w1_3": 42.00, "block": 84.00, "labour": 0.00, "waiver": True, "unit": "ea"},
+        "Supa-Trac flooring (sqm)": {"w1_3": 11.55, "block": 25.00, "labour": 4.65, "waiver": True, "unit": "SQM"},
+        "Supa-Trac Edging (lm)": {"w1_3": 6.70, "block": 6.70, "labour": 0.00, "waiver": True, "unit": "lm"},
+        "Trakmats (ea)": {"w1_3": 23.20, "block": 45.00, "labour": 5.85, "waiver": True, "unit": "ea"},
+        "Trakmat Joiners (ea)": {"w1_3": 11.95, "block": 11.95, "labour": 0.00, "waiver": True, "unit": "ea"},
+        "No Fuss Floor (Grey/Green) (sqm)": {"w1_3": 7.10, "block": 15.00, "labour": 3.05, "waiver": True, "unit": "SQM"},
+        "Plastorip (sqm)": {"w1_3": 10.15, "block": 20.30, "labour": 3.05, "is_plastorip": True, "waiver": True, "unit": "SQM"},
+        "Terratrak Plus (sqm)": {"w1_3": 23.40, "block": 46.80, "labour": 4.65, "waiver": True, "unit": "SQM"},
+        "Wooden Floor (sqm)": {"w1_3": 8.85, "block": 17.70, "labour": 7.15, "waiver": True, "unit": "SQM"},
+        "Parquetry Dance Floor (sqm)": {"w1_3": 20.95, "block": 41.90, "labour": 4.80, "waiver": True, "unit": "SQM"},
+        "Carpet Tiles - Onyx (sqm)": {"w1_3": 8.85, "block": 17.70, "labour": 3.05, "waiver": True, "unit": "SQM"},
+        "Protectall (sqm)": {"w1_3": 22.05, "block": 44.10, "labour": 3.25, "waiver": True, "unit": "SQM"},
+        "Enkamat Underlay (sqm)": {"w1_3": 2.60, "block": 5.20, "labour": 0.00, "waiver": True, "unit": "SQM"},
+        "Black Plastic (sqm)": {"w1_3": 0.90, "block": 0.90, "labour": 0.00, "waiver": True, "unit": "SQM"}
     },
     "GRANDSTANDS": {
-        "Grandstand Seating (per seat)": {"is_gs": True, "labour": 0.00, "waiver": True},
-        "Shade Cloth / Scrim (per lm)": {"w1_3": 6.00, "block": 12.00, "labour": 0.00, "waiver": True}
+        "Grandstand Seating (per seat)": {"is_gs": True, "labour": 0.00, "waiver": True, "unit": "seat"},
+        "Shade Cloth / Scrim (per lm)": {"w1_3": 6.00, "block": 12.00, "labour": 0.00, "waiver": True, "unit": "lm"}
     },
     "MOJO BARRIERS": {
-        "Mojo Straight (Sections)": {"w1_3": 35.00, "block": 70.00, "labour": 0.00, "is_mojo": True, "waiver": False},
-        "Mojo Corner / Flex (Sections)": {"w1_3": 45.00, "block": 90.00, "labour": 0.00, "is_mojo": True, "waiver": False}
+        "Mojo Straight (Sections)": {"w1_3": 35.00, "block": 70.00, "labour": 0.00, "is_mojo": True, "waiver": False, "unit": "Sections"},
+        "Mojo Corner / Flex (Sections)": {"w1_3": 45.00, "block": 90.00, "labour": 0.00, "is_mojo": True, "waiver": False, "unit": "Sections"}
     }
 }
 
 if 'df' not in st.session_state:
-    st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Disc %", "Total", "Labour_Rate", "Block_Rate", "SYSTEM RATE", "No_Waiver", "Is_GS", "Is_Mojo"])
+    st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Disc %", "Total", "Labour_Rate", "Block_Rate", "SYSTEM RATE", "No_Waiver", "Is_GS", "Is_Mojo", "Unit_Type"])
 
 st.title("📦 No Fuss Quote Pro")
 
@@ -139,7 +139,7 @@ if is_p_sqm:
     add_p_edges = ac_col1.checkbox("Add Edging", value=True)
     add_p_corners = ac_col2.checkbox("Add Corners (4pcs - Free)", value=True)
 else:
-    qty_in = st.number_input("Quantity", min_value=0.0, value=None)
+    qty_in = st.number_input(f"Quantity ({ref_current['unit']})", min_value=0.0, value=None)
     add_p_edges, add_p_corners = False, False
 
 c_a, c_d = st.columns(2)
@@ -164,15 +164,15 @@ if st.button("ADD TO QUOTE ENGINE"):
         else:
             base_r, lab_r, block_r = (adj_rate if adj_rate else ref_current["w1_3"]), ref_current.get("labour", 0.0), ref_current.get("block", 0.0)
 
-        new_items = [{"Qty": qty_in, "Product": item_choice, "Unit Rate": base_r, "Disc %": discount_pct if discount_pct else 0.0, "Total": 0.0, "Labour_Rate": lab_r, "Block_Rate": block_r, "SYSTEM RATE": 0.0, "No_Waiver": no_waiver, "Is_GS": is_gs, "Is_Mojo": is_mojo}]
+        new_items = [{"Qty": qty_in, "Product": item_choice, "Unit Rate": base_r, "Disc %": discount_pct if discount_pct else 0.0, "Total": 0.0, "Labour_Rate": lab_r, "Block_Rate": block_r, "SYSTEM RATE": 0.0, "No_Waiver": no_waiver, "Is_GS": is_gs, "Is_Mojo": is_mojo, "Unit_Type": ref_current['unit']}]
         
         if is_p_sqm:
             if add_p_edges:
                 edge_qty = math.ceil(((w + l) * 2) / 0.4) if (w > 0 and l > 0) else 0
                 if edge_qty > 0:
-                    new_items.append({"Qty": edge_qty, "Product": "Plastorip Edging (pc)", "Unit Rate": 1.65, "Disc %": discount_pct if discount_pct else 0.0, "Total": 0.0, "Labour_Rate": 0.0, "Block_Rate": 1.65, "SYSTEM RATE": 0.0, "No_Waiver": False, "Is_GS": False, "Is_Mojo": False})
+                    new_items.append({"Qty": edge_qty, "Product": "Plastorip Edging (pc)", "Unit Rate": 1.65, "Disc %": discount_pct if discount_pct else 0.0, "Total": 0.0, "Labour_Rate": 0.0, "Block_Rate": 1.65, "SYSTEM RATE": 0.0, "No_Waiver": False, "Is_GS": False, "Is_Mojo": False, "Unit_Type": "pc"})
             if add_p_corners:
-                new_items.append({"Qty": 4, "Product": "Plastorip Corner (ea)", "Unit Rate": 0.00, "Disc %": 0.0, "Total": 0.0, "Labour_Rate": 0.0, "Block_Rate": 0.0, "SYSTEM RATE": 0.0, "No_Waiver": True, "Is_GS": False, "Is_Mojo": False})
+                new_items.append({"Qty": 4, "Product": "Plastorip Corner (ea)", "Unit Rate": 0.00, "Disc %": 0.0, "Total": 0.0, "Labour_Rate": 0.0, "Block_Rate": 0.0, "SYSTEM RATE": 0.0, "No_Waiver": True, "Is_GS": False, "Is_Mojo": False, "Unit_Type": "ea"})
         
         st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame(new_items)], ignore_index=True)
         st.rerun()
@@ -206,10 +206,6 @@ if not st.session_state.df.empty:
 
     col_c, col_e = st.columns(2)
     charge_cartage = col_c.checkbox("🚚 Include Cartage ($3.50/km x 4)", value=True)
-    if has_gs and col_e.checkbox("Add Engineer Sign-off ($750.00)", value=any(st.session_state.df["Product"] == "Engineer Sign-off")):
-        if not any(st.session_state.df["Product"] == "Engineer Sign-off"):
-            st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame([{"Qty": 1, "Product": "Engineer Sign-off", "Unit Rate": 750.0, "Disc %": 0.0, "Total": 750.0, "Labour_Rate": 0.0, "Block_Rate": 750.0, "SYSTEM RATE": 750.0, "No_Waiver": True, "Is_GS": False, "Is_Mojo": False}])], ignore_index=True)
-            st.rerun()
 
     # --- 5. FINANCES ---
     hire_total_only = 0.0
@@ -224,7 +220,15 @@ if not st.session_state.df.empty:
 
     for idx, row in st.session_state.df.iterrows():
         q, r, d, b, lr, ig, im = row["Qty"], row["Unit Rate"], row["Disc %"], row["Block_Rate"], row["Labour_Rate"], row["Is_GS"], row["Is_Mojo"]
-        hire = (q * r) if ig else (q * r * live_weeks) if live_weeks <= 3 else (q * r * 3) + (q * b)
+        
+        # UPDATED FLOORING LOGIC: If 4+ weeks, shift whole hire to Block Rate base
+        if not ig and not im and live_weeks >= 4:
+            weekly_r = b / 4
+            hire = (q * weekly_r * live_weeks)
+        elif ig:
+            hire = (q * r)
+        else:
+            hire = (q * r * live_weeks) if live_weeks <= 3 else (q * r * 3) + (q * b)
         
         item_lab = 0.0
         if im: 
@@ -245,31 +249,34 @@ if not st.session_state.df.empty:
     cartage = (km_input * 4 * 3.50) if km_input and charge_cartage else 0.0
     
     st.divider()
-    st.markdown("### 💰 FINANCIAL SUMMARY")
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("SUBTOTAL (HIRE)", f"${subtotal:,.2f}"); m2.metric("LABOUR", f"${lab_total_only:,.2f}"); m3.metric("WAIVER", f"${waiver:,.2f}"); m4.metric("CARTAGE", f"${cartage:,.2f}")
     st.metric("GRAND TOTAL (EX GST)", f"${(subtotal + lab_total_only + waiver + cartage):,.2f}")
 
-    # RESTORED DESCRIPTION BLOCKS
+    # UPDATED DESCRIPTION BLOCKS FOR v21.1
     st.markdown("### 📋 DESCRIPTION BLOCKS")
     for idx, row in st.session_state.df.iterrows():
-        p, lab_r, is_gs_d, br = row["Unit Rate"], row["Labour_Rate"], row["Is_GS"], row["Block_Rate"]
-        init_p = p if (labour_mode != "Bake Labour into Unit Rate" or lab_r == 0) else p + lab_r
+        p, lab_r, is_gs_d, br, ut = row["Unit Rate"], row["Labour_Rate"], row["Is_GS"], row["Block_Rate"], row["Unit_Type"]
+        
         copy_block = f"PRICING BASED ON {live_weeks} WEEK HIRE PERIOD\n"
+        
         if is_gs_d:
-            copy_block += f"Price for initial event period (Weeks 1-3) = ${p:,.2f} per seat + GST\n"
+            copy_block += f"Price for initial event period (Weeks 1-3) = ${p:,.2f} per {ut} + GST\n"
+        elif live_weeks >= 4:
+            # 4+ Week Special Logic
+            weekly_r = br / 4
+            init_wk = weekly_r + (lab_r if labour_mode == "Bake Labour into Unit Rate" else 0)
+            copy_block += f"Price for Initial Week (Incl. Install) = ${init_wk:,.2f} per {ut} + GST\n"
+            copy_block += f"Price for weeks 2+ = ${weekly_r:,.2f} per {ut}/week + GST"
         else:
-            if init_p == p:
-                end_wk = min(live_weeks, 3)
-                copy_block += f"Price for weeks 1-{end_wk} = ${p:,.2f} per unit/week + GST\n"
-            else:
-                copy_block += f"Price for Initial Week (Incl. Install) = ${init_p:,.2f} per unit + GST\n"
-                if live_weeks > 1:
-                    copy_block += f"Price for weeks 2-3 = ${p:,.2f} per unit/week + GST\n"
-        if live_weeks >= 4:
-            copy_block += f"Price for weeks 4+ = ${br / 4:,.2f} per unit/week + GST"
+            # Standard 1-3 Week Logic
+            init_wk = p + (lab_r if labour_mode == "Bake Labour into Unit Rate" else 0)
+            copy_block += f"Price for Initial Week (Incl. Install) = ${init_wk:,.2f} per {ut} + GST\n"
+            if live_weeks > 1:
+                copy_block += f"Price for weeks 2-3 = ${p:,.2f} per {ut}/week + GST"
+        
         st.text_area(f"Line {idx+1}: {row['Product']}", value=copy_block, height=125)
     
     if st.button("⚠️ RESET QUOTE"):
-        st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Disc %", "Total", "Labour_Rate", "Block_Rate", "SYSTEM RATE", "No_Waiver", "Is_GS", "Is_Mojo"])
+        st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Disc %", "Total", "Labour_Rate", "Block_Rate", "SYSTEM RATE", "No_Waiver", "Is_GS", "Is_Mojo", "Unit_Type"])
         st.rerun()
