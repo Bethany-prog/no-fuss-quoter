@@ -27,15 +27,56 @@ st.set_page_config(page_title="No Fuss Quote Pro", page_icon="📦", layout="wid
 
 st.markdown("""
     <style>
-    .main { background-color: #0F111A; }
-    div[data-testid="stSelectbox"] label p { font-size: 18px !important; color: #00E676 !important; font-weight: bold !important; }
+    /* UI Restoration to v20.1 Style */
+    .main { background-color: #FFFFFF !important; }
+    
+    /* Green Accent Headers */
+    h3 { 
+        color: #00E676 !important; 
+        border-left: 5px solid #00E676; 
+        padding-left: 15px; 
+        margin-top: 25px;
+        font-family: sans-serif;
+    }
+    
+    /* Input Field Styling */
+    div[data-testid="stNumberInput"] label p, 
+    div[data-testid="stDateInput"] label p,
+    div[data-testid="stSelectbox"] label p { 
+        color: #333333 !important; 
+        font-weight: bold !important; 
+    }
+
+    /* Metrics Box Styling (Dark with Blue Border) */
     div[data-testid="stMetricValue"] { color: #00E676 !important; font-size: 32px !important; font-weight: bold !important; }
-    div.stMetric { background-color: #1A1D2D; padding: 20px; border-radius: 12px; border: 2px solid #3D5AFE; }
-    div.stButton > button:first-child { background-color: #3D5AFE; color: white; border-radius: 10px; height: 50px; font-weight: bold; }
-    h3 { color: #00E676 !important; border-left: 5px solid #00E676; padding-left: 15px; margin-top: 25px; }
-    [data-testid="stCheckbox"] { background-color: #1A1D2D; padding: 12px; border-radius: 10px; border: 1px solid #3D5AFE; margin-bottom: 8px; }
-    [data-testid="stCheckbox"] label p { font-size: 18px !important; font-weight: bold !important; color: #00E676 !important; }
+    div.stMetric { 
+        background-color: #1A1D2D !important; 
+        padding: 20px !important; 
+        border-radius: 12px !important; 
+        border: 2px solid #3D5AFE !important; 
+    }
+    
+    /* Button Styling */
+    div.stButton > button:first-child { 
+        background-color: #3D5AFE; 
+        color: white; 
+        border-radius: 10px; 
+        height: 50px; 
+        font-weight: bold; 
+        padding: 0 30px;
+    }
+    
+    /* Table Styling */
     .stDataFrame { border: 2px solid #00E676 !important; border-radius: 12px; }
+    
+    /* Checkbox Styling */
+    [data-testid="stCheckbox"] { 
+        background-color: #F0F2F6; 
+        padding: 12px; 
+        border-radius: 10px; 
+        border: 1px solid #3D5AFE; 
+        margin-bottom: 8px; 
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -56,13 +97,13 @@ PRODUCT_CATALOG = {
         "Shade Cloth / Scrim (per lm)": {"w1_3": 6.00, "block": 12.00, "labour": 0.00}
     },
     "MOJO BARRIERS": {
-        "Mojo Straight (1m Bay)": {"w1_3": 35.00, "block": 70.00, "labour": 8.50},
-        "Mojo Corner / Flex": {"w1_3": 45.00, "block": 90.00, "labour": 12.00}
+        "Mojo Straight (Sections)": {"w1_3": 35.00, "block": 70.00, "labour": 0.00, "is_mojo": True},
+        "Mojo Corner / Flex (Sections)": {"w1_3": 45.00, "block": 90.00, "labour": 0.00, "is_mojo": True}
     }
 }
 
 if 'df' not in st.session_state:
-    st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Disc %", "Total", "Labour_Rate", "Block_Rate", "SYSTEM RATE", "No_Waiver", "Is_GS"])
+    st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Disc %", "Total", "Labour_Rate", "Block_Rate", "SYSTEM RATE", "No_Waiver", "Is_GS", "Is_Mojo"])
 
 st.title("📦 No Fuss Quote Pro")
 
@@ -80,7 +121,8 @@ dept_col, item_col = st.columns(2)
 dept_choice = dept_col.selectbox("Department", sorted(PRODUCT_CATALOG.keys()))
 item_choice = item_col.selectbox("Product", sorted(PRODUCT_CATALOG[dept_choice].keys()))
 
-is_p_sqm = PRODUCT_CATALOG[dept_choice][item_choice].get("is_plastorip", False)
+ref_current = PRODUCT_CATALOG[dept_choice][item_choice]
+is_p_sqm = ref_current.get("is_plastorip", False)
 w, l = 0.0, 0.0
 
 if is_p_sqm:
@@ -92,11 +134,9 @@ if is_p_sqm:
         qty_in = w * l
     else:
         qty_in = p_col2.number_input("Total SQM", min_value=0.0)
-    
-    # Tick box options for Plastorip Accessories
     st.markdown("#### Plastorip Accessories")
     ac_col1, ac_col2 = st.columns(2)
-    add_p_edges = ac_col1.checkbox("Add Edging (Automatic Calculation)", value=True)
+    add_p_edges = ac_col1.checkbox("Add Edging (Auto Calc)", value=True)
     add_p_corners = ac_col2.checkbox("Add Corners (4pcs - Free)", value=True)
 else:
     qty_in = st.number_input("Quantity / Seats", min_value=0.0, value=None)
@@ -108,9 +148,8 @@ discount_pct = c_d.number_input("Discount %", min_value=0.0, max_value=100.0, va
 
 if st.button("ADD TO QUOTE ENGINE"):
     if qty_in and qty_in > 0:
-        ref = PRODUCT_CATALOG[dept_choice][item_choice]
-        is_gs = ref.get("is_gs", False)
-        
+        is_gs = ref_current.get("is_gs", False)
+        is_mojo = ref_current.get("is_mojo", False)
         if is_gs:
             if qty_in <= 40: s, h = 2, 4
             elif qty_in <= 100: s, h = 3, 5
@@ -121,17 +160,17 @@ if st.button("ADD TO QUOTE ENGINE"):
             calc_rate = (s * h * 55.0 * 4) / qty_in
             base_r, lab_r, block_r = (adj_rate if adj_rate else calc_rate), 0.0, (adj_rate if adj_rate else calc_rate) * 2
         else:
-            base_r, lab_r, block_r = (adj_rate if adj_rate else ref["w1_3"]), ref["labour"], ref["block"]
+            base_r, lab_r, block_r = (adj_rate if adj_rate else ref_current["w1_3"]), ref_current.get("labour", 0.0), ref_current.get("block", 0.0)
 
-        new_items = [{"Qty": qty_in, "Product": item_choice, "Unit Rate": base_r, "Disc %": discount_pct if discount_pct else 0.0, "Total": 0.0, "Labour_Rate": lab_r, "Block_Rate": block_r, "SYSTEM RATE": 0.0, "No_Waiver": False, "Is_GS": is_gs}]
-
+        new_items = [{"Qty": qty_in, "Product": item_choice, "Unit Rate": base_r, "Disc %": discount_pct if discount_pct else 0.0, "Total": 0.0, "Labour_Rate": lab_r, "Block_Rate": block_r, "SYSTEM RATE": 0.0, "No_Waiver": False, "Is_GS": is_gs, "Is_Mojo": is_mojo}]
+        
         if is_p_sqm:
             if add_p_edges:
                 edge_qty = math.ceil(((w + l) * 2) / 0.4) if (w > 0 and l > 0) else 0
                 if edge_qty > 0:
-                    new_items.append({"Qty": edge_qty, "Product": "Plastorip Edging (pc)", "Unit Rate": 1.65, "Disc %": discount_pct if discount_pct else 0.0, "Total": 0.0, "Labour_Rate": 0.0, "Block_Rate": 1.65, "SYSTEM RATE": 0.0, "No_Waiver": False, "Is_GS": False})
+                    new_items.append({"Qty": edge_qty, "Product": "Plastorip Edging (pc)", "Unit Rate": 1.65, "Disc %": discount_pct if discount_pct else 0.0, "Total": 0.0, "Labour_Rate": 0.0, "Block_Rate": 1.65, "SYSTEM RATE": 0.0, "No_Waiver": False, "Is_GS": False, "Is_Mojo": False})
             if add_p_corners:
-                new_items.append({"Qty": 4, "Product": "Plastorip Corner (ea)", "Unit Rate": 0.00, "Disc %": 0.0, "Total": 0.0, "Labour_Rate": 0.0, "Block_Rate": 0.0, "SYSTEM RATE": 0.0, "No_Waiver": False, "Is_GS": False})
+                new_items.append({"Qty": 4, "Product": "Plastorip Corner (ea)", "Unit Rate": 0.00, "Disc %": 0.0, "Total": 0.0, "Labour_Rate": 0.0, "Block_Rate": 0.0, "SYSTEM RATE": 0.0, "No_Waiver": False, "Is_GS": False, "Is_Mojo": False})
         
         st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame(new_items)], ignore_index=True)
         st.rerun()
@@ -140,9 +179,10 @@ if st.button("ADD TO QUOTE ENGINE"):
 if not st.session_state.df.empty:
     st.markdown("### 🏗️ QUOTED ITEMS")
     has_gs = st.session_state.df["Is_GS"].any()
+    has_mojo = st.session_state.df["Is_Mojo"].any()
+    
     edited_df = st.data_editor(st.session_state.df[["Qty", "Product", "SYSTEM RATE", "Unit Rate", "Disc %", "Total"]], num_rows="dynamic", use_container_width=True, key="editor",
                                column_config={"SYSTEM RATE": st.column_config.NumberColumn("🔢 SYSTEM RATE", format="$%.2f"), "Unit Rate": st.column_config.NumberColumn("Unit Rate", format="$%.2f"), "Total": st.column_config.NumberColumn("Total", format="$%.2f")})
-    
     if not edited_df.equals(st.session_state.df[["Qty", "Product", "SYSTEM RATE", "Unit Rate", "Disc %", "Total"]]):
         for col in ["Qty", "Unit Rate", "Disc %"]: st.session_state.df[col] = edited_df[col]
         st.rerun()
@@ -150,16 +190,27 @@ if not st.session_state.df.empty:
     # --- 4. SELECTORS ---
     st.markdown("### ⚙️ LABOUR & CARTAGE")
     labour_mode = "Bake Labour into Unit Rate" if has_gs else st.selectbox("Labour Mode", ["Bake Labour into Unit Rate", "Show Labour as Separate Line Item", "No Labour"])
+    
+    mojo_lab_total = 0.0
+    if has_mojo and labour_mode != "No Labour":
+        m_qty = st.session_state.df[st.session_state.df["Is_Mojo"] == True]["Qty"].sum()
+        if m_qty <= 30: sup, hand, h_in, h_out = 1, 1, 4, 4
+        elif m_qty <= 60: sup, hand, h_in, h_out = 1, 2, 4, 4
+        elif m_qty <= 100: sup, hand, h_in, h_out = 1, 4, 4, 4
+        elif m_qty <= 200: sup, hand, h_in, h_out = 1, 6, 6, 4
+        else: sup, hand, h_in, h_out = 2, 8, 6, 6
+        mojo_lab_total = ((sup + hand) * (h_in + h_out) * 55.0)
+        st.info(f"👷 Mojo Labour: {sup} Supervisor + {hand} Hands ({h_in}hr In / {h_out}hr Out)")
+
     col_c, col_e = st.columns(2)
     charge_cartage = col_c.checkbox("🚚 Include Cartage ($3.50/km x 4)", value=True)
-    
     if has_gs and col_e.checkbox("👷 Add Engineer Sign-off ($750.00)", value=any(st.session_state.df["Product"] == "Engineer Sign-off")):
         if not any(st.session_state.df["Product"] == "Engineer Sign-off"):
-            st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame([{"Qty": 1, "Product": "Engineer Sign-off", "Unit Rate": 750.0, "Disc %": 0.0, "Total": 750.0, "Labour_Rate": 0.0, "Block_Rate": 750.0, "SYSTEM RATE": 750.0, "No_Waiver": True, "Is_GS": False}])], ignore_index=True)
+            st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame([{"Qty": 1, "Product": "Engineer Sign-off", "Unit Rate": 750.0, "Disc %": 0.0, "Total": 750.0, "Labour_Rate": 0.0, "Block_Rate": 750.0, "SYSTEM RATE": 750.0, "No_Waiver": True, "Is_GS": False, "Is_Mojo": False}])], ignore_index=True)
             st.rerun()
 
     # --- 5. FINANCES ---
-    lab_total = 0.0
+    lab_total = mojo_lab_total
     for idx, row in st.session_state.df.iterrows():
         q, r, d, b, lr, ig = row["Qty"], row["Unit Rate"], row["Disc %"], row["Block_Rate"], row["Labour_Rate"], row["Is_GS"]
         hire = (q * r) if ig else (q * r * live_weeks) if live_weeks <= 3 else (q * r * 3) + (q * b)
@@ -169,9 +220,15 @@ if not st.session_state.df.empty:
         final = (hire + item_l) * (1 - (d / 100))
         st.session_state.df.at[idx, "Total"], st.session_state.df.at[idx, "SYSTEM RATE"] = final, (final / q if q > 0 else 0)
 
-    subtotal = max(2000.0 if has_gs else 300.0, st.session_state.df["Total"].sum() + lab_total)
-    waiver_eligible = st.session_state.df[st.session_state.df["No_Waiver"] == False]["Total"].sum()
-    waiver = (waiver_eligible + (lab_total if labour_mode == "Show Labour as Separate Line Item" else 0)) * 0.07
+    pure_hire = st.session_state.df["Total"].sum()
+    mojo_hire = st.session_state.df[st.session_state.df["Is_Mojo"] == True]["Total"].sum()
+    
+    # Mojo Minimum Charge Override
+    if has_mojo and mojo_hire < 350.0:
+        pure_hire = pure_hire + (350.0 - mojo_hire)
+    
+    subtotal = max(2000.0 if has_gs else 300.0, pure_hire + lab_total)
+    waiver = st.session_state.df[st.session_state.df["No_Waiver"] == False]["Total"].sum() * 0.07
     cartage = (km_input * 4 * 3.50) if km_input and charge_cartage else 0.0
     
     st.divider()
@@ -180,5 +237,5 @@ if not st.session_state.df.empty:
     st.metric("GRAND TOTAL (EX GST)", f"${(subtotal + waiver + cartage):,.2f}")
     
     if st.button("⚠️ RESET QUOTE"):
-        st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Disc %", "Total", "Labour_Rate", "Block_Rate", "SYSTEM RATE", "No_Waiver", "Is_GS"])
+        st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Disc %", "Total", "Labour_Rate", "Block_Rate", "SYSTEM RATE", "No_Waiver", "Is_GS", "Is_Mojo"])
         st.rerun()
