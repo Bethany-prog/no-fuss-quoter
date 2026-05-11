@@ -28,8 +28,6 @@ st.set_page_config(page_title="No Fuss Quote Pro", page_icon="📦", layout="wid
 st.markdown("""
     <style>
     .main { background-color: #FFFFFF !important; }
-    
-    /* White Headers with Green Accent */
     h3 { 
         color: #FFFFFF !important; 
         border-left: 5px solid #00E676; 
@@ -40,30 +38,24 @@ st.markdown("""
         padding-bottom: 10px;
         border-radius: 0 10px 10px 0;
     }
-    
     div[data-testid="stNumberInput"] label p, 
     div[data-testid="stDateInput"] label p,
     div[data-testid="stSelectbox"] label p { 
         color: #333333 !important; 
         font-weight: bold !important; 
     }
-
     div[data-testid="stMetricValue"] { color: #00E676 !important; font-size: 32px !important; font-weight: bold !important; }
-    
-    /* Ensuring Metric Labels (Headers) are White */
     [data-testid="stMetricLabel"] p {
         color: #FFFFFF !important;
         font-weight: bold !important;
         font-size: 16px !important;
     }
-    
     div.stMetric { 
         background-color: #1A1D2D !important; 
         padding: 20px !important; 
         border-radius: 12px !important; 
         border: 2px solid #3D5AFE !important; 
     }
-    
     div.stButton > button:first-child { 
         background-color: #3D5AFE; 
         color: white; 
@@ -71,9 +63,7 @@ st.markdown("""
         height: 50px; 
         font-weight: bold; 
     }
-    
     .stDataFrame { border: 2px solid #00E676 !important; border-radius: 12px; }
-    
     [data-testid="stCheckbox"] { 
         background-color: #F0F2F6; 
         padding: 12px; 
@@ -204,7 +194,7 @@ if not st.session_state.df.empty:
         elif m_qty <= 200: sup, hand, h_in, h_out = 1, 6, 6, 4
         else: sup, hand, h_in, h_out = 2, 8, 6, 6
         mojo_lab_total = ((sup + hand) * (h_in + h_out) * 55.0)
-        st.info(f"👷 Mojo Labour: {sup} Supervisor + {hand} Hands ({h_in}hr In / {h_out}hr Out)")
+        st.info(f"👷 Mojo Labour Matrix Active: {sup} Supervisor + {hand} Hands ({h_in}hr In / {h_out}hr Out)")
 
     col_c, col_e = st.columns(2)
     charge_cartage = col_c.checkbox("🚚 Include Cartage ($3.50/km x 4)", value=True)
@@ -213,19 +203,31 @@ if not st.session_state.df.empty:
             st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame([{"Qty": 1, "Product": "Engineer Sign-off", "Unit Rate": 750.0, "Disc %": 0.0, "Total": 750.0, "Labour_Rate": 0.0, "Block_Rate": 750.0, "SYSTEM RATE": 750.0, "No_Waiver": True, "Is_GS": False, "Is_Mojo": False}])], ignore_index=True)
             st.rerun()
 
-    # --- 5. FINANCES ---
+    # --- 5. FINANCES (FIXED MOJO LABOUR TOGGLE) ---
     hire_total_only = 0.0
-    lab_total_only = mojo_lab_total
+    lab_total_only = 0.0
     
+    # Calculate Mojo Per-Section Labor if Baked In
+    mojo_baked_per_unit = 0.0
+    if has_mojo and labour_mode == "Bake Labour into Unit Rate":
+        m_total_qty = st.session_state.df[st.session_state.df["Is_Mojo"] == True]["Qty"].sum()
+        mojo_baked_per_unit = mojo_lab_total / m_total_qty if m_total_qty > 0 else 0
+    elif has_mojo and labour_mode == "Show Labour as Separate Line Item":
+        lab_total_only = mojo_lab_total
+
     for idx, row in st.session_state.df.iterrows():
-        q, r, d, b, lr, ig = row["Qty"], row["Unit Rate"], row["Disc %"], row["Block_Rate"], row["Labour_Rate"], row["Is_GS"]
+        q, r, d, b, lr, ig, im = row["Qty"], row["Unit Rate"], row["Disc %"], row["Block_Rate"], row["Labour_Rate"], row["Is_GS"], row["Is_Mojo"]
         hire = (q * r) if ig else (q * r * live_weeks) if live_weeks <= 3 else (q * r * 3) + (q * b)
         
         item_lab = 0.0
-        if labour_mode == "Bake Labour into Unit Rate":
-            item_lab = q * lr
-        elif labour_mode == "Show Labour as Separate Line Item":
-            lab_total_only += (q * lr) * (1 - (d / 100))
+        if im: # It's a Mojo item
+            if labour_mode == "Bake Labour into Unit Rate":
+                item_lab = q * mojo_baked_per_unit
+        else: # Regular Flooring item
+            if labour_mode == "Bake Labour into Unit Rate":
+                item_lab = q * lr
+            elif labour_mode == "Show Labour as Separate Line Item":
+                lab_total_only += (q * lr) * (1 - (d / 100))
             
         final = (hire + item_lab) * (1 - (d / 100))
         st.session_state.df.at[idx, "Total"], st.session_state.df.at[idx, "SYSTEM RATE"] = final, (final / q if q > 0 else 0)
@@ -236,7 +238,6 @@ if not st.session_state.df.empty:
         hire_total_only += (350.0 - mojo_hire)
     
     subtotal = max(2000.0 if has_gs else 300.0, hire_total_only)
-    
     waiver_eligible = st.session_state.df[st.session_state.df["No_Waiver"] == False]["Total"].sum()
     waiver = waiver_eligible * 0.07
     cartage = (km_input * 4 * 3.50) if km_input and charge_cartage else 0.0
