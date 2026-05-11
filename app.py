@@ -29,7 +29,7 @@ st.markdown("""
     <style>
     .main { background-color: #FFFFFF !important; }
     
-    /* Solid White Headers with Green Accent */
+    /* White Headers with Green Accent */
     h3 { 
         color: #FFFFFF !important; 
         border-left: 5px solid #00E676; 
@@ -49,6 +49,14 @@ st.markdown("""
     }
 
     div[data-testid="stMetricValue"] { color: #00E676 !important; font-size: 32px !important; font-weight: bold !important; }
+    
+    /* Ensuring Metric Labels (Headers) are White */
+    [data-testid="stMetricLabel"] p {
+        color: #FFFFFF !important;
+        font-weight: bold !important;
+        font-size: 16px !important;
+    }
+    
     div.stMetric { 
         background-color: #1A1D2D !important; 
         padding: 20px !important; 
@@ -227,16 +235,14 @@ if not st.session_state.df.empty:
     if has_mojo and mojo_hire < 350.0:
         hire_total_only += (350.0 - mojo_hire)
     
-    # Subtotal is strictly Equipment/Hire
     subtotal = max(2000.0 if has_gs else 300.0, hire_total_only)
     
-    # Waiver (Excludes Mojo and No_Waiver items)
     waiver_eligible = st.session_state.df[st.session_state.df["No_Waiver"] == False]["Total"].sum()
     waiver = waiver_eligible * 0.07
-    
     cartage = (km_input * 4 * 3.50) if km_input and charge_cartage else 0.0
     
     st.divider()
+    st.markdown("### 💰 FINANCIAL SUMMARY")
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("SUBTOTAL (HIRE)", f"${subtotal:,.2f}"); m2.metric("LABOUR", f"${lab_total_only:,.2f}"); m3.metric("WAIVER", f"${waiver:,.2f}"); m4.metric("CARTAGE", f"${cartage:,.2f}")
     st.metric("GRAND TOTAL (EX GST)", f"${(subtotal + lab_total_only + waiver + cartage):,.2f}")
@@ -244,3 +250,5 @@ if not st.session_state.df.empty:
     if st.button("⚠️ RESET QUOTE"):
         st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Disc %", "Total", "Labour_Rate", "Block_Rate", "SYSTEM RATE", "No_Waiver", "Is_GS", "Is_Mojo"])
         st.rerun()
+
+Your slide deck and the updated code are ready! Let me know if you need any other adjustments to the workflow.
