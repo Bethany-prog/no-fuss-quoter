@@ -52,7 +52,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# 3. MASTER CATALOG (Cleaned terminology)
+# 3. MASTER CATALOG
 CATALOG = {
     "FLOORING": {
         "I-Trac System": [
@@ -102,7 +102,7 @@ if 'df' not in st.session_state:
 
 st.title("📦 No Fuss Quote Pro")
 
-# --- 1. LOGISTICS (AUS FORMAT) ---
+# --- 1. LOGISTICS ---
 st.markdown("### 📍 HIRE DATES & DISTANCE")
 c1, c2, c3 = st.columns(3)
 start_date = c1.date_input("Hire Start", value=date.today(), format="DD/MM/YYYY")
@@ -110,7 +110,7 @@ end_date = c2.date_input("Hire End", value=date.today(), format="DD/MM/YYYY")
 km_input = c3.number_input("Distance (KM)", min_value=0.0, value=None, placeholder="KM...")
 live_weeks = math.ceil(((end_date - start_date).days) / 7) if (end_date - start_date).days > 0 else 1
 
-# --- 2. ADD PRODUCT (CLEAN INTERFACE) ---
+# --- 2. ADD PRODUCT ---
 st.markdown("### ➕ ADD PRODUCT")
 dept_col, bundle_col = st.columns(2)
 dept_choice = dept_col.selectbox("Department", sorted(CATALOG.keys()))
@@ -119,7 +119,6 @@ bundle_choice = bundle_col.selectbox("Select System/Group", sorted(CATALOG[dept_
 selected_bundle = CATALOG[dept_choice][bundle_choice]
 bundle_results = []
 
-# Accessory logic displayed directly without the container box
 w, l = 0, 0
 for item in selected_bundle:
     if item.get("is_p"):
@@ -130,7 +129,7 @@ for item in selected_bundle:
             l = l_col.number_input("Length (m)", min_value=0.0, value=None, placeholder="Length...", key="p_l")
             q_val = (w * l) if (w and l) else 0.0
         else:
-            q_val = st.number_input(f"Qty: {item['Product']} ({item['unit']})", min_value=0.0, value=None, placeholder="Enter SQM...", key=f"q_{item['Product']}")
+            q_val = st.number_input(f"Qty: {item['Product']} ({item['unit']})", min_value=0.0, value=None, placeholder="SQM...", key=f"q_{item['Product']}")
     else:
         default_q = None
         if "Edging" in item['Product'] and w > 0:
@@ -138,14 +137,14 @@ for item in selected_bundle:
         elif "Corner" in item['Product'] and w > 0:
             default_q = 4.0
             
-        q_val = st.number_input(f"Qty: {item['Product']} ({item['unit']})", min_value=0.0, value=default_q, placeholder="Enter Qty...", key=f"q_{item['Product']}")
+        q_val = st.number_input(f"Qty: {item['Product']} ({item['unit']})", min_value=0.0, value=default_q, placeholder="Qty...", key=f"q_{item['Product']}")
     
     if q_val and q_val > 0:
         bundle_results.append({"item": item, "qty": q_val})
 
 c_a, c_d = st.columns(2)
 adj_rate = c_a.number_input("Override Price (Primary Item)", min_value=0.0, value=None, placeholder="Manual Rate...")
-discount_pct = c_d.number_input("Discount %", min_value=0.0, max_value=100.0, value=None, placeholder="Discount %...")
+discount_pct = c_d.number_input("Discount %", min_value=0.0, max_value=100.0, value=None, placeholder="%...")
 
 if st.button("ADD SELECTED ITEMS TO QUOTE"):
     new_rows = []
@@ -186,22 +185,28 @@ if not st.session_state.df.empty:
 
     # --- 4. SELECTORS ---
     st.markdown("### ⚙️ LABOUR & CARTAGE")
-    labour_mode = "Bake Labour into Unit Rate" if has_gs else st.selectbox("Labour Mode", ["Bake Labour into Unit Rate", "Show Labour as Separate Line Item", "No Labour"])
-    mojo_lab_total = 0.0
-    if has_mojo and labour_mode != "No Labour":
+    lab_mode = "Bake Labour into Unit Rate" if has_gs else st.selectbox("Labour Mode", ["Bake Labour into Unit Rate", "Show Labour as Separate Line Item", "No Labour"])
+    
+    mojo_lab = 0.0
+    if has_mojo and lab_mode != "No Labour":
         m_qty = st.session_state.df[st.session_state.df["Is_Mojo"] == True]["Qty"].sum()
         if m_qty <= 30: sup, hand, h_in, h_out = 1, 1, 4, 4
         elif m_qty <= 60: sup, hand, h_in, h_out = 1, 2, 4, 4
         elif m_qty <= 100: sup, hand, h_in, h_out = 1, 4, 4, 4
         elif m_qty <= 200: sup, hand, h_in, h_out = 1, 6, 6, 4
         else: sup, hand, h_in, h_out = 2, 8, 6, 6
-        mojo_lab_total = ((sup + hand) * (h_in + h_out) * 55.0)
-        st.info(f"👷 Mojo Labour: {sup} Supervisor + {hand} Hands ({h_in}hr In / {h_out}hr Out)")
-    charge_cartage = st.checkbox("🚚 Include Cartage ($3.50/km x 4)", value=True)
+        mojo_lab = ((sup + hand) * (h_in + h_out) * 55.0)
+        st.info(f"👷 Mojo Labour: {sup} Sup + {hand} Hands ({h_in}hr In / {h_out}hr Out)")
+
+    col_cart, col_waiv = st.columns(2)
+    charge_cartage = col_cart.checkbox("🚚 Include Cartage ($3.50/km x 4)", value=True)
+    # Manual Waiver Toggle
+    include_waiver = col_waiv.checkbox("🛡️ Include Damage Waiver (7%)", value=True)
 
     # --- 5. FINANCES ---
-    hire_total_only, lab_total_only = 0.0, (mojo_lab_total if labour_mode == "Show Labour as Separate Line Item" else 0.0)
-    mojo_baked_per_unit = (mojo_lab_total / st.session_state.df[st.session_state.df["Is_Mojo"] == True]["Qty"].sum()) if (has_mojo and labour_mode == "Bake Labour into Unit Rate") else 0.0
+    hire_only, lab_only = 0.0, (mojo_lab if lab_mode == "Show Labour as Separate Line Item" else 0.0)
+    m_baked = (mojo_lab / st.session_state.df[st.session_state.df["Is_Mojo"] == True]["Qty"].sum()) if (has_mojo and lab_mode == "Bake Labour into Unit Rate") else 0.0
+    
     for idx, row in st.session_state.df.iterrows():
         q, r, d, b, lr, ig, im = row["Qty"], row["Unit Rate"], row["Disc %"], row["Block_Rate"], row["Labour_Rate"], row["Is_GS"], row["Is_Mojo"]
         if not ig and not im and live_weeks >= 4:
@@ -210,24 +215,28 @@ if not st.session_state.df.empty:
             hire = q * r
         else:
             hire = (q * r * live_weeks) if live_weeks <= 3 else (q * r * 3) + (q * b)
-        item_lab = (q * mojo_baked_per_unit) if im and labour_mode == "Bake Labour into Unit Rate" else (q * lr) if labour_mode == "Bake Labour into Unit Rate" else 0.0
-        if not im and labour_mode == "Show Labour as Separate Line Item": lab_total_only += (q * lr) * (1 - (d / 100))
+        item_lab = (q * m_baked) if im and lab_mode == "Bake Labour into Unit Rate" else (q * lr) if lab_mode == "Bake Labour into Unit Rate" else 0.0
+        if not im and lab_mode == "Show Labour as Separate Line Item": lab_only += (q * lr) * (1 - (d / 100))
         final = (hire + item_lab) * (1 - (d / 100))
         st.session_state.df.at[idx, "Total"], st.session_state.df.at[idx, "SYSTEM RATE"] = final, (final / q if q > 0 else 0)
-        hire_total_only += final
-    subtotal = max(2000.0 if has_gs else 300.0, (hire_total_only + (350.0 - st.session_state.df[st.session_state.df["Is_Mojo"] == True]["Total"].sum()) if (has_mojo and st.session_state.df[st.session_state.df["Is_Mojo"] == True]["Total"].sum() < 350.0) else hire_total_only))
-    waiver = st.session_state.df[st.session_state.df["No_Waiver"] == False]["Total"].sum() * 0.07
+        hire_only += final
+
+    subtotal = max(2000.0 if has_gs else 300.0, (hire_only + (350.0 - st.session_state.df[st.session_state.df["Is_Mojo"] == True]["Total"].sum()) if (has_mojo and st.session_state.df[st.session_state.df["Is_Mojo"] == True]["Total"].sum() < 350.0) else hire_only))
+    
+    # Updated Waiver Logic for Toggle
+    waiver = (st.session_state.df[st.session_state.df["No_Waiver"] == False]["Total"].sum() * 0.07) if include_waiver else 0.0
+    
     cartage = (km_input * 4 * 3.50) if km_input and charge_cartage else 0.0
     st.divider()
     m1, m2, m3, m4 = st.columns(4)
-    m1.metric("SUBTOTAL (HIRE)", f"${subtotal:,.2f}"); m2.metric("LABOUR", f"${lab_total_only:,.2f}"); m3.metric("WAIVER", f"${waiver:,.2f}"); m4.metric("CARTAGE", f"${cartage:,.2f}")
-    st.metric("GRAND TOTAL (EX GST)", f"${(subtotal + lab_total_only + waiver + cartage):,.2f}")
+    m1.metric("SUBTOTAL (HIRE)", f"${subtotal:,.2f}"); m2.metric("LABOUR", f"${lab_only:,.2f}"); m3.metric("WAIVER", f"${waiver:,.2f}"); m4.metric("CARTAGE", f"${cartage:,.2f}")
+    st.metric("GRAND TOTAL (EX GST)", f"${(subtotal + lab_only + waiver + cartage):,.2f}")
 
     st.markdown("### 📋 DESCRIPTION BLOCKS")
     for idx, row in st.session_state.df.iterrows():
-        p, lr, is_gs, br, ut = row["Unit Rate"], row["Labour_Rate"], row["Is_GS"], row["Block_Rate"], row["Unit_Type"]
-        wk_r = br/4 if live_weeks >= 4 and not is_gs else p
-        init = wk_r + (lr if labour_mode == "Bake Labour into Unit Rate" else 0)
+        p, lr, igs, br, ut = row["Unit Rate"], row["Labour_Rate"], row["Is_GS"], row["Block_Rate"], row["Unit_Type"]
+        wk_r = br/4 if live_weeks >= 4 and not igs else p
+        init = wk_r + (lr if lab_mode == "Bake Labour into Unit Rate" else 0)
         txt = f"PRICING BASED ON {live_weeks} WEEK HIRE PERIOD\nPrice for Initial Week (Incl. Install) = ${init:,.2f} per {ut} + GST\n"
         if live_weeks > 1: txt += f"Price for weeks 2+ = ${wk_r:,.2f} per {ut}/week + GST"
         st.text_area(f"Line {idx+1}: {row['Product']}", value=txt, height=100)
