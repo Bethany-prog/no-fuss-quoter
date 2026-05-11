@@ -39,7 +39,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# 3. MASTER CATALOG
+# 3. MASTER CATALOG (October 2025 Standard)
 PRODUCT_CATALOG = {
     "FLOORING": {
         "I-Trac flooring (sqm)": {"w1_3": 23.40, "block": 46.80, "labour": 4.65},
@@ -47,7 +47,10 @@ PRODUCT_CATALOG = {
         "Supa-Trac flooring (sqm)": {"w1_3": 11.55, "block": 25.00, "labour": 4.65},
         "Supa-Trac Edging (lm)": {"w1_3": 6.70, "block": 6.70, "labour": 0.00},
         "Trakmats (ea)": {"w1_3": 23.20, "block": 45.00, "labour": 5.85},
-        "No Fuss Floor (Grey/Green) (sqm)": {"w1_3": 7.10, "block": 15.00, "labour": 3.05}
+        "No Fuss Floor (Grey/Green) (sqm)": {"w1_3": 7.10, "block": 15.00, "labour": 3.05},
+        "Plastorip (sqm)": {"w1_3": 10.15, "block": 20.30, "labour": 3.05},
+        "Plastorip Edging (lm)": {"w1_3": 1.65, "block": 1.65, "labour": 0.00},
+        "Plastorip Expansion Joiner 1m": {"w1_3": 12.15, "block": 12.15, "labour": 0.00}
     },
     "GRANDSTANDS": {
         "Grandstand Seating (per seat)": {"is_gs": True, "labour": 0.00},
@@ -110,11 +113,8 @@ if st.button("ADD TO QUOTE ENGINE"):
 # --- 3. QUOTED ITEMS TABLE ---
 if not st.session_state.df.empty:
     st.markdown("### 🏗️ QUOTED ITEMS")
-    
-    # Check for Grandstand to lock labour mode later
     has_gs = st.session_state.df["Is_GS"].any()
 
-    # Data Editor
     edited_df = st.data_editor(st.session_state.df[["Qty", "Product", "SYSTEM RATE", "Unit Rate", "Disc %", "Total"]], 
                                num_rows="dynamic", use_container_width=True, key="editor",
                                column_config={
@@ -126,7 +126,7 @@ if not st.session_state.df.empty:
         for col in ["Qty", "Unit Rate", "Disc %"]: st.session_state.df[col] = edited_df[col]
         st.rerun()
 
-    # --- 4. WORKFLOW SELECTORS (BELOW TABLE) ---
+    # --- 4. WORKFLOW SELECTORS ---
     st.markdown("### ⚙️ LABOUR & CARTAGE SELECTORS")
     if has_gs:
         st.info("💡 Grandstand pricing automatically includes built-in installation labour.")
