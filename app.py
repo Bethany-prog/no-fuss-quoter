@@ -28,6 +28,8 @@ st.set_page_config(page_title="No Fuss Quote Pro", page_icon="📦", layout="wid
 st.markdown("""
     <style>
     .main { background-color: #FFFFFF !important; }
+    
+    /* Solid White Headers with Green Accent */
     h3 { 
         color: #FFFFFF !important; 
         border-left: 5px solid #00E676; 
@@ -38,24 +40,29 @@ st.markdown("""
         padding-bottom: 10px;
         border-radius: 0 10px 10px 0;
     }
+    
     div[data-testid="stNumberInput"] label p, 
     div[data-testid="stDateInput"] label p,
     div[data-testid="stSelectbox"] label p { 
         color: #333333 !important; 
         font-weight: bold !important; 
     }
+
     div[data-testid="stMetricValue"] { color: #00E676 !important; font-size: 32px !important; font-weight: bold !important; }
+    
     [data-testid="stMetricLabel"] p {
         color: #FFFFFF !important;
         font-weight: bold !important;
         font-size: 16px !important;
     }
+
     div.stMetric { 
         background-color: #1A1D2D !important; 
         padding: 20px !important; 
         border-radius: 12px !important; 
         border: 2px solid #3D5AFE !important; 
     }
+    
     div.stButton > button:first-child { 
         background-color: #3D5AFE; 
         color: white; 
@@ -63,7 +70,9 @@ st.markdown("""
         height: 50px; 
         font-weight: bold; 
     }
+    
     .stDataFrame { border: 2px solid #00E676 !important; border-radius: 12px; }
+    
     [data-testid="stCheckbox"] { 
         background-color: #F0F2F6; 
         padding: 12px; 
@@ -73,16 +82,24 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# 3. MASTER CATALOG
+# 3. MASTER CATALOG (Synced with pRICING.csv)
 PRODUCT_CATALOG = {
     "FLOORING": {
         "I-Trac flooring (sqm)": {"w1_3": 23.40, "block": 46.80, "labour": 4.65, "waiver": True},
         "I-Trac ramps (ea)": {"w1_3": 42.00, "block": 84.00, "labour": 0.00, "waiver": True},
         "Supa-Trac flooring (sqm)": {"w1_3": 11.55, "block": 25.00, "labour": 4.65, "waiver": True},
+        "Supa-Trac Edging (lm)": {"w1_3": 6.70, "block": 6.70, "labour": 0.00, "waiver": True},
         "Trakmats (ea)": {"w1_3": 23.20, "block": 45.00, "labour": 5.85, "waiver": True},
+        "Trakmat Joiners (ea)": {"w1_3": 11.95, "block": 11.95, "labour": 0.00, "waiver": True},
         "No Fuss Floor (Grey/Green) (sqm)": {"w1_3": 7.10, "block": 15.00, "labour": 3.05, "waiver": True},
         "Plastorip (sqm)": {"w1_3": 10.15, "block": 20.30, "labour": 3.05, "is_plastorip": True, "waiver": True},
-        "Plastorip Expansion Joiner 1m": {"w1_3": 12.15, "block": 12.15, "labour": 0.00, "waiver": True}
+        "Terratrak Plus (sqm)": {"w1_3": 23.40, "block": 46.80, "labour": 4.65, "waiver": True},
+        "Wooden Floor (sqm)": {"w1_3": 8.85, "block": 17.70, "labour": 7.15, "waiver": True},
+        "Parquetry Dance Floor (sqm)": {"w1_3": 20.95, "block": 41.90, "labour": 4.80, "waiver": True},
+        "Carpet Tiles - Onyx (sqm)": {"w1_3": 8.85, "block": 17.70, "labour": 3.05, "waiver": True},
+        "Protectall (sqm)": {"w1_3": 22.05, "block": 44.10, "labour": 3.25, "waiver": True},
+        "Enkamat Underlay (sqm)": {"w1_3": 2.60, "block": 5.20, "labour": 0.00, "waiver": True},
+        "Black Plastic (sqm)": {"w1_3": 0.90, "block": 0.90, "labour": 0.00, "waiver": True}
     },
     "GRANDSTANDS": {
         "Grandstand Seating (per seat)": {"is_gs": True, "labour": 0.00, "waiver": True},
@@ -194,20 +211,20 @@ if not st.session_state.df.empty:
         elif m_qty <= 200: sup, hand, h_in, h_out = 1, 6, 6, 4
         else: sup, hand, h_in, h_out = 2, 8, 6, 6
         mojo_lab_total = ((sup + hand) * (h_in + h_out) * 55.0)
-        st.info(f"👷 Mojo Labour Matrix Active: {sup} Supervisor + {hand} Hands ({h_in}hr In / {h_out}hr Out)")
+        st.info(f"👷 Mojo Labour: {sup} Supervisor + {hand} Hands ({h_in}hr In / {h_out}hr Out)")
 
     col_c, col_e = st.columns(2)
     charge_cartage = col_c.checkbox("🚚 Include Cartage ($3.50/km x 4)", value=True)
-    if has_gs and col_e.checkbox("👷 Add Engineer Sign-off ($750.00)", value=any(st.session_state.df["Product"] == "Engineer Sign-off")):
+    if has_gs and col_e.checkbox("Add Engineer Sign-off ($750.00)", value=any(st.session_state.df["Product"] == "Engineer Sign-off")):
         if not any(st.session_state.df["Product"] == "Engineer Sign-off"):
             st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame([{"Qty": 1, "Product": "Engineer Sign-off", "Unit Rate": 750.0, "Disc %": 0.0, "Total": 750.0, "Labour_Rate": 0.0, "Block_Rate": 750.0, "SYSTEM RATE": 750.0, "No_Waiver": True, "Is_GS": False, "Is_Mojo": False}])], ignore_index=True)
             st.rerun()
 
-    # --- 5. FINANCES (FIXED MOJO LABOUR TOGGLE) ---
+    # --- 5. FINANCES ---
     hire_total_only = 0.0
     lab_total_only = 0.0
     
-    # Calculate Mojo Per-Section Labor if Baked In
+    # Mojo Baked-In Logic
     mojo_baked_per_unit = 0.0
     if has_mojo and labour_mode == "Bake Labour into Unit Rate":
         m_total_qty = st.session_state.df[st.session_state.df["Is_Mojo"] == True]["Qty"].sum()
@@ -220,26 +237,21 @@ if not st.session_state.df.empty:
         hire = (q * r) if ig else (q * r * live_weeks) if live_weeks <= 3 else (q * r * 3) + (q * b)
         
         item_lab = 0.0
-        if im: # It's a Mojo item
-            if labour_mode == "Bake Labour into Unit Rate":
-                item_lab = q * mojo_baked_per_unit
-        else: # Regular Flooring item
-            if labour_mode == "Bake Labour into Unit Rate":
-                item_lab = q * lr
-            elif labour_mode == "Show Labour as Separate Line Item":
-                lab_total_only += (q * lr) * (1 - (d / 100))
+        if im: # Mojo
+            if labour_mode == "Bake Labour into Unit Rate": item_lab = q * mojo_baked_per_unit
+        else: # Regular
+            if labour_mode == "Bake Labour into Unit Rate": item_lab = q * lr
+            elif labour_mode == "Show Labour as Separate Line Item": lab_total_only += (q * lr) * (1 - (d / 100))
             
         final = (hire + item_lab) * (1 - (d / 100))
         st.session_state.df.at[idx, "Total"], st.session_state.df.at[idx, "SYSTEM RATE"] = final, (final / q if q > 0 else 0)
         hire_total_only += final
 
     mojo_hire = st.session_state.df[st.session_state.df["Is_Mojo"] == True]["Total"].sum()
-    if has_mojo and mojo_hire < 350.0:
-        hire_total_only += (350.0 - mojo_hire)
+    if has_mojo and mojo_hire < 350.0: hire_total_only += (350.0 - mojo_hire)
     
     subtotal = max(2000.0 if has_gs else 300.0, hire_total_only)
-    waiver_eligible = st.session_state.df[st.session_state.df["No_Waiver"] == False]["Total"].sum()
-    waiver = waiver_eligible * 0.07
+    waiver = st.session_state.df[st.session_state.df["No_Waiver"] == False]["Total"].sum() * 0.07
     cartage = (km_input * 4 * 3.50) if km_input and charge_cartage else 0.0
     
     st.divider()
