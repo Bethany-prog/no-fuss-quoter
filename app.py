@@ -28,8 +28,6 @@ st.set_page_config(page_title="No Fuss Quote Pro", page_icon="📦", layout="wid
 st.markdown("""
     <style>
     .main { background-color: #FFFFFF !important; }
-    
-    /* Solid White Headers with Green Accent */
     h3 { 
         color: #FFFFFF !important; 
         border-left: 5px solid #00E676; 
@@ -40,29 +38,24 @@ st.markdown("""
         padding-bottom: 10px;
         border-radius: 0 10px 10px 0;
     }
-    
     div[data-testid="stNumberInput"] label p, 
     div[data-testid="stDateInput"] label p,
     div[data-testid="stSelectbox"] label p { 
         color: #333333 !important; 
         font-weight: bold !important; 
     }
-
     div[data-testid="stMetricValue"] { color: #00E676 !important; font-size: 32px !important; font-weight: bold !important; }
-    
     [data-testid="stMetricLabel"] p {
         color: #FFFFFF !important;
         font-weight: bold !important;
         font-size: 16px !important;
     }
-
     div.stMetric { 
         background-color: #1A1D2D !important; 
         padding: 20px !important; 
         border-radius: 12px !important; 
         border: 2px solid #3D5AFE !important; 
     }
-    
     div.stButton > button:first-child { 
         background-color: #3D5AFE; 
         color: white; 
@@ -70,9 +63,7 @@ st.markdown("""
         height: 50px; 
         font-weight: bold; 
     }
-    
     .stDataFrame { border: 2px solid #00E676 !important; border-radius: 12px; }
-    
     [data-testid="stCheckbox"] { 
         background-color: #F0F2F6; 
         padding: 12px; 
@@ -82,7 +73,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# 3. MASTER CATALOG (Synced with pRICING.csv)
+# 3. MASTER CATALOG
 PRODUCT_CATALOG = {
     "FLOORING": {
         "I-Trac flooring (sqm)": {"w1_3": 23.40, "block": 46.80, "labour": 4.65, "waiver": True},
@@ -224,7 +215,6 @@ if not st.session_state.df.empty:
     hire_total_only = 0.0
     lab_total_only = 0.0
     
-    # Mojo Baked-In Logic
     mojo_baked_per_unit = 0.0
     if has_mojo and labour_mode == "Bake Labour into Unit Rate":
         m_total_qty = st.session_state.df[st.session_state.df["Is_Mojo"] == True]["Qty"].sum()
@@ -237,9 +227,9 @@ if not st.session_state.df.empty:
         hire = (q * r) if ig else (q * r * live_weeks) if live_weeks <= 3 else (q * r * 3) + (q * b)
         
         item_lab = 0.0
-        if im: # Mojo
+        if im: 
             if labour_mode == "Bake Labour into Unit Rate": item_lab = q * mojo_baked_per_unit
-        else: # Regular
+        else:
             if labour_mode == "Bake Labour into Unit Rate": item_lab = q * lr
             elif labour_mode == "Show Labour as Separate Line Item": lab_total_only += (q * lr) * (1 - (d / 100))
             
@@ -259,6 +249,26 @@ if not st.session_state.df.empty:
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("SUBTOTAL (HIRE)", f"${subtotal:,.2f}"); m2.metric("LABOUR", f"${lab_total_only:,.2f}"); m3.metric("WAIVER", f"${waiver:,.2f}"); m4.metric("CARTAGE", f"${cartage:,.2f}")
     st.metric("GRAND TOTAL (EX GST)", f"${(subtotal + lab_total_only + waiver + cartage):,.2f}")
+
+    # RESTORED DESCRIPTION BLOCKS
+    st.markdown("### 📋 DESCRIPTION BLOCKS")
+    for idx, row in st.session_state.df.iterrows():
+        p, lab_r, is_gs_d, br = row["Unit Rate"], row["Labour_Rate"], row["Is_GS"], row["Block_Rate"]
+        init_p = p if (labour_mode != "Bake Labour into Unit Rate" or lab_r == 0) else p + lab_r
+        copy_block = f"PRICING BASED ON {live_weeks} WEEK HIRE PERIOD\n"
+        if is_gs_d:
+            copy_block += f"Price for initial event period (Weeks 1-3) = ${p:,.2f} per seat + GST\n"
+        else:
+            if init_p == p:
+                end_wk = min(live_weeks, 3)
+                copy_block += f"Price for weeks 1-{end_wk} = ${p:,.2f} per unit/week + GST\n"
+            else:
+                copy_block += f"Price for Initial Week (Incl. Install) = ${init_p:,.2f} per unit + GST\n"
+                if live_weeks > 1:
+                    copy_block += f"Price for weeks 2-3 = ${p:,.2f} per unit/week + GST\n"
+        if live_weeks >= 4:
+            copy_block += f"Price for weeks 4+ = ${br / 4:,.2f} per unit/week + GST"
+        st.text_area(f"Line {idx+1}: {row['Product']}", value=copy_block, height=125)
     
     if st.button("⚠️ RESET QUOTE"):
         st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Disc %", "Total", "Labour_Rate", "Block_Rate", "SYSTEM RATE", "No_Waiver", "Is_GS", "Is_Mojo"])
