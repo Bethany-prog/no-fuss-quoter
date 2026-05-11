@@ -27,19 +27,20 @@ st.set_page_config(page_title="No Fuss Quote Pro", page_icon="📦", layout="wid
 
 st.markdown("""
     <style>
-    /* UI Restoration to v20.1 Style */
     .main { background-color: #FFFFFF !important; }
     
-    /* Green Accent Headers */
+    /* Solid White Headers with Green Accent */
     h3 { 
-        color: #00E676 !important; 
+        color: #FFFFFF !important; 
         border-left: 5px solid #00E676; 
         padding-left: 15px; 
         margin-top: 25px;
-        font-family: sans-serif;
+        background-color: #1A1D2D;
+        padding-top: 10px;
+        padding-bottom: 10px;
+        border-radius: 0 10px 10px 0;
     }
     
-    /* Input Field Styling */
     div[data-testid="stNumberInput"] label p, 
     div[data-testid="stDateInput"] label p,
     div[data-testid="stSelectbox"] label p { 
@@ -47,7 +48,6 @@ st.markdown("""
         font-weight: bold !important; 
     }
 
-    /* Metrics Box Styling (Dark with Blue Border) */
     div[data-testid="stMetricValue"] { color: #00E676 !important; font-size: 32px !important; font-weight: bold !important; }
     div.stMetric { 
         background-color: #1A1D2D !important; 
@@ -56,26 +56,21 @@ st.markdown("""
         border: 2px solid #3D5AFE !important; 
     }
     
-    /* Button Styling */
     div.stButton > button:first-child { 
         background-color: #3D5AFE; 
         color: white; 
         border-radius: 10px; 
         height: 50px; 
         font-weight: bold; 
-        padding: 0 30px;
     }
     
-    /* Table Styling */
     .stDataFrame { border: 2px solid #00E676 !important; border-radius: 12px; }
     
-    /* Checkbox Styling */
     [data-testid="stCheckbox"] { 
         background-color: #F0F2F6; 
         padding: 12px; 
         border-radius: 10px; 
         border: 1px solid #3D5AFE; 
-        margin-bottom: 8px; 
     }
     </style>
     """, unsafe_allow_html=True)
@@ -83,22 +78,21 @@ st.markdown("""
 # 3. MASTER CATALOG
 PRODUCT_CATALOG = {
     "FLOORING": {
-        "I-Trac flooring (sqm)": {"w1_3": 23.40, "block": 46.80, "labour": 4.65},
-        "I-Trac ramps (ea)": {"w1_3": 42.00, "block": 84.00, "labour": 0.00},
-        "Supa-Trac flooring (sqm)": {"w1_3": 11.55, "block": 25.00, "labour": 4.65},
-        "Supa-Trac Edging (lm)": {"w1_3": 6.70, "block": 6.70, "labour": 0.00},
-        "Trakmats (ea)": {"w1_3": 23.20, "block": 45.00, "labour": 5.85},
-        "No Fuss Floor (Grey/Green) (sqm)": {"w1_3": 7.10, "block": 15.00, "labour": 3.05},
-        "Plastorip (sqm)": {"w1_3": 10.15, "block": 20.30, "labour": 3.05, "is_plastorip": True},
-        "Plastorip Expansion Joiner 1m": {"w1_3": 12.15, "block": 12.15, "labour": 0.00}
+        "I-Trac flooring (sqm)": {"w1_3": 23.40, "block": 46.80, "labour": 4.65, "waiver": True},
+        "I-Trac ramps (ea)": {"w1_3": 42.00, "block": 84.00, "labour": 0.00, "waiver": True},
+        "Supa-Trac flooring (sqm)": {"w1_3": 11.55, "block": 25.00, "labour": 4.65, "waiver": True},
+        "Trakmats (ea)": {"w1_3": 23.20, "block": 45.00, "labour": 5.85, "waiver": True},
+        "No Fuss Floor (Grey/Green) (sqm)": {"w1_3": 7.10, "block": 15.00, "labour": 3.05, "waiver": True},
+        "Plastorip (sqm)": {"w1_3": 10.15, "block": 20.30, "labour": 3.05, "is_plastorip": True, "waiver": True},
+        "Plastorip Expansion Joiner 1m": {"w1_3": 12.15, "block": 12.15, "labour": 0.00, "waiver": True}
     },
     "GRANDSTANDS": {
-        "Grandstand Seating (per seat)": {"is_gs": True, "labour": 0.00},
-        "Shade Cloth / Scrim (per lm)": {"w1_3": 6.00, "block": 12.00, "labour": 0.00}
+        "Grandstand Seating (per seat)": {"is_gs": True, "labour": 0.00, "waiver": True},
+        "Shade Cloth / Scrim (per lm)": {"w1_3": 6.00, "block": 12.00, "labour": 0.00, "waiver": True}
     },
     "MOJO BARRIERS": {
-        "Mojo Straight (Sections)": {"w1_3": 35.00, "block": 70.00, "labour": 0.00, "is_mojo": True},
-        "Mojo Corner / Flex (Sections)": {"w1_3": 45.00, "block": 90.00, "labour": 0.00, "is_mojo": True}
+        "Mojo Straight (Sections)": {"w1_3": 35.00, "block": 70.00, "labour": 0.00, "is_mojo": True, "waiver": False},
+        "Mojo Corner / Flex (Sections)": {"w1_3": 45.00, "block": 90.00, "labour": 0.00, "is_mojo": True, "waiver": False}
     }
 }
 
@@ -136,10 +130,10 @@ if is_p_sqm:
         qty_in = p_col2.number_input("Total SQM", min_value=0.0)
     st.markdown("#### Plastorip Accessories")
     ac_col1, ac_col2 = st.columns(2)
-    add_p_edges = ac_col1.checkbox("Add Edging (Auto Calc)", value=True)
+    add_p_edges = ac_col1.checkbox("Add Edging", value=True)
     add_p_corners = ac_col2.checkbox("Add Corners (4pcs - Free)", value=True)
 else:
-    qty_in = st.number_input("Quantity / Seats", min_value=0.0, value=None)
+    qty_in = st.number_input("Quantity", min_value=0.0, value=None)
     add_p_edges, add_p_corners = False, False
 
 c_a, c_d = st.columns(2)
@@ -150,6 +144,8 @@ if st.button("ADD TO QUOTE ENGINE"):
     if qty_in and qty_in > 0:
         is_gs = ref_current.get("is_gs", False)
         is_mojo = ref_current.get("is_mojo", False)
+        no_waiver = not ref_current.get("waiver", True)
+        
         if is_gs:
             if qty_in <= 40: s, h = 2, 4
             elif qty_in <= 100: s, h = 3, 5
@@ -162,7 +158,7 @@ if st.button("ADD TO QUOTE ENGINE"):
         else:
             base_r, lab_r, block_r = (adj_rate if adj_rate else ref_current["w1_3"]), ref_current.get("labour", 0.0), ref_current.get("block", 0.0)
 
-        new_items = [{"Qty": qty_in, "Product": item_choice, "Unit Rate": base_r, "Disc %": discount_pct if discount_pct else 0.0, "Total": 0.0, "Labour_Rate": lab_r, "Block_Rate": block_r, "SYSTEM RATE": 0.0, "No_Waiver": False, "Is_GS": is_gs, "Is_Mojo": is_mojo}]
+        new_items = [{"Qty": qty_in, "Product": item_choice, "Unit Rate": base_r, "Disc %": discount_pct if discount_pct else 0.0, "Total": 0.0, "Labour_Rate": lab_r, "Block_Rate": block_r, "SYSTEM RATE": 0.0, "No_Waiver": no_waiver, "Is_GS": is_gs, "Is_Mojo": is_mojo}]
         
         if is_p_sqm:
             if add_p_edges:
@@ -170,7 +166,7 @@ if st.button("ADD TO QUOTE ENGINE"):
                 if edge_qty > 0:
                     new_items.append({"Qty": edge_qty, "Product": "Plastorip Edging (pc)", "Unit Rate": 1.65, "Disc %": discount_pct if discount_pct else 0.0, "Total": 0.0, "Labour_Rate": 0.0, "Block_Rate": 1.65, "SYSTEM RATE": 0.0, "No_Waiver": False, "Is_GS": False, "Is_Mojo": False})
             if add_p_corners:
-                new_items.append({"Qty": 4, "Product": "Plastorip Corner (ea)", "Unit Rate": 0.00, "Disc %": 0.0, "Total": 0.0, "Labour_Rate": 0.0, "Block_Rate": 0.0, "SYSTEM RATE": 0.0, "No_Waiver": False, "Is_GS": False, "Is_Mojo": False})
+                new_items.append({"Qty": 4, "Product": "Plastorip Corner (ea)", "Unit Rate": 0.00, "Disc %": 0.0, "Total": 0.0, "Labour_Rate": 0.0, "Block_Rate": 0.0, "SYSTEM RATE": 0.0, "No_Waiver": True, "Is_GS": False, "Is_Mojo": False})
         
         st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame(new_items)], ignore_index=True)
         st.rerun()
@@ -210,31 +206,40 @@ if not st.session_state.df.empty:
             st.rerun()
 
     # --- 5. FINANCES ---
-    lab_total = mojo_lab_total
+    hire_total_only = 0.0
+    lab_total_only = mojo_lab_total
+    
     for idx, row in st.session_state.df.iterrows():
         q, r, d, b, lr, ig = row["Qty"], row["Unit Rate"], row["Disc %"], row["Block_Rate"], row["Labour_Rate"], row["Is_GS"]
         hire = (q * r) if ig else (q * r * live_weeks) if live_weeks <= 3 else (q * r * 3) + (q * b)
-        if labour_mode == "Show Labour as Separate Line Item": lab_total += (q * lr) * (1 - (d / 100)); item_l = 0.0
-        elif labour_mode == "No Labour": item_l = 0.0
-        else: item_l = q * lr
-        final = (hire + item_l) * (1 - (d / 100))
+        
+        item_lab = 0.0
+        if labour_mode == "Bake Labour into Unit Rate":
+            item_lab = q * lr
+        elif labour_mode == "Show Labour as Separate Line Item":
+            lab_total_only += (q * lr) * (1 - (d / 100))
+            
+        final = (hire + item_lab) * (1 - (d / 100))
         st.session_state.df.at[idx, "Total"], st.session_state.df.at[idx, "SYSTEM RATE"] = final, (final / q if q > 0 else 0)
+        hire_total_only += final
 
-    pure_hire = st.session_state.df["Total"].sum()
     mojo_hire = st.session_state.df[st.session_state.df["Is_Mojo"] == True]["Total"].sum()
-    
-    # Mojo Minimum Charge Override
     if has_mojo and mojo_hire < 350.0:
-        pure_hire = pure_hire + (350.0 - mojo_hire)
+        hire_total_only += (350.0 - mojo_hire)
     
-    subtotal = max(2000.0 if has_gs else 300.0, pure_hire + lab_total)
-    waiver = st.session_state.df[st.session_state.df["No_Waiver"] == False]["Total"].sum() * 0.07
+    # Subtotal is strictly Equipment/Hire
+    subtotal = max(2000.0 if has_gs else 300.0, hire_total_only)
+    
+    # Waiver (Excludes Mojo and No_Waiver items)
+    waiver_eligible = st.session_state.df[st.session_state.df["No_Waiver"] == False]["Total"].sum()
+    waiver = waiver_eligible * 0.07
+    
     cartage = (km_input * 4 * 3.50) if km_input and charge_cartage else 0.0
     
     st.divider()
     m1, m2, m3, m4 = st.columns(4)
-    m1.metric("SUBTOTAL", f"${subtotal:,.2f}"); m2.metric("LABOUR", f"${lab_total:,.2f}"); m3.metric("WAIVER", f"${waiver:,.2f}"); m4.metric("CARTAGE", f"${cartage:,.2f}")
-    st.metric("GRAND TOTAL (EX GST)", f"${(subtotal + waiver + cartage):,.2f}")
+    m1.metric("SUBTOTAL (HIRE)", f"${subtotal:,.2f}"); m2.metric("LABOUR", f"${lab_total_only:,.2f}"); m3.metric("WAIVER", f"${waiver:,.2f}"); m4.metric("CARTAGE", f"${cartage:,.2f}")
+    st.metric("GRAND TOTAL (EX GST)", f"${(subtotal + lab_total_only + waiver + cartage):,.2f}")
     
     if st.button("⚠️ RESET QUOTE"):
         st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Disc %", "Total", "Labour_Rate", "Block_Rate", "SYSTEM RATE", "No_Waiver", "Is_GS", "Is_Mojo"])
