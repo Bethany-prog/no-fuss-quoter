@@ -29,18 +29,33 @@ st.markdown("""
     <style>
     .main { background-color: #0F111A; }
     
-    /* White labels for better readability on work screens */
-    label, p, span, .stMarkdown, .stSubheader, .stHeader, h3, h4 {
+    /* TARGETED WHITE TEXT: Fixed headers/labels without breaking the boxes */
+    label, p, .stMarkdown p, .stSubheader, h3, h4 {
         color: #FFFFFF !important;
         font-weight: bold !important;
     }
     
+    /* Metrics Styling - Restoring the Blue Border and Dark Background */
     div[data-testid="stMetricValue"] { color: #00E676 !important; font-size: 32px !important; font-weight: bold !important; }
-    div.stMetric { background-color: #1A1D2D; padding: 20px; border-radius: 12px; border: 2px solid #3D5AFE; }
+    div.stMetric { 
+        background-color: #1A1D2D !important; 
+        padding: 20px !important; 
+        border-radius: 12px !important; 
+        border: 2px solid #3D5AFE !important; 
+    }
+    
+    /* Restore Top Section Backgrounds */
+    [data-testid="column"] {
+        background-color: #1A1D2D;
+        padding: 15px;
+        border-radius: 12px;
+        border: 1px solid #3D5AFE;
+        margin-bottom: 10px;
+    }
+
     div.stButton > button:first-child { background-color: #3D5AFE; color: white; border-radius: 10px; height: 50px; font-weight: bold; }
     
     [data-testid="stCheckbox"] { background-color: #1A1D2D; padding: 12px; border-radius: 10px; border: 1px solid #3D5AFE; margin-bottom: 8px; }
-    [data-testid="stCheckbox"] label p { font-size: 18px !important; font-weight: bold !important; color: #00E676 !important; }
     .stDataFrame { border: 2px solid #00E676 !important; border-radius: 12px; }
     </style>
     """, unsafe_allow_html=True)
@@ -156,7 +171,6 @@ if not st.session_state.df.empty:
     st.markdown("### ⚙️ LABOUR & CARTAGE")
     labour_mode = "Bake Labour into Unit Rate" if has_gs else st.selectbox("Labour Mode", ["Bake Labour into Unit Rate", "Show Labour as Separate Line Item", "No Labour"])
     
-    # Mojo Labour Calculator
     mojo_lab_total = 0.0
     if has_mojo and labour_mode != "No Labour":
         m_qty = st.session_state.df[st.session_state.df["Is_Mojo"] == True]["Qty"].sum()
@@ -189,7 +203,6 @@ if not st.session_state.df.empty:
     pure_hire = st.session_state.df["Total"].sum()
     mojo_hire = st.session_state.df[st.session_state.df["Is_Mojo"] == True]["Total"].sum()
     
-    # Mojo $350 Min check
     if has_mojo and mojo_hire < 350.0:
         pure_hire = pure_hire + (350.0 - mojo_hire)
     
