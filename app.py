@@ -63,6 +63,7 @@ PRODUCT_CATALOG = {
     }
 }
 
+# Initialize DataFrame with strict columns to prevent KeyErrors
 if 'df' not in st.session_state:
     st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Disc %", "Total", "Labour_Rate", "Block_Rate", "SYSTEM RATE", "No_Waiver", "Is_GS"])
 
@@ -82,8 +83,8 @@ dept_col, item_col = st.columns(2)
 dept_choice = dept_col.selectbox("Department", sorted(PRODUCT_CATALOG.keys()))
 item_choice = item_col.selectbox("Product", sorted(PRODUCT_CATALOG[dept_choice].keys()))
 
-# Special Layout for Plastorip SQM
 is_p_sqm = PRODUCT_CATALOG[dept_choice][item_choice].get("is_plastorip", False)
+w, l = 0.0, 0.0
 
 if is_p_sqm:
     p_col1, p_col2, p_col3 = st.columns([2, 2, 2])
@@ -95,10 +96,8 @@ if is_p_sqm:
         st.caption(f"Calculated Area: {qty_in:.2f} sqm | Perimeter: {(w+l)*2:.2f}m")
     else:
         qty_in = p_col2.number_input("Total SQM", min_value=0.0)
-        w, l = 0, 0
 else:
     qty_in = st.number_input("Quantity / Seats", min_value=0.0, value=None)
-    w, l = 0, 0
 
 c_a, c_d = st.columns(2)
 adj_rate = c_a.number_input("Override Rate", min_value=0.0, value=None)
@@ -107,9 +106,10 @@ discount_pct = c_d.number_input("Discount %", min_value=0.0, max_value=100.0, va
 if st.button("ADD TO QUOTE ENGINE"):
     if qty_in and qty_in > 0:
         ref = PRODUCT_CATALOG[dept_choice][item_choice]
+        is_gs = ref.get("is_gs", False)
         
-        # 1. Add Base Product
-        if ref.get("is_gs"):
+        # Grandstand Logic
+        if is_gs:
             if qty_in <= 40: s, h = 2, 4
             elif qty_in <= 100: s, h = 3, 5
             elif qty_in <= 149: s, h = 4, 5
@@ -121,9 +121,9 @@ if st.button("ADD TO QUOTE ENGINE"):
         else:
             base_r, lab_r, block_r = (adj_rate if adj_rate else ref["w1_3"]), ref["labour"], ref["block"]
 
-        new_items = [{"Qty": qty_in, "Product": item_choice, "Unit Rate": base_r, "Disc %": discount_pct if discount_pct else 0.0, "Total": 0.0, "Labour_Rate": lab_r, "Block_Rate": block_r, "SYSTEM RATE": 0.0, "No_Waiver": False, "Is_GS": ref.get("is_gs", False)}]
+        new_items = [{"Qty": qty_in, "Product": item_choice, "Unit Rate": base_r, "Disc %": discount_pct if discount_pct else 0.0, "Total": 0.0, "Labour_Rate": lab_r, "Block_Rate": block_r, "SYSTEM RATE": 0.0, "No_Waiver": False, "Is_GS": is_gs}]
 
-        # 2. Plastorip Auto-Add Logic
+        # Auto-Add Edging & Corners
         if is_p_sqm and w > 0 and l > 0:
             edge_qty = math.ceil(((w + l) * 2) / 0.4)
             new_items.append({"Qty": edge_qty, "Product": "Plastorip Edging (pc)", "Unit Rate": 1.65, "Disc %": discount_pct if discount_pct else 0.0, "Total": 0.0, "Labour_Rate": 0.0, "Block_Rate": 1.65, "SYSTEM RATE": 0.0, "No_Waiver": False, "Is_GS": False})
@@ -132,21 +132,23 @@ if st.button("ADD TO QUOTE ENGINE"):
         st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame(new_items)], ignore_index=True)
         st.rerun()
 
-# --- 3. QUOTED ITEMS TABLE ---
+# --- 3. DATA GRID ---
 if not st.session_state.df.empty:
     st.markdown("### 🏗️ QUOTED ITEMS")
     has_gs = st.session_state.df["Is_GS"].any()
     edited_df = st.data_editor(st.session_state.df[["Qty", "Product", "SYSTEM RATE", "Unit Rate", "Disc %", "Total"]], num_rows="dynamic", use_container_width=True, key="editor",
                                column_config={"SYSTEM RATE": st.column_config.NumberColumn("🔢 SYSTEM RATE", format="$%.2f"), "Unit Rate": st.column_config.NumberColumn("Unit Rate", format="$%.2f"), "Total": st.column_config.NumberColumn("Total", format="$%.2f")})
+    
     if not edited_df.equals(st.session_state.df[["Qty", "Product", "SYSTEM RATE", "Unit Rate", "Disc %", "Total"]]):
         for col in ["Qty", "Unit Rate", "Disc %"]: st.session_state.df[col] = edited_df[col]
         st.rerun()
 
     # --- 4. SELECTORS ---
-    st.markdown("### ⚙️ LABOUR & CARTAGE SELECTORS")
+    st.markdown("### ⚙️ LABOUR & CARTAGE")
     labour_mode = "Bake Labour into Unit Rate" if has_gs else st.selectbox("Labour Mode", ["Bake Labour into Unit Rate", "Show Labour as Separate Line Item", "No Labour"])
     col_c, col_e = st.columns(2)
     charge_cartage = col_c.checkbox("🚚 Include Cartage ($3.50/km x 4)", value=True)
+    
     if has_gs and col_e.checkbox("👷 Add Engineer Sign-off ($750.00)", value=any(st.session_state.df["Product"] == "Engineer Sign-off")):
         if not any(st.session_state.df["Product"] == "Engineer Sign-off"):
             st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame([{"Qty": 1, "Product": "Engineer Sign-off", "Unit Rate": 750.0, "Disc %": 0.0, "Total": 750.0, "Labour_Rate": 0.0, "Block_Rate": 750.0, "SYSTEM RATE": 750.0, "No_Waiver": True, "Is_GS": False}])], ignore_index=True)
@@ -163,8 +165,13 @@ if not st.session_state.df.empty:
         final = (hire + item_l) * (1 - (d / 100))
         st.session_state.df.at[idx, "Total"], st.session_state.df.at[idx, "SYSTEM RATE"] = final, (final / q if q > 0 else 0)
 
+    # SECURE CALCULATION (Prevents KeyError)
     subtotal = max(2000.0 if has_gs else 300.0, st.session_state.df["Total"].sum() + lab_total)
-    waiver = st.session_state.df[~st.session_state.df["No_Waiver"]]["Total"].sum() * 0.07
+    
+    # Filter for waiver (excludes products with No_Waiver flag)
+    waiver_eligible = st.session_state.df[st.session_state.df["No_Waiver"] == False]["Total"].sum()
+    waiver = (waiver_eligible + (lab_total if labour_mode == "Show Labour as Separate Line Item" else 0)) * 0.07
+    
     cartage = (km_input * 4 * 3.50) if km_input and charge_cartage else 0.0
     
     st.divider()
