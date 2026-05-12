@@ -40,7 +40,7 @@ def save_to_google(name, df, start, end, km):
         return True
     except: return False
 
-# --- PDF GENERATION (v25.6) ---
+# --- PDF GENERATION (v25.7) ---
 def create_calculation_pdf(name, df, subtotal, labour, waiver, cartage, grand_total, km, weeks):
     pdf = FPDF()
     pdf.add_page()
@@ -68,7 +68,7 @@ def create_calculation_pdf(name, df, subtotal, labour, waiver, cartage, grand_to
         pdf.cell(25, 8, f" {row['Qty']} {row['Unit_Type']}", 1, 0, "C")
         pdf.cell(35, 8, f" ${row['Unit Rate']:,.2f}", 1, 0, "C")
         pdf.cell(40, 8, f" ${row['Total']:,.2f}", 1, 1, "R")
-        if row['Unit Rate'] > 0:
+        if row['Unit Rate'] > 0 and not row['Is_Lab_Line']:
             math_summary.append(f"{row['Qty']} x ${row['Unit Rate']:,.2f}")
     
     pdf.ln(10); pdf.set_font("Arial", "B", 13); pdf.cell(0, 10, "Financial Breakdown", ln=True)
@@ -137,7 +137,7 @@ CATALOG = {
 }
 
 if 'df' not in st.session_state:
-    st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Disc %", "Total", "Labour_Rate", "Block_Rate", "SYSTEM RATE", "No_Waiver", "Unit_Type", "Is_Lab_Line"])
+    st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Disc %", "Total", "Labour_Rate", "Block_Rate", "No_Waiver", "Unit_Type", "Is_Lab_Line"])
 
 st.title("📦 No Fuss Quote Pro")
 
@@ -152,7 +152,6 @@ live_weeks = math.ceil(((end_date - start_date).days) / 7) if (end_date - start_
 # ADD PRODUCT
 st.markdown("### ➕ ADD PRODUCT")
 dept_col, bundle_col = st.columns(2)
-# Marquee as primary, Structures as default group
 dept_choice = dept_col.selectbox("Department", sorted(CATALOG.keys(), reverse=True))
 bundle_choice = bundle_col.selectbox("Select Group", sorted(CATALOG[dept_choice].keys(), reverse=True))
 selected_bundle = CATALOG[dept_choice][bundle_choice]
@@ -169,38 +168,34 @@ if st.button("ADD SELECTED ITEMS TO QUOTE"):
     new_rows = []
     for entry in bundle_results:
         it, q, secure = entry['item'], entry['qty'], entry['secure']
-        # 1. Add structure (Hire only)
-        new_rows.append({"Qty": q, "Product": it['Product'], "Unit Rate": it['w1_3'], "Disc %": 0.0, "Total": 0.0, "Labour_Rate": 0.0, "Block_Rate": it.get('block', it['w1_3']), "SYSTEM RATE": 0.0, "No_Waiver": False, "Unit_Type": it['unit'], "Is_Lab_Line": False})
-        
-        # 2. Add Separate Labour line for Marquees
+        new_rows.append({"Qty": q, "Product": it['Product'], "Unit Rate": it['w1_3'], "Disc %": 0.0, "Total": 0.0, "Labour_Rate": 0.0, "Block_Rate": it.get('block', it['w1_3']), "No_Waiver": False, "Unit_Type": it['unit'], "Is_Lab_Line": False})
         if dept_choice == "MARQUEE" and it.get('labour', 0) > 0:
-            new_rows.append({"Qty": q, "Product": f"Labour: Build/Strike ({it['Product']})", "Unit Rate": it['labour'], "Disc %": 0.0, "Total": 0.0, "Labour_Rate": 0.0, "Block_Rate": it['labour'], "SYSTEM RATE": 0.0, "No_Waiver": True, "Unit_Type": "ea", "Is_Lab_Line": True})
-            
-        # 3. Add Securing
+            new_rows.append({"Qty": q, "Product": f"Labour: Build/Strike ({it['Product']})", "Unit Rate": it['labour'], "Disc %": 0.0, "Total": 0.0, "Labour_Rate": 0.0, "Block_Rate": it['labour'], "No_Waiver": True, "Unit_Type": "ea", "Is_Lab_Line": True})
         if secure == "Weights":
-            new_rows.append({"Qty": q * it['weights_req'], "Product": f"Orange Weight (For {it['Product']})", "Unit Rate": 6.60, "Disc %": 0.0, "Total": 0.0, "Labour_Rate": 0.0, "Block_Rate": 6.60, "SYSTEM RATE": 0.0, "No_Waiver": False, "Unit_Type": "ea", "Is_Lab_Line": False})
+            new_rows.append({"Qty": q * it['weights_req'], "Product": f"Orange Weight (For {it['Product']})", "Unit Rate": 6.60, "Disc %": 0.0, "Total": 0.0, "Labour_Rate": 0.0, "Block_Rate": 6.60, "No_Waiver": False, "Unit_Type": "ea", "Is_Lab_Line": False})
         elif secure == "Pegging":
-            new_rows.append({"Qty": q, "Product": f"Pegging (For {it['Product']})", "Unit Rate": 0.0, "Disc %": 0.0, "Total": 0.0, "Labour_Rate": 0.0, "Block_Rate": 0.0, "SYSTEM RATE": 0.0, "No_Waiver": True, "Unit_Type": "ea", "Is_Lab_Line": False})
-            
+            new_rows.append({"Qty": q, "Product": f"Pegging (For {it['Product']})", "Unit Rate": 0.0, "Disc %": 0.0, "Total": 0.0, "Labour_Rate": 0.0, "Block_Rate": 0.0, "No_Waiver": True, "Unit_Type": "ea", "Is_Lab_Line": False})
     st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame(new_rows)], ignore_index=True); st.rerun()
 
-# FINANCES
+# FINANCES & LIVE CALC LOOP
 if not st.session_state.df.empty:
     st.markdown("### 🏗️ QUOTED ITEMS")
-    # Clean display for editor
+    
+    # 1. THE DATA EDITOR
     display_df = st.session_state.df[["Qty", "Unit_Type", "Product", "Unit Rate", "Disc %", "Total"]]
     edited_df = st.data_editor(display_df, use_container_width=True, key="editor")
+    
+    # 2. UPDATE SESSION STATE FROM EDITOR
     if not edited_df.equals(display_df):
         for col in ["Qty", "Unit Rate", "Disc %"]: st.session_state.df[col] = edited_df[col]
         st.rerun()
-    
+
+    # 3. INTERNAL MATH LOOP (Updates "Total" column live)
     inc_cart, inc_waiv = st.checkbox("🚚 Include Cartage", value=True), st.checkbox("🛡️ Include Damage Waiver (7%)", value=True)
     
     h_tot, lab_tot, w_tot = 0.0, 0.0, 0.0
     for idx, row in st.session_state.df.iterrows():
         q, r, d, b, is_lab = row["Qty"], row["Unit Rate"], row["Disc %"], row["Block_Rate"], row["Is_Lab_Line"]
-        
-        # Determine if it's a hire item or a labour line
         if is_lab:
             line_val = q * r * (1 - (d/100))
             lab_tot += line_val
@@ -209,9 +204,9 @@ if not st.session_state.df.empty:
             line_val = hire_val * (1 - (d / 100))
             if inc_waiv and not row["No_Waiver"]: w_tot += line_val * 0.07
             h_tot += line_val
-            
         st.session_state.df.at[idx, "Total"] = line_val
 
+    # 4. METRICS DISPLAY
     c_val = (km_input * 14.0 if km_input and inc_cart else 0)
     st.divider(); m1, m2, m3, m4 = st.columns(4)
     m1.metric("HIRE SUBTOTAL", f"${h_tot:,.2f}"); m2.metric("LABOUR TOTAL", f"${lab_tot:,.2f}"); m3.metric("WAIVER", f"${w_tot:,.2f}"); m4.metric("CARTAGE", f"${c_val:,.2f}")
@@ -220,7 +215,7 @@ if not st.session_state.df.empty:
     fn = st.text_input("Project Name:")
     if st.button("CLOUD ARCHIVE") and fn:
         save_to_google(fn, st.session_state.df, start_date, end_date, km_input); st.success("Saved to Cloud!")
-        
+    
     pdf_bytes = create_calculation_pdf(fn if fn else "Internal", st.session_state.df, h_tot, lab_tot, w_tot, c_val, h_tot + lab_tot + w_tot + c_val, km_input if km_input else 0, live_weeks)
     st.download_button("📥 DOWNLOAD INTERNAL PDF", pdf_bytes, file_name=f"{fn if fn else 'Quote'}_Calculations.pdf", mime="application/pdf")
     if st.button("⚠️ RESET"): st.session_state.df = pd.DataFrame(columns=st.session_state.df.columns); st.rerun()
