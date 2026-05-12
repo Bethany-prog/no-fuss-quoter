@@ -3,11 +3,10 @@ from streamlit_gsheets import GSheetsConnection
 import math
 import pandas as pd
 from datetime import date
-import json
+from fpdf import FPDF
+import io
 
-# --- VERIFIED PUBLIC URL ---
-SHEET_URL = "https://docs.google.com/spreadsheets/d/1Fs-WAeLWr-I3oduyIAX0V-cNTLCd8_j91ummWa_k-Rw/edit#gid=0"
-
+# 1. PASSWORD PROTECTION
 def check_password():
     if "password_correct" not in st.session_state:
         st.session_state.password_correct = False
@@ -25,7 +24,7 @@ def check_password():
 if not check_password():
     st.stop()
 
-# 2. DATABASE CONNECTION
+# 2. DATABASE CONNECTION (Keep standard setup)
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 def save_to_google(name, df, start, end, km):
@@ -38,21 +37,91 @@ def save_to_google(name, df, start, end, km):
             "KM": km,
             "Saved_Date": str(date.today())
         }])
-        # Forced live read
-        existing_data = conn.read(spreadsheet=SHEET_URL, ttl=0)
+        existing_data = conn.read(ttl=0)
         updated_data = pd.concat([existing_data, new_entry], ignore_index=True)
-        conn.update(spreadsheet=SHEET_URL, data=updated_data)
+        conn.update(data=updated_data)
         st.cache_data.clear()
         return True
-    except Exception as e:
-        st.error(f"Save Failed: {e}")
-        return False
+    except: return False
+
+# --- NEW: PDF GENERATION FUNCTION ---
+def create_calculation_pdf(name, df, subtotal, labour, waiver, cartage, grand_total, km, weeks):
+    pdf = FPDF()
+    pdf.add_page()
+    
+    # Header
+    pdf.set_font("Arial", "B", 16)
+    pdf.cell(0, 10, "No Fuss Event Hire - Internal Calculation Sheet", ln=True, align="C")
+    pdf.set_font("Arial", "", 10)
+    pdf.cell(0, 10, f"Generated on: {date.today()}", ln=True, align="C")
+    pdf.ln(5)
+    
+    # Project Info
+    pdf.set_font("Arial", "B", 12)
+    pdf.cell(0, 10, f"Quote: {name}", ln=True)
+    pdf.set_font("Arial", "", 11)
+    pdf.cell(0, 8, f"Hire Duration: {weeks} Week(s)", ln=True)
+    pdf.cell(0, 8, f"Total Distance: {km} km", ln=True)
+    pdf.ln(5)
+    
+    # Item Table Header
+    pdf.set_fill_color(26, 29, 45)
+    pdf.set_text_color(255, 255, 255)
+    pdf.set_font("Arial", "B", 10)
+    pdf.cell(80, 10, " Product", 1, 0, "L", True)
+    pdf.cell(25, 10, " Qty", 1, 0, "C", True)
+    pdf.cell(35, 10, " Rate (Inc Lab)", 1, 0, "C", True)
+    pdf.cell(40, 10, " Total", 1, 1, "R", True)
+    
+    # Item Table Rows
+    pdf.set_text_color(0, 0, 0)
+    pdf.set_font("Arial", "", 9)
+    for _, row in df.iterrows():
+        pdf.cell(80, 8, f" {row['Product']}", 1)
+        pdf.cell(25, 8, f" {row['Qty']} {row['Unit_Type']}", 1, 0, "C")
+        pdf.cell(35, 8, f" ${row['SYSTEM RATE']:,.2f}", 1, 0, "C")
+        pdf.cell(40, 8, f" ${row['Total']:,.2f}", 1, 1, "R")
+    
+    pdf.ln(10)
+    
+    # Calculation Breakdown Section
+    pdf.set_font("Arial", "B", 12)
+    pdf.cell(0, 10, "Financial Breakdown (Math Check)", ln=True)
+    pdf.set_font("Arial", "", 11)
+    pdf.cell(100, 8, "Base Hire Subtotal:", 0)
+    pdf.cell(0, 8, f"${subtotal:,.2f}", 0, 1, "R")
+    
+    pdf.cell(100, 8, "Separate Labour Charges:", 0)
+    pdf.cell(0, 8, f"${labour:,.2f}", 0, 1, "R")
+    
+    pdf.set_text_color(100, 100, 100)
+    pdf.set_font("Arial", "I", 9)
+    pdf.cell(0, 5, f"Waiver Math: 7% of discounted Hire Total", ln=True)
+    pdf.set_text_color(0, 0, 0)
+    pdf.set_font("Arial", "", 11)
+    pdf.cell(100, 8, "Damage Waiver (7%):", 0)
+    pdf.cell(0, 8, f"${waiver:,.2f}", 0, 1, "R")
+    
+    pdf.set_text_color(100, 100, 100)
+    pdf.set_font("Arial", "I", 9)
+    pdf.cell(0, 5, f"Cartage Math: {km} km x 4 trips x $3.50/km", ln=True)
+    pdf.set_text_color(0, 0, 0)
+    pdf.set_font("Arial", "", 11)
+    pdf.cell(100, 8, "Cartage Total:", 0)
+    pdf.cell(0, 8, f"${cartage:,.2f}", 0, 1, "R")
+    
+    pdf.ln(2)
+    pdf.set_font("Arial", "B", 13)
+    pdf.cell(100, 10, "GRAND TOTAL (EX GST):", "T")
+    pdf.cell(0, 10, f"${grand_total:,.2f}", "T", 1, "R")
+    
+    return pdf.output()
 
 # 3. PAGE CONFIG
 st.set_page_config(page_title="No Fuss Quote Pro", page_icon="📦", layout="wide")
 st.markdown("<style>.main { background-color: #FFFFFF !important; } h3 { color: #FFFFFF !important; border-left: 5px solid #00E676; padding: 10px 15px; background-color: #1A1D2D; border-radius: 0 10px 10px 0; } div.stMetric { background-color: #1A1D2D !important; padding: 20px !important; border-radius: 12px !important; border: 2px solid #3D5AFE !important; } div[data-testid='stMetricValue'] { color: #00E676 !important; font-size: 32px !important; font-weight: bold !important; } [data-testid='stMetricLabel'] p { color: #FFFFFF !important; font-weight: bold !important; font-size: 16px !important; } div.stButton > button:first-child { background-color: #3D5AFE; color: white; border-radius: 10px; height: 50px; font-weight: bold; width: 100%; } .stDataFrame { border: 2px solid #00E676 !important; border-radius: 12px; }</style>", unsafe_allow_html=True)
 
-# 4. MASTER CATALOG
+# 4. MASTER CATALOG (v22.5 Sync)
 CATALOG = {
     "FLOORING": {
         "I-Trac System": [
@@ -84,12 +153,6 @@ CATALOG = {
             {"Product": "Geotextile Underlay", "w1_3": 2.60, "block": 2.60, "labour": 0.00, "unit": "SQM", "waiver": True},
             {"Product": "Black Plastic", "w1_3": 0.90, "block": 0.90, "labour": 0.00, "unit": "SQM", "waiver": True}
         ]
-    },
-    "MOJO BARRIERS": {
-        "Mojo System": [
-            {"Product": "Mojo Straight", "w1_3": 35.00, "block": 70.00, "labour": 0.00, "is_mojo": True, "unit": "Sections", "waiver": False},
-            {"Product": "Mojo Corner / Flex", "w1_3": 45.00, "block": 90.00, "labour": 0.00, "is_mojo": True, "unit": "Sections", "waiver": False}
-        ]
     }
 }
 
@@ -98,27 +161,7 @@ if 'df' not in st.session_state:
 
 st.title("📦 No Fuss Quote Pro")
 
-# --- 5. CLOUD LOAD ---
-st.markdown("### 📂 ARCHIVE HISTORY")
-try:
-    # Explicit connection check
-    archive_df = conn.read(spreadsheet=SHEET_URL, ttl=0)
-    if not archive_df.empty:
-        existing_list = archive_df["Quote_Name"].tolist()
-        l_col1, l_col2 = st.columns([3, 1])
-        load_choice = l_col1.selectbox("Select Previous Quote", ["Select..."] + existing_list, label_visibility="collapsed")
-        if l_col2.button("LOAD FROM CLOUD"):
-            if load_choice != "Select...":
-                row = archive_df[archive_df["Quote_Name"] == load_choice].iloc[0]
-                st.session_state.df = pd.read_json(row["Data_JSON"])
-                st.rerun()
-    else: st.info("Cloud Archive is empty. Add a header row to your sheet.")
-except Exception as e:
-    st.error(f"Cloud Connection Failed: {e}")
-    st.warning("1. Check Google Sheet 'Share' settings are 'Anyone with link' + 'Editor'")
-    st.warning("2. Ensure Row 1 has headers: Quote_Name, Data_JSON, Start_Date, End_Date, KM, Saved_Date")
-
-# --- 6. LOGISTICS ---
+# LOGISTICS
 st.markdown("### 📍 HIRE DATES & DISTANCE")
 c1, c2, c3 = st.columns(3)
 start_date = c1.date_input("Hire Start", value=date.today(), format="DD/MM/YYYY")
@@ -126,7 +169,7 @@ end_date = c2.date_input("Hire End", value=date.today(), format="DD/MM/YYYY")
 km_input = c3.number_input("Distance (KM)", min_value=0.0, value=None, placeholder="KM...")
 live_weeks = math.ceil(((end_date - start_date).days) / 7) if (end_date - start_date).days > 0 else 1
 
-# --- 7. ADD PRODUCT ---
+# ADD PRODUCT
 st.markdown("### ➕ ADD PRODUCT")
 dept_col, bundle_col = st.columns(2)
 dept_choice = dept_col.selectbox("Department", sorted(CATALOG.keys()))
@@ -159,63 +202,51 @@ if st.button("ADD SELECTED ITEMS TO QUOTE"):
         new_rows.append({"Qty": q, "Product": it['Product'], "Unit Rate": base_r, "Disc %": discount_pct if discount_pct else 0.0, "Total": 0.0, "Labour_Rate": lab_r, "Block_Rate": block_r, "SYSTEM RATE": 0.0, "No_Waiver": not it.get("waiver", True), "Is_GS": is_gs, "Is_Mojo": is_mojo, "Unit_Type": it['unit'], "Is_ST": is_st})
     if new_rows: st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame(new_rows)], ignore_index=True); st.rerun()
 
-# --- 8. FINANCES ---
+# FINANCES
 if not st.session_state.df.empty:
     st.markdown("### 🏗️ QUOTED ITEMS")
     display_cols = ["Qty", "Unit_Type", "Product", "Unit Rate", "Disc %", "SYSTEM RATE", "Total"]
-    edited_df = st.data_editor(st.session_state.df[display_cols], use_container_width=True, key="editor", column_config={"Unit Rate": st.column_config.NumberColumn("Hire Rate", format="$%.2f"), "SYSTEM RATE": st.column_config.NumberColumn("Total Rate", format="$%.2f")})
+    edited_df = st.data_editor(st.session_state.df[display_cols], use_container_width=True, key="editor")
     if not edited_df.equals(st.session_state.df[display_cols]):
         for col in ["Qty", "Unit Rate", "Disc %"]: st.session_state.df[col] = edited_df[col]
         st.rerun()
 
     labour_mode = st.selectbox("Labour Mode", ["Bake Labour into Unit Rate", "Show Labour as Separate Line Item", "No Labour"])
-    mojo_lab, has_mojo = 0.0, st.session_state.df["Is_Mojo"].any()
-    if has_mojo and labour_mode != "No Labour":
-        m_qty = st.session_state.df[st.session_state.df["Is_Mojo"] == True]["Qty"].sum()
-        if m_qty <= 30: s, h, hi, ho = 1, 1, 4, 4
-        elif m_qty <= 60: s, h, hi, ho = 1, 2, 4, 4
-        elif m_qty <= 100: s, h, hi, ho = 1, 4, 4, 4
-        elif m_qty <= 200: s, h, hi, ho = 1, 6, 6, 4
-        else: s, h, hi, ho = 2, 8, 6, 6
-        mojo_lab = ((s + h) * (hi + ho) * 55.0)
-
     charge_cartage, include_damage_waiver = st.checkbox("🚚 Include Cartage", value=True), st.checkbox("🛡️ Include Damage Waiver (7%)", value=True)
+    
     hire_total, lab_total, waiver_total, total_sheets = 0.0, 0.0, 0.0, 0
-    m_baked = (mojo_lab / st.session_state.df[st.session_state.df["Is_Mojo"] == True]["Qty"].sum()) if (has_mojo and labour_mode == "Bake Labour into Unit Rate" and st.session_state.df[st.session_state.df["Is_Mojo"] == True]["Qty"].sum() > 0) else 0.0
-    if has_mojo and labour_mode == "Show Labour as Separate Line Item": lab_total = mojo_lab
-
     for idx, row in st.session_state.df.iterrows():
-        q, r, d, b, lr, im, ist = row["Qty"], row["Unit Rate"], row["Disc %"], row["Block_Rate"], row["Labour_Rate"], row["Is_Mojo"], row["Is_ST"]
+        q, r, d, b, lr, ist = row["Qty"], row["Unit Rate"], row["Disc %"], row["Block_Rate"], row["Labour_Rate"], row["Is_ST"]
         if ist: total_sheets += math.ceil(q / 3.135)
-        hire_val = (q * (b / 4) * live_weeks) if (live_weeks >= 4 and not im) else (q * r * live_weeks)
+        hire_val = (q * (b / 4) * live_weeks) if live_weeks >= 4 else (q * r * live_weeks)
         hire_disc = hire_val * (1 - (d / 100))
         if include_damage_waiver and not row["No_Waiver"]: waiver_total += hire_disc * 0.07
-        item_lab = (q * m_baked) if im and labour_mode == "Bake Labour into Unit Rate" else (q * lr) if labour_mode == "Bake Labour into Unit Rate" else 0.0
-        if not im and labour_mode == "Show Labour as Separate Line Item": lab_total += (q * lr) * (1 - (d / 100))
+        item_lab = q * lr if labour_mode == "Bake Labour into Unit Rate" else 0.0
+        if labour_mode == "Show Labour as Separate Line Item": lab_total += (q * lr) * (1 - (d / 100))
         total_line = hire_disc + (item_lab * (1 - (d / 100)))
         st.session_state.df.at[idx, "Total"], st.session_state.df.at[idx, "SYSTEM RATE"] = total_line, (total_line / q if q > 0 else 0)
         hire_total += total_line
 
+    cartage = (km_input * 14.0 if km_input and charge_cartage else 0)
+    grand_total = hire_total + lab_total + waiver_total + cartage
+
     st.divider()
     m1, m2, m3, m4 = st.columns(4)
-    m1.metric("SUBTOTAL", f"${hire_total:,.2f}"); m2.metric("LABOUR", f"${lab_total:,.2f}"); m3.metric("WAIVER", f"${waiver_total:,.2f}"); m4.metric("CARTAGE", f"${(km_input * 14.0 if km_input and charge_cartage else 0):,.2f}")
-    st.metric("GRAND TOTAL (EX GST)", f"${(hire_total + lab_total + waiver_total + (km_input * 14.0 if km_input and charge_cartage else 0)):,.2f}")
-    if total_sheets > 0: st.metric("TOTAL SHEETS (Supa-Trac)", f"{total_sheets}")
+    m1.metric("SUBTOTAL", f"${hire_total:,.2f}"); m2.metric("LABOUR", f"${lab_total:,.2f}"); m3.metric("WAIVER", f"${waiver_total:,.2f}"); m4.metric("CARTAGE", f"${cartage:,.2f}")
+    st.metric("GRAND TOTAL (EX GST)", f"${grand_total:,.2f}")
 
-    st.markdown("### 📋 DESCRIPTION BLOCKS")
-    for idx, row in st.session_state.df.iterrows():
-        p, lr, br, ut = row["Unit Rate"], row["Labour_Rate"], row["Block_Rate"], row["Unit_Type"]
-        wk_r = br/4 if live_weeks >= 4 else p
-        init = wk_r + (lr if labour_mode == "Bake Labour into Unit Rate" else 0)
-        copy_block = f"PRICING BASED ON {live_weeks} WEEK HIRE PERIOD\n"
-        if live_weeks == 1 or round(init, 2) == round(wk_r, 2): copy_block += f"Price per {ut} = ${init:,.2f} + GST"
-        else: copy_block += f"Price for Initial Week = ${init:,.2f} per {ut} + GST\nPrice for weeks 2+ = ${wk_r:,.2f} per {ut}/week + GST"
-        st.text_area(f"Line {idx+1}: {row['Product']}", value=copy_block, height=100)
-
-    st.markdown("### 💾 FINISH & SAVE")
-    save_col1, save_col2 = st.columns([3, 1])
+    # --- 9. FINISH & SAVE & EXPORT ---
+    st.markdown("### 💾 FINISH & EXPORT")
+    save_col1, save_col2, save_col3 = st.columns([2, 1, 1])
     fn = save_col1.text_input("Quote Name:", placeholder="Client Name / Event")
+    
     if save_col2.button("CLOUD ARCHIVE"):
-        if fn and save_to_google(fn, st.session_state.df, start_date, end_date, km_input):
-            st.success(f"Archived to Cloud: {fn}"); st.rerun()
+        if fn:
+            save_to_google(fn, st.session_state.df, start_date, end_date, km_input)
+            st.success("Archived!")
+            
+    # PDF DOWNLOAD BUTTON
+    pdf_bytes = create_calculation_pdf(fn if fn else "Internal_Quote", st.session_state.df, hire_total, lab_total, waiver_total, cartage, grand_total, km_input if km_input else 0, live_weeks)
+    save_col3.download_button(label="📥 DOWNLOAD INTERNAL PDF", data=pdf_bytes, file_name=f"{fn if fn else 'Quote'}_Calculations.pdf", mime="application/pdf")
+    
     if st.button("⚠️ RESET ALL"): st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Disc %", "Total", "Labour_Rate", "Block_Rate", "SYSTEM RATE", "No_Waiver", "Is_GS", "Is_Mojo", "Unit_Type", "Is_ST"]); st.rerun()
