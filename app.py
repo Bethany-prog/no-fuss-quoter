@@ -5,11 +5,9 @@ import pandas as pd
 from datetime import date
 import json
 
-# --- HARD-LINKED CONFIG (v23.3) ---
-# Your specific sheet URL is now a backup inside the code
-SHEET_URL = "https://docs.google.com/spreadsheets/d/1Fs-WAeLWr-I3oduyIAX0V-cNTLCd8_j91ummWa_k-Rw"
+# --- VERIFIED PUBLIC URL ---
+SHEET_URL = "https://docs.google.com/spreadsheets/d/1Fs-WAeLWr-I3oduyIAX0V-cNTLCd8_j91ummWa_k-Rw/edit#gid=0"
 
-# 1. PASSWORD PROTECTION
 def check_password():
     if "password_correct" not in st.session_state:
         st.session_state.password_correct = False
@@ -28,7 +26,6 @@ if not check_password():
     st.stop()
 
 # 2. DATABASE CONNECTION
-# We pass the URL directly to ensure it never says "Spreadsheet not specified"
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 def save_to_google(name, df, start, end, km):
@@ -41,7 +38,7 @@ def save_to_google(name, df, start, end, km):
             "KM": km,
             "Saved_Date": str(date.today())
         }])
-        # Explicitly passing the URL to the read and update functions
+        # Forced live read
         existing_data = conn.read(spreadsheet=SHEET_URL, ttl=0)
         updated_data = pd.concat([existing_data, new_entry], ignore_index=True)
         conn.update(spreadsheet=SHEET_URL, data=updated_data)
@@ -101,11 +98,12 @@ if 'df' not in st.session_state:
 
 st.title("📦 No Fuss Quote Pro")
 
-# --- 5. CLOUD LOAD (v23.3 Hard-Linked) ---
+# --- 5. CLOUD LOAD ---
 st.markdown("### 📂 ARCHIVE HISTORY")
 try:
+    # Explicit connection check
     archive_df = conn.read(spreadsheet=SHEET_URL, ttl=0)
-    if not archive_df.empty and "Quote_Name" in archive_df.columns:
+    if not archive_df.empty:
         existing_list = archive_df["Quote_Name"].tolist()
         l_col1, l_col2 = st.columns([3, 1])
         load_choice = l_col1.selectbox("Select Previous Quote", ["Select..."] + existing_list, label_visibility="collapsed")
@@ -114,9 +112,11 @@ try:
                 row = archive_df[archive_df["Quote_Name"] == load_choice].iloc[0]
                 st.session_state.df = pd.read_json(row["Data_JSON"])
                 st.rerun()
-    else: st.info("Cloud Archive is empty. Row 1 headers must match exactly.")
+    else: st.info("Cloud Archive is empty. Add a header row to your sheet.")
 except Exception as e:
     st.error(f"Cloud Connection Failed: {e}")
+    st.warning("1. Check Google Sheet 'Share' settings are 'Anyone with link' + 'Editor'")
+    st.warning("2. Ensure Row 1 has headers: Quote_Name, Data_JSON, Start_Date, End_Date, KM, Saved_Date")
 
 # --- 6. LOGISTICS ---
 st.markdown("### 📍 HIRE DATES & DISTANCE")
