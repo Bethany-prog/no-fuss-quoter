@@ -73,10 +73,6 @@ CATALOG = {
             {"Product": "Supa-Trac flooring", "w1_3": 11.55, "block": 25.00, "labour": 4.65, "unit": "SQM", "waiver": True, "is_st": True},
             {"Product": "Supa-Trac Edging", "w1_3": 6.70, "block": 6.70, "labour": 0.00, "unit": "lm", "waiver": True}
         ],
-        "Trakmats": [
-            {"Product": "Trakmats", "w1_3": 23.20, "block": 45.00, "labour": 5.85, "unit": "ea", "waiver": True},
-            {"Product": "Trakmat Joiners", "w1_3": 11.95, "block": 11.95, "labour": 0.00, "unit": "ea", "waiver": True}
-        ],
         "Other Flooring": [
             {"Product": "No Fuss Floor (Grey/Green)", "w1_3": 7.10, "block": 15.00, "labour": 3.05, "unit": "SQM", "waiver": True},
             {"Product": "Terratrak Plus", "w1_3": 23.40, "block": 46.80, "labour": 4.65, "unit": "SQM", "waiver": True},
@@ -201,66 +197,73 @@ if not st.session_state.df.empty:
         elif m_qty <= 200: sup, hand, h_in, h_out = 1, 6, 6, 4
         else: sup, hand, h_in, h_out = 2, 8, 6, 6
         mojo_lab = ((sup + hand) * (h_in + h_out) * 55.0)
-        st.info(f"👷 Mojo Labour: {sup} Sup + {hand} Hands ({h_in}hr In / {h_out}hr Out)")
+        st.info(f"👷 Mojo Labour Matrix Active")
 
     col_cart, col_waiv = st.columns(2)
     charge_cartage = col_cart.checkbox("🚚 Include Cartage ($3.50/km x 4)", value=True)
     include_damage_waiver = col_waiv.checkbox("🛡️ Include Damage Waiver (7%)", value=True)
 
-    # --- 5. FINANCES ---
-    hire_only, lab_only, total_sheets = 0.0, (mojo_lab if labour_mode == "Show Labour as Separate Line Item" else 0.0), 0
-    m_baked = (mojo_lab / st.session_state.df[st.session_state.df["Is_Mojo"] == True]["Qty"].sum()) if (has_mojo and labour_mode == "Bake Labour into Unit Rate") else 0.0
+    # --- 5. FINANCES (v22.2 - PRE-LABOUR WAIVER) ---
+    hire_total_only, lab_total_only, waiver_total = 0.0, 0.0, 0.0
+    total_sheets = 0
     
+    m_baked = (mojo_lab / st.session_state.df[st.session_state.df["Is_Mojo"] == True]["Qty"].sum()) if (has_mojo and labour_mode == "Bake Labour into Unit Rate") else 0.0
+    if has_mojo and labour_mode == "Show Labour as Separate Line Item":
+        lab_total_only = mojo_lab
+
     for idx, row in st.session_state.df.iterrows():
         q, r, d, b, lr, ig, im, ist = row["Qty"], row["Unit Rate"], row["Disc %"], row["Block_Rate"], row["Labour_Rate"], row["Is_GS"], row["Is_Mojo"], row["Is_ST"]
         
-        if ist:
-            total_sheets += math.ceil(q / 3.135)
+        if ist: total_sheets += math.ceil(q / 3.135)
 
+        # Calculate Pure Equipment Hire First
         if not ig and not im and live_weeks >= 4:
-            wk_r = b / 4
-            hire = (q * wk_r * live_weeks)
+            hire_val = (q * (b / 4) * live_weeks)
         elif ig:
-            hire = q * r
+            hire_val = q * r
         else:
-            hire = (q * r * live_weeks)
+            hire_val = (q * r * live_weeks)
         
-        item_lab = (q * m_baked) if im and labour_mode == "Bake Labour into Unit Rate" else (q * lr) if labour_mode == "Bake Labour into Unit Rate" else 0.0
-        if not im and labour_mode == "Show Labour as Separate Line Item": lab_only += (q * lr) * (1 - (d / 100))
-        final = (hire + item_lab) * (1 - (d / 100))
-        st.session_state.df.at[idx, "Total"], st.session_state.df.at[idx, "SYSTEM RATE"] = final, (final / q if q > 0 else 0)
-        hire_only += final
+        hire_discounted = hire_val * (1 - (d / 100))
+        
+        # WAIVER CALCULATION (Done strictly on pure hire before labour)
+        if include_damage_waiver and not row["No_Waiver"]:
+            waiver_total += hire_discounted * 0.07
 
-    subtotal = max(2000.0 if has_gs else 300.0, (hire_only + (350.0 - st.session_state.df[st.session_state.df["Is_Mojo"] == True]["Total"].sum()) if (has_mojo and st.session_state.df[st.session_state.df["Is_Mojo"] == True]["Total"].sum() < 350.0) else hire_only))
-    waiver = (st.session_state.df[st.session_state.df["No_Waiver"] == False]["Total"].sum() * 0.07) if include_damage_waiver else 0.0
+        # LABOUR CALCULATION
+        item_lab = (q * m_baked) if im and labour_mode == "Bake Labour into Unit Rate" else (q * lr) if labour_mode == "Bake Labour into Unit Rate" else 0.0
+        if not im and labour_mode == "Show Labour as Separate Line Item": 
+            lab_total_only += (q * lr) * (1 - (d / 100))
+        
+        final_line_total = hire_discounted + (item_lab * (1 - (d / 100)))
+        st.session_state.df.at[idx, "Total"], st.session_state.df.at[idx, "SYSTEM RATE"] = final_line_total, (final_line_total / q if q > 0 else 0)
+        hire_total_only += final_line_total
+
+    subtotal = max(2000.0 if has_gs else 300.0, (hire_total_only + (350.0 - st.session_state.df[st.session_state.df["Is_Mojo"] == True]["Total"].sum()) if (has_mojo and st.session_state.df[st.session_state.df["Is_Mojo"] == True]["Total"].sum() < 350.0) else hire_total_only))
     cartage = (km_input * 4 * 3.50) if km_input and charge_cartage else 0.0
     
     st.divider()
     m_col1, m_col2, m_col3, m_col4 = st.columns(4)
     m_col1.metric("SUBTOTAL (HIRE)", f"${subtotal:,.2f}")
-    m_col2.metric("LABOUR", f"${lab_only:,.2f}")
-    m_col3.metric("WAIVER", f"${waiver:,.2f}")
+    m_col2.metric("LABOUR", f"${lab_total_only:,.2f}")
+    m_col3.metric("WAIVER", f"${waiver_total:,.2f}")
     m_col4.metric("CARTAGE", f"${cartage:,.2f}")
     
     c_tot1, c_tot2 = st.columns(2)
-    c_tot1.metric("GRAND TOTAL (EX GST)", f"${(subtotal + lab_only + waiver + cartage):,.2f}")
-    if total_sheets > 0:
-        c_tot2.metric("TOTAL SHEETS (Supa-Trac)", f"{total_sheets}")
+    c_tot1.metric("GRAND TOTAL (EX GST)", f"${(subtotal + lab_total_only + waiver_total + cartage):,.2f}")
+    if total_sheets > 0: c_tot2.metric("TOTAL SHEETS (Supa-Trac)", f"{total_sheets}")
 
     st.markdown("### 📋 DESCRIPTION BLOCKS")
     for idx, row in st.session_state.df.iterrows():
         p, lr, igs, br, ut = row["Unit Rate"], row["Labour_Rate"], row["Is_GS"], row["Block_Rate"], row["Unit_Type"]
         wk_r = br/4 if (live_weeks >= 4 and not igs) else p
         init = wk_r + (lr if labour_mode == "Bake Labour into Unit Rate" else 0)
-        
         copy_block = f"PRICING BASED ON {live_weeks} WEEK HIRE PERIOD\n"
         if round(init, 2) == round(wk_r, 2):
             copy_block += f"Price per {ut} = ${init:,.2f} + GST"
         else:
             copy_block += f"Price for Initial Week (Incl. Install) = ${init:,.2f} per {ut} + GST\n"
-            if live_weeks > 1:
-                copy_block += f"Price for weeks 2+ = ${wk_r:,.2f} per {ut}/week + GST"
-        
+            if live_weeks > 1: copy_block += f"Price for weeks 2+ = ${wk_r:,.2f} per {ut}/week + GST"
         st.text_area(f"Line {idx+1}: {row['Product']}", value=copy_block, height=100)
     
     if st.button("⚠️ RESET QUOTE"):
