@@ -24,7 +24,7 @@ def check_password():
 if not check_password():
     st.stop()
 
-# 2. DATABASE CONNECTION (Keep standard setup)
+# 2. DATABASE CONNECTION ( pausable setup )
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 def save_to_google(name, df, start, end, km):
@@ -44,7 +44,7 @@ def save_to_google(name, df, start, end, km):
         return True
     except: return False
 
-# --- NEW: PDF GENERATION FUNCTION ---
+# --- PDF GENERATION FUNCTION ---
 def create_calculation_pdf(name, df, subtotal, labour, waiver, cartage, grand_total, km, weeks):
     pdf = FPDF()
     pdf.add_page()
@@ -115,7 +115,8 @@ def create_calculation_pdf(name, df, subtotal, labour, waiver, cartage, grand_to
     pdf.cell(100, 10, "GRAND TOTAL (EX GST):", "T")
     pdf.cell(0, 10, f"${grand_total:,.2f}", "T", 1, "R")
     
-    return pdf.output()
+    # FIX: Ensure output is converted to bytes for Streamlit
+    return bytes(pdf.output())
 
 # 3. PAGE CONFIG
 st.set_page_config(page_title="No Fuss Quote Pro", page_icon="📦", layout="wide")
@@ -245,7 +246,7 @@ if not st.session_state.df.empty:
             save_to_google(fn, st.session_state.df, start_date, end_date, km_input)
             st.success("Archived!")
             
-    # PDF DOWNLOAD BUTTON
+    # PDF DOWNLOAD BUTTON with standard bytes format
     pdf_bytes = create_calculation_pdf(fn if fn else "Internal_Quote", st.session_state.df, hire_total, lab_total, waiver_total, cartage, grand_total, km_input if km_input else 0, live_weeks)
     save_col3.download_button(label="📥 DOWNLOAD INTERNAL PDF", data=pdf_bytes, file_name=f"{fn if fn else 'Quote'}_Calculations.pdf", mime="application/pdf")
     
