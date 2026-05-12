@@ -15,14 +15,7 @@ def save_quote(name, data_df, start_d, end_d, km):
             with open(DB_FILE, "r") as f:
                 db = json.load(f)
         except: db = {}
-    
-    db[name] = {
-        "df": data_df.to_dict('records'),
-        "start": str(start_d),
-        "end": str(end_d),
-        "km": km,
-        "saved_at": str(date.today())
-    }
+    db[name] = {"df": data_df.to_dict('records'), "start": str(start_d), "end": str(end_d), "km": km, "saved_at": str(date.today())}
     with open(DB_FILE, "w") as f:
         json.dump(db, f)
 
@@ -75,10 +68,7 @@ st.markdown("""
     }
     div[data-testid="stNumberInput"] label p, 
     div[data-testid="stDateInput"] label p,
-    div[data-testid="stSelectbox"] label p { 
-        color: #333333 !important; 
-        font-weight: bold !important; 
-    }
+    div[data-testid="stSelectbox"] label p { color: #333333 !important; font-weight: bold !important; }
     div[data-testid="stMetricValue"] { color: #00E676 !important; font-size: 32px !important; font-weight: bold !important; }
     [data-testid="stMetricLabel"] p { color: #FFFFFF !important; font-weight: bold !important; font-size: 16px !important; }
     div.stMetric { background-color: #1A1D2D !important; padding: 20px !important; border-radius: 12px !important; border: 2px solid #3D5AFE !important; }
@@ -87,41 +77,38 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# 3. MASTER CATALOG
+# 3. MASTER CATALOG (Synced with v22.5 Data)
 CATALOG = {
     "FLOORING": {
         "I-Trac System": [
             {"Product": "I-Trac flooring", "w1_3": 23.40, "block": 46.80, "labour": 4.65, "unit": "SQM", "waiver": True},
-            {"Product": "I-Trac ramps", "w1_3": 42.00, "block": 84.00, "labour": 0.00, "unit": "ea", "waiver": True}
+            {"Product": "I-Trac Ramp", "w1_3": 42.00, "block": 84.00, "labour": 0.00, "unit": "ea", "waiver": True}
+        ],
+        "Supa-Trac System": [
+            {"Product": "Supa-trac flooring", "w1_3": 11.55, "block": 25.00, "labour": 4.65, "unit": "SQM", "waiver": True, "is_st": True},
+            {"Product": "Supa-trac Edging", "w1_3": 6.70, "block": 6.70, "labour": 0.00, "unit": "lm", "waiver": False}
+        ],
+        "Trakmat System": [
+            {"Product": "Trakmats", "w1_3": 23.20, "block": 45.00, "labour": 5.85, "unit": "ea", "waiver": True},
+            {"Product": "Trakmat Joiners 4 Hole", "w1_3": 11.95, "block": 11.95, "labour": 0.00, "unit": "ea", "waiver": True},
+            {"Product": "Trakmat Joiners 2 Hole", "w1_3": 4.40, "block": 4.40, "labour": 0.00, "unit": "ea", "waiver": True}
         ],
         "Plastorip System": [
             {"Product": "Plastorip", "w1_3": 10.15, "block": 20.30, "labour": 3.05, "unit": "SQM", "waiver": True, "is_p": True},
-            {"Product": "Plastorip Edging", "w1_3": 1.65, "block": 1.65, "labour": 0.00, "unit": "pc", "waiver": True},
-            {"Product": "Plastorip Corner", "w1_3": 0.00, "block": 0.00, "labour": 0.00, "unit": "ea", "waiver": True}
+            {"Product": "Plastorip Edging", "w1_3": 1.65, "block": 1.65, "labour": 0.00, "unit": "pc", "waiver": False},
+            {"Product": "Plastorip Corners", "w1_3": 0.00, "block": 0.00, "labour": 0.00, "unit": "ea", "waiver": False},
+            {"Product": "Plastorip Expansion Joiners", "w1_3": 12.15, "block": 12.15, "labour": 0.00, "unit": "ea", "waiver": False}
         ],
-        "Supa-Trac System": [
-            {"Product": "Supa-Trac flooring", "w1_3": 11.55, "block": 25.00, "labour": 4.65, "unit": "SQM", "waiver": True, "is_st": True},
-            {"Product": "Supa-Trac Edging", "w1_3": 6.70, "block": 6.70, "labour": 0.00, "unit": "lm", "waiver": True}
-        ],
-        "Trakmats": [
-            {"Product": "Trakmats", "w1_3": 23.20, "block": 45.00, "labour": 5.85, "unit": "ea", "waiver": True},
-            {"Product": "Trakmat Joiners", "w1_3": 11.95, "block": 11.95, "labour": 0.00, "unit": "ea", "waiver": True}
-        ],
-        "Other Flooring": [
+        "No Fuss Floor": [
             {"Product": "No Fuss Floor (Grey/Green)", "w1_3": 7.10, "block": 15.00, "labour": 3.05, "unit": "SQM", "waiver": True},
-            {"Product": "Terratrak Plus", "w1_3": 23.40, "block": 46.80, "labour": 4.65, "unit": "SQM", "waiver": True},
-            {"Product": "Wooden Floor", "w1_3": 8.85, "block": 17.70, "labour": 7.15, "unit": "SQM", "waiver": True},
-            {"Product": "Parquetry Dance Floor", "w1_3": 20.95, "block": 41.90, "labour": 4.80, "unit": "SQM", "waiver": True},
-            {"Product": "Carpet Tiles - Onyx", "w1_3": 8.85, "block": 17.70, "labour": 3.05, "unit": "SQM", "waiver": True},
-            {"Product": "Protectall", "w1_3": 22.05, "block": 44.10, "labour": 3.25, "unit": "SQM", "waiver": True},
-            {"Product": "Enkamat Underlay", "w1_3": 2.60, "block": 5.20, "labour": 0.00, "unit": "SQM", "waiver": True},
+            {"Product": "Ramp 1M", "w1_3": 6.60, "block": 13.20, "labour": 0.00, "unit": "ea", "waiver": True},
+            {"Product": "Expansion Joiner 1.2M", "w1_3": 6.60, "block": 13.20, "labour": 0.00, "unit": "ea", "waiver": True}
+        ],
+        "Specialty/Protection": [
+            {"Product": "Terratrak Plus", "w1_3": 23.40, "block": 46.80, "labour": 4.365, "unit": "SQM", "waiver": True},
+            {"Product": "LD20 Roll", "w1_3": 1800.00, "block": 3300.00, "labour": 0.00, "unit": "Roll", "waiver": True},
+            {"Product": "Geotextile Underlay", "w1_3": 2.60, "block": 2.60, "labour": 0.00, "unit": "SQM", "waiver": True},
             {"Product": "Black Plastic", "w1_3": 0.90, "block": 0.90, "labour": 0.00, "unit": "SQM", "waiver": True}
-        ]
-    },
-    "GRANDSTANDS": {
-        "Seating": [
-            {"Product": "Grandstand Seating", "is_gs": True, "unit": "seat", "waiver": True},
-            {"Product": "Shade Cloth / Scrim", "w1_3": 6.00, "block": 12.00, "labour": 0.00, "unit": "lm", "waiver": True}
         ]
     },
     "MOJO BARRIERS": {
@@ -146,7 +133,6 @@ with sl_col1:
         if q_name and not st.session_state.df.empty:
             save_quote(q_name, st.session_state.df, date.today(), date.today(), 0)
             st.success(f"Quote '{q_name}' archived.")
-        else: st.warning("Add items and enter a name.")
 
 with sl_col2:
     existing = load_quote_list()
@@ -172,8 +158,7 @@ dept_choice = dept_col.selectbox("Department", sorted(CATALOG.keys()))
 bundle_choice = bundle_col.selectbox("Select System/Group", sorted(CATALOG[dept_choice].keys()))
 
 selected_bundle = CATALOG[dept_choice][bundle_choice]
-bundle_results = []
-w, l = 0, 0
+bundle_results, w, l = [], 0, 0
 for item in selected_bundle:
     if item.get("is_p"):
         p_mode = st.radio("Input Mode", ["Manual SQM", "Dimensions (WxL)"], key="p_mode")
@@ -183,61 +168,42 @@ for item in selected_bundle:
             l = l_col.number_input("Length (m)", min_value=0.0, value=None, placeholder="Length...", key="p_l")
             q_val = (w * l) if (w and l) else 0.0
         else:
-            q_val = st.number_input(f"Qty: {item['Product']} ({item['unit']})", min_value=0.0, value=None, placeholder="SQM...", key=f"q_{item['Product']}")
+            q_val = st.number_input(f"Qty: {item['Product']} ({item['unit']})", min_value=0.0, value=None, key=f"q_{item['Product']}")
     else:
         default_q = None
         if "Edging" in item['Product'] and w > 0: default_q = float(math.ceil(((w + l) * 2) / 0.4))
         elif "Corner" in item['Product'] and w > 0: default_q = 4.0
-        q_val = st.number_input(f"Qty: {item['Product']} ({item['unit']})", min_value=0.0, value=default_q, placeholder="Qty...", key=f"q_{item['Product']}")
-    
+        q_val = st.number_input(f"Qty: {item['Product']} ({item['unit']})", min_value=0.0, value=default_q, key=f"q_{item['Product']}")
     if q_val and q_val > 0: bundle_results.append({"item": item, "qty": q_val})
 
 c_a, c_d = st.columns(2)
-adj_rate = c_a.number_input("Override Price (Primary Item)", min_value=0.0, value=None, placeholder="Manual Rate...")
-discount_pct = c_d.number_input("Discount %", min_value=0.0, max_value=100.0, value=None, placeholder="%...")
+adj_rate = c_a.number_input("Override Price (Primary Item)", min_value=0.0, value=None)
+discount_pct = c_d.number_input("Discount %", min_value=0.0, max_value=100.0, value=None)
 
 if st.button("ADD SELECTED ITEMS TO QUOTE"):
     new_rows = []
     for entry in bundle_results:
         it, q = entry['item'], entry['qty']
         is_gs, is_mojo, is_st = it.get("is_gs", False), it.get("is_mojo", False), it.get("is_st", False)
-        if is_gs:
-            if q <= 40: s, h = 2, 4
-            elif q <= 100: s, h = 3, 5
-            elif q <= 149: s, h = 4, 5
-            elif q <= 199: s, h = 5, 5
-            elif q <= 299: s, h = 5, 6
-            else: s, h = 6, 10
-            calc_rate = (s * h * 55.0 * 4) / q
-            base_r, lab_r, block_r = (adj_rate if adj_rate else calc_rate), 0.0, (adj_rate if adj_rate else calc_rate) * 2
-        else:
-            base_r, lab_r, block_r = (adj_rate if (adj_rate and it == selected_bundle[0]) else it.get("w1_3", 0.0)), it.get("labour", 0.0), it.get("block", 0.0)
-
-        new_rows.append({
-            "Qty": q, "Product": it['Product'], "Unit Rate": base_r, "Disc %": discount_pct if discount_pct else 0.0, 
-            "Total": 0.0, "Labour_Rate": lab_r, "Block_Rate": block_r, "SYSTEM RATE": 0.0, 
-            "No_Waiver": not it.get("waiver", True), "Is_GS": is_gs, "Is_Mojo": is_mojo, "Unit_Type": it['unit'], "Is_ST": is_st
-        })
+        base_r, lab_r, block_r = (adj_rate if (adj_rate and it == selected_bundle[0]) else it.get("w1_3", 0.0)), it.get("labour", 0.0), it.get("block", 0.0)
+        new_rows.append({"Qty": q, "Product": it['Product'], "Unit Rate": base_r, "Disc %": discount_pct if discount_pct else 0.0, "Total": 0.0, "Labour_Rate": lab_r, "Block_Rate": block_r, "SYSTEM RATE": 0.0, "No_Waiver": not it.get("waiver", True), "Is_GS": is_gs, "Is_Mojo": is_mojo, "Unit_Type": it['unit'], "Is_ST": is_st})
     if new_rows:
         st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame(new_rows)], ignore_index=True)
         st.rerun()
 
-# --- 3. DATA GRID ---
+# --- 3. DATA GRID & 4. SELECTORS ---
 if not st.session_state.df.empty:
     st.markdown("### 🏗️ QUOTED ITEMS")
-    has_gs, has_mojo = st.session_state.df["Is_GS"].any(), st.session_state.df["Is_Mojo"].any()
     display_cols = ["Qty", "Unit_Type", "Product", "SYSTEM RATE", "Unit Rate", "Disc %", "Total"]
-    edited_df = st.data_editor(st.session_state.df[display_cols], num_rows="dynamic", use_container_width=True, key="editor",
-                               column_config={"SYSTEM RATE": st.column_config.NumberColumn("🔢 SYSTEM RATE", format="$%.2f"), "Unit Rate": st.column_config.NumberColumn("Unit Rate", format="$%.2f"), "Total": st.column_config.NumberColumn("Total", format="$%.2f")})
+    edited_df = st.data_editor(st.session_state.df[display_cols], num_rows="dynamic", use_container_width=True, key="editor")
     if not edited_df.equals(st.session_state.df[display_cols]):
         for col in ["Qty", "Unit Rate", "Disc %"]: st.session_state.df[col] = edited_df[col]
         st.rerun()
 
-    # --- 4. SELECTORS ---
     st.markdown("### ⚙️ LABOUR & CARTAGE")
-    labour_mode = "Bake Labour into Unit Rate" if has_gs else st.selectbox("Labour Mode", ["Bake Labour into Unit Rate", "Show Labour as Separate Line Item", "No Labour"])
+    labour_mode = st.selectbox("Labour Mode", ["Bake Labour into Unit Rate", "Show Labour as Separate Line Item", "No Labour"])
     
-    mojo_lab = 0.0
+    mojo_lab, has_mojo = 0.0, st.session_state.df["Is_Mojo"].any()
     if has_mojo and labour_mode != "No Labour":
         m_qty = st.session_state.df[st.session_state.df["Is_Mojo"] == True]["Qty"].sum()
         if m_qty <= 30: sup, hand, h_in, h_out = 1, 1, 4, 4
@@ -246,61 +212,42 @@ if not st.session_state.df.empty:
         elif m_qty <= 200: sup, hand, h_in, h_out = 1, 6, 6, 4
         else: sup, hand, h_in, h_out = 2, 8, 6, 6
         mojo_lab = ((sup + hand) * (h_in + h_out) * 55.0)
-        st.info(f"👷 Mojo Labour Matrix Active")
 
     col_cart, col_waiv = st.columns(2)
     charge_cartage = col_cart.checkbox("🚚 Include Cartage ($3.50/km x 4)", value=True)
     include_damage_waiver = col_waiv.checkbox("🛡️ Include Damage Waiver (7%)", value=True)
 
-    # --- 5. FINANCES ---
-    hire_total_only, lab_total_only, waiver_total, total_sheets = 0.0, 0.0, 0.0, 0
+    # --- 5. FINANCES (STRICT PRE-LABOUR WAIVER) ---
+    hire_total, lab_total, waiver_total, total_sheets = 0.0, 0.0, 0.0, 0
     m_baked = (mojo_lab / st.session_state.df[st.session_state.df["Is_Mojo"] == True]["Qty"].sum()) if (has_mojo and labour_mode == "Bake Labour into Unit Rate") else 0.0
-    if has_mojo and labour_mode == "Show Labour as Separate Line Item": lab_total_only = mojo_lab
+    if has_mojo and labour_mode == "Show Labour as Separate Line Item": lab_total = mojo_lab
 
     for idx, row in st.session_state.df.iterrows():
-        q, r, d, b, lr, ig, im, ist = row["Qty"], row["Unit Rate"], row["Disc %"], row["Block_Rate"], row["Labour_Rate"], row["Is_GS"], row["Is_Mojo"], row["Is_ST"]
+        q, r, d, b, lr, im, ist = row["Qty"], row["Unit Rate"], row["Disc %"], row["Block_Rate"], row["Labour_Rate"], row["Is_Mojo"], row["Is_ST"]
         if ist: total_sheets += math.ceil(q / 3.135)
-
-        if not ig and not im and live_weeks >= 4: wk_r = b / 4; hire_val = (q * wk_r * live_weeks)
-        elif ig: hire_val = q * r
-        else: hire_val = (q * r * live_weeks)
-        
-        hire_discounted = hire_val * (1 - (d / 100))
-        if include_damage_waiver and not row["No_Waiver"]: waiver_total += hire_discounted * 0.07
-
+        hire_val = (q * (b / 4) * live_weeks) if (live_weeks >= 4 and not im) else (q * r * live_weeks)
+        hire_disc = hire_val * (1 - (d / 100))
+        if include_damage_waiver and not row["No_Waiver"]: waiver_total += hire_disc * 0.07
         item_lab = (q * m_baked) if im and labour_mode == "Bake Labour into Unit Rate" else (q * lr) if labour_mode == "Bake Labour into Unit Rate" else 0.0
-        if not im and labour_mode == "Show Labour as Separate Line Item": lab_total_only += (q * lr) * (1 - (d / 100))
-        
-        final_line_total = hire_discounted + (item_lab * (1 - (d / 100)))
-        st.session_state.df.at[idx, "Total"], st.session_state.df.at[idx, "SYSTEM RATE"] = final_line_total, (final_line_total / q if q > 0 else 0)
-        hire_total_only += final_line_total
+        if not im and labour_mode == "Show Labour as Separate Line Item": lab_total += (q * lr) * (1 - (d / 100))
+        total_line = hire_disc + (item_lab * (1 - (d / 100)))
+        st.session_state.df.at[idx, "Total"], st.session_state.df.at[idx, "SYSTEM RATE"] = total_line, (total_line / q if q > 0 else 0)
+        hire_total += total_line
 
-    subtotal = max(2000.0 if has_gs else 300.0, (hire_total_only + (350.0 - st.session_state.df[st.session_state.df["Is_Mojo"] == True]["Total"].sum()) if (has_mojo and st.session_state.df[st.session_state.df["Is_Mojo"] == True]["Total"].sum() < 350.0) else hire_total_only))
+    subtotal = max(300.0, (hire_total + (350.0 - st.session_state.df[st.session_state.df["Is_Mojo"] == True]["Total"].sum()) if (has_mojo and st.session_state.df[st.session_state.df["Is_Mojo"] == True]["Total"].sum() < 350.0) else hire_total))
     cartage = (km_input * 4 * 3.50) if km_input and charge_cartage else 0.0
-    
     st.divider()
     m_col1, m_col2, m_col3, m_col4 = st.columns(4)
-    m_col1.metric("SUBTOTAL (HIRE)", f"${subtotal:,.2f}")
-    m_col2.metric("LABOUR", f"${lab_total_only:,.2f}")
-    m_col3.metric("WAIVER", f"${waiver_total:,.2f}")
-    m_col4.metric("CARTAGE", f"${cartage:,.2f}")
-    
-    c_tot1, c_tot2 = st.columns(2)
-    c_tot1.metric("GRAND TOTAL (EX GST)", f"${(subtotal + lab_total_only + waiver_total + cartage):,.2f}")
-    if total_sheets > 0: c_tot2.metric("TOTAL SHEETS (Supa-Trac)", f"{total_sheets}")
+    m_col1.metric("SUBTOTAL (HIRE)", f"${subtotal:,.2f}"); m_col2.metric("LABOUR", f"${lab_total:,.2f}"); m_col3.metric("WAIVER", f"${waiver_total:,.2f}"); m_col4.metric("CARTAGE", f"${cartage:,.2f}")
+    c1, c2 = st.columns(2)
+    c1.metric("GRAND TOTAL (EX GST)", f"${(subtotal + lab_total + waiver_total + cartage):,.2f}")
+    if total_sheets > 0: c2.metric("TOTAL SHEETS (Supa-Trac)", f"{total_sheets}")
 
     st.markdown("### 📋 DESCRIPTION BLOCKS")
     for idx, row in st.session_state.df.iterrows():
-        p, lr, igs, br, ut = row["Unit Rate"], row["Labour_Rate"], row["Is_GS"], row["Block_Rate"], row["Unit_Type"]
-        wk_r = br/4 if (live_weeks >= 4 and not igs) else p
+        p, lr, br, ut = row["Unit Rate"], row["Labour_Rate"], row["Block_Rate"], row["Unit_Type"]
+        wk_r = br/4 if live_weeks >= 4 else p
         init = wk_r + (lr if labour_mode == "Bake Labour into Unit Rate" else 0)
-        copy_block = f"PRICING BASED ON {live_weeks} WEEK HIRE PERIOD\n"
-        if round(init, 2) == round(wk_r, 2): copy_block += f"Price per {ut} = ${init:,.2f} + GST"
-        else:
-            copy_block += f"Price for Initial Week (Incl. Install) = ${init:,.2f} per {ut} + GST\n"
-            if live_weeks > 1: copy_block += f"Price for weeks 2+ = ${wk_r:,.2f} per {ut}/week + GST"
+        copy_block = f"PRICING BASED ON {live_weeks} WEEK HIRE PERIOD\nPrice per {ut} = ${init:,.2f} + GST" if round(init, 2) == round(wk_r, 2) else f"PRICING BASED ON {live_weeks} WEEK HIRE PERIOD\nPrice for Initial Week (Incl. Install) = ${init:,.2f} per {ut} + GST\nPrice for weeks 2+ = ${wk_r:,.2f} per {ut}/week + GST"
         st.text_area(f"Line {idx+1}: {row['Product']}", value=copy_block, height=100)
-    
-    if st.button("⚠️ RESET QUOTE"):
-        st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Disc %", "Total", "Labour_Rate", "Block_Rate", "SYSTEM RATE", "No_Waiver", "Is_GS", "Is_Mojo", "Unit_Type", "Is_ST"])
-        st.rerun()
+    if st.button("⚠️ RESET QUOTE"): st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Disc %", "Total", "Labour_Rate", "Block_Rate", "SYSTEM RATE", "No_Waiver", "Is_GS", "Is_Mojo", "Unit_Type", "Is_ST"]); st.rerun()
