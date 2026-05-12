@@ -24,7 +24,7 @@ def check_password():
 if not check_password():
     st.stop()
 
-# 2. DATABASE CONNECTION (Standard setup)
+# 2. DATABASE CONNECTION
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 def save_to_google(name, df, start, end, km):
@@ -44,73 +44,74 @@ def save_to_google(name, df, start, end, km):
         return True
     except: return False
 
-# --- RESTORED PDF ENGINE (v24.4 - VERTICAL BREAKDOWN) ---
-def create_calculation_pdf(name, df, hire_total, labour_total, waiver, cartage, grand_total, km, weeks, lab_mode):
+# --- ORIGINAL PDF GENERATION (v24.0 Logic) ---
+def create_calculation_pdf(name, df, subtotal, labour, waiver, cartage, grand_total, km, weeks):
     pdf = FPDF()
     pdf.add_page()
     
     # Header
     pdf.set_font("Arial", "B", 16)
-    pdf.cell(0, 12, "INTERNAL CALCULATION BREAKDOWN", ln=True)
+    pdf.cell(0, 10, "No Fuss Event Hire - Internal Calculation Sheet", ln=True, align="C")
     pdf.set_font("Arial", "", 10)
-    pdf.cell(0, 5, f"Quote Name: {name}", ln=True)
-    pdf.cell(0, 5, f"Hire Period: {weeks} Week(s)", ln=True)
-    pdf.cell(0, 5, f"Date Generated: {date.today()}", ln=True)
-    pdf.ln(10)
-
-    # Vertical Item Explanations
-    for _, row in df.iterrows():
-        prod = row['Product']
-        qty = row['Qty']
-        unit = row['Unit_Type']
-        base_rate = row['Unit Rate']
-        labour_rate = row['Labour_Rate']
-        block_rate = row['Block_Rate']
-        
-        pdf.set_font("Arial", "B", 12)
-        pdf.cell(0, 8, f"ITEM: {prod} (Qty: {qty} {unit})", ln=True)
-        pdf.set_font("Arial", "", 11)
-        
-        # Hire Explanation
-        if weeks == 1:
-            pdf.cell(0, 6, f" - Week 1 Hire: ${base_rate:,.2f} per {unit}", ln=True)
-        else:
-            pdf.cell(0, 6, f" - Week 1 Hire (Incl. Setup/Admin): ${base_rate:,.2f} per {unit}", ln=True)
-            wk2_val = block_rate/4 if not row['Is_GS'] else base_rate
-            pdf.cell(0, 6, f" - Weeks 2+ Hire: ${wk2_val:,.2f} per {unit}/week", ln=True)
-        
-        # Labour Explanation
-        if lab_mode != "No Labour" and labour_rate > 0:
-            pdf.cell(0, 6, f" - Installation Labour: ${labour_rate:,.2f} per {unit}", ln=True)
-        
-        pdf.set_font("Arial", "B", 10)
-        pdf.cell(0, 6, f" - Line Item Total (Ex GST): ${row['Total']:,.2f}", ln=True)
-        pdf.ln(5)
-
+    pdf.cell(0, 10, f"Generated on: {date.today()}", ln=True, align="C")
     pdf.ln(5)
-    pdf.line(10, pdf.get_y(), 200, pdf.get_y())
-    pdf.ln(5)
-
-    # Logistics & Summary
+    
+    # Project Info
     pdf.set_font("Arial", "B", 12)
-    pdf.cell(0, 8, "LOGISTICS & FINAL TOTALS", ln=True)
+    pdf.cell(0, 10, f"Quote: {name}", ln=True)
     pdf.set_font("Arial", "", 11)
-    
-    pdf.cell(0, 7, f"Subtotal (Hire & Labour): ${ (hire_total + labour_total):,.2f}", ln=True)
-    pdf.cell(0, 7, f"Damage Waiver (7% of Hire): ${waiver:,.2f}", ln=True)
-    pdf.cell(0, 7, f"Cartage ({km} km x 4 trips @ $3.50): ${cartage:,.2f}", ln=True)
-    
+    pdf.cell(0, 8, f"Hire Duration: {weeks} Week(s)", ln=True)
+    pdf.cell(0, 8, f"Total Distance: {km} km", ln=True)
     pdf.ln(5)
-    pdf.set_font("Arial", "B", 14)
-    pdf.cell(0, 10, f"GRAND TOTAL (EX GST): ${grand_total:,.2f}", ln=True)
-
+    
+    # Item Table Header
+    pdf.set_fill_color(26, 29, 45)
+    pdf.set_text_color(255, 255, 255)
+    pdf.set_font("Arial", "B", 10)
+    pdf.cell(80, 10, " Product", 1, 0, "L", True)
+    pdf.cell(25, 10, " Qty", 1, 0, "C", True)
+    pdf.cell(35, 10, " Rate (Inc Lab)", 1, 0, "C", True)
+    pdf.cell(40, 10, " Total", 1, 1, "R", True)
+    
+    # Item Table Rows
+    pdf.set_text_color(0, 0, 0)
+    pdf.set_font("Arial", "", 9)
+    for _, row in df.iterrows():
+        pdf.cell(80, 8, f" {row['Product']}", 1)
+        pdf.cell(25, 8, f" {row['Qty']} {row['Unit_Type']}", 1, 0, "C")
+        pdf.cell(35, 8, f" ${row['SYSTEM RATE']:,.2f}", 1, 0, "C")
+        pdf.cell(40, 8, f" ${row['Total']:,.2f}", 1, 1, "R")
+    
+    pdf.ln(10)
+    
+    # Totals Section
+    pdf.set_font("Arial", "B", 12)
+    pdf.cell(0, 10, "Financial Breakdown", ln=True)
+    pdf.set_font("Arial", "", 11)
+    pdf.cell(100, 8, "Base Hire Subtotal:", 0)
+    pdf.cell(0, 8, f"${subtotal:,.2f}", 0, 1, "R")
+    
+    pdf.cell(100, 8, "Labour Charges:", 0)
+    pdf.cell(0, 8, f"${labour:,.2f}", 0, 1, "R")
+    
+    pdf.cell(100, 8, "Damage Waiver (7%):", 0)
+    pdf.cell(0, 8, f"${waiver:,.2f}", 0, 1, "R")
+    
+    pdf.cell(100, 8, "Cartage Total:", 0)
+    pdf.cell(0, 8, f"${cartage:,.2f}", 0, 1, "R")
+    
+    pdf.ln(2)
+    pdf.set_font("Arial", "B", 13)
+    pdf.cell(100, 10, "GRAND TOTAL (EX GST):", "T")
+    pdf.cell(0, 10, f"${grand_total:,.2f}", "T", 1, "R")
+    
     return bytes(pdf.output())
 
 # 3. PAGE CONFIG
 st.set_page_config(page_title="No Fuss Quote Pro", page_icon="📦", layout="wide")
 st.markdown("<style>.main { background-color: #FFFFFF !important; } h3 { color: #FFFFFF !important; border-left: 5px solid #00E676; padding: 10px 15px; background-color: #1A1D2D; border-radius: 0 10px 10px 0; } div.stMetric { background-color: #1A1D2D !important; padding: 20px !important; border-radius: 12px !important; border: 2px solid #3D5AFE !important; } div[data-testid='stMetricValue'] { color: #00E676 !important; font-size: 32px !important; font-weight: bold !important; } [data-testid='stMetricLabel'] p { color: #FFFFFF !important; font-weight: bold !important; font-size: 16px !important; } div.stButton > button:first-child { background-color: #3D5AFE; color: white; border-radius: 10px; height: 50px; font-weight: bold; width: 100%; } .stDataFrame { border: 2px solid #00E676 !important; border-radius: 12px; }</style>", unsafe_allow_html=True)
 
-# 4. MASTER CATALOG (v22.5 Sync)
+# 4. MASTER CATALOG
 CATALOG = {
     "FLOORING": {
         "I-Trac System": [
@@ -227,15 +228,15 @@ if not st.session_state.df.empty:
     # --- SAVE & EXPORT ---
     st.markdown("### 💾 FINISH & EXPORT")
     save_col1, save_col2, save_col3 = st.columns([2, 1, 1])
-    fn = save_col1.text_input("Project Name:", placeholder="Client Name")
+    fn = save_col1.text_input("Quote Name:", placeholder="Client Name")
     
     if save_col2.button("CLOUD ARCHIVE"):
         if fn:
             save_to_google(fn, st.session_state.df, start_date, end_date, km_input)
             st.success("Archived!")
             
-    # RESTORED PDF DOWNLOAD
-    pdf_bytes = create_calculation_pdf(fn if fn else "Internal_Quote", st.session_state.df, hire_total, lab_total, waiver_total, cart_total, final_grand, km_input if km_input else 0, live_weeks, labour_mode)
+    # RESTORED PDF Logic
+    pdf_bytes = create_calculation_pdf(fn if fn else "Internal_Quote", st.session_state.df, hire_total, lab_total, waiver_total, cart_total, final_grand, km_input if km_input else 0, live_weeks)
     save_col3.download_button(label="📥 DOWNLOAD INTERNAL PDF", data=pdf_bytes, file_name=f"{fn if fn else 'Quote'}_Calculations.pdf", mime="application/pdf")
     
     if st.button("⚠️ RESET ALL"): st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Disc %", "Total", "Labour_Rate", "Block_Rate", "SYSTEM RATE", "No_Waiver", "Is_GS", "Is_Mojo", "Unit_Type", "Is_ST"]); st.rerun()
