@@ -40,85 +40,88 @@ def save_to_google(name, df, start, end, km):
         return True
     except: return False
 
-# --- PDF GENERATION (v26.2 - MATH STRINGS & BLOCK PRICING) ---
+# --- PDF GENERATION (v26.3 - TABLE + RAW BREAKDOWN) ---
 def create_calculation_pdf(name, df, subtotal, labour, waiver, cartage, grand_total, km, weeks):
     pdf = FPDF()
     pdf.add_page()
+    
+    # Header
     pdf.set_font("Arial", "B", 16)
     pdf.cell(0, 10, "No Fuss Event Hire - Internal Calculation Sheet", ln=True, align="C")
     pdf.set_font("Arial", "", 10)
     pdf.cell(0, 10, f"Generated on: {date.today()}", ln=True, align="C")
     pdf.ln(5)
     
+    # Project Info
     pdf.set_font("Arial", "B", 12)
     pdf.cell(0, 10, f"Quote: {name}", ln=True)
     pdf.set_font("Arial", "", 11)
     pdf.cell(0, 8, f"Hire Duration: {weeks} Week(s) | Total Distance: {km} km", ln=True)
     pdf.ln(5)
+
+    # --- PART 1: THE TABLE (Like image on the right) ---
+    pdf.set_fill_color(26, 29, 45); pdf.set_text_color(255, 255, 255)
+    pdf.set_font("Arial", "B", 10)
+    pdf.cell(80, 10, " Product", 1, 0, "L", True); pdf.cell(25, 10, " Qty", 1, 0, "C", True)
+    pdf.cell(35, 10, " Rate", 1, 0, "C", True); pdf.cell(40, 10, " Total", 1, 1, "R", True)
     
+    pdf.set_text_color(0, 0, 0); pdf.set_font("Arial", "", 9)
+    for _, row in df.iterrows():
+        pdf.cell(80, 8, f" {row['Product']}", 1)
+        pdf.cell(25, 8, f" {row['Qty']} {row['Unit_Type']}", 1, 0, "C")
+        pdf.cell(35, 8, f" ${row['Unit Rate']:,.2f}", 1, 0, "C")
+        pdf.cell(40, 8, f" ${row['Total']:,.2f}", 1, 1, "R")
+    
+    pdf.ln(10)
+
+    # --- PART 2: THE FINANCIAL BREAKDOWN (The Math) ---
     pdf.set_font("Arial", "B", 13)
     pdf.cell(0, 10, "Financial Breakdown", ln=True)
     
-    # --- 1. BASE HIRE SUBTOTAL ---
+    # 1. BASE HIRE SUBTOTAL
     pdf.set_font("Arial", "B", 11)
     pdf.cell(0, 8, f"BASE HIRE SUBTOTAL: ${subtotal:,.2f}", ln=True)
     pdf.set_font("Arial", "", 10)
-    
     for _, row in df.iterrows():
         if not row['Is_Lab_Line']:
-            p_name = row['Product']
-            qty = row['Qty']
-            rate = row['Unit Rate']
-            total = row['Total']
-            
-            if "Marquee" in p_name:
+            if "Marquee" in row['Product']:
                 try:
-                    parts = p_name.replace("Marquee ", "").upper().split("X")
+                    parts = row['Product'].replace("Marquee ", "").upper().split("X")
                     sqm = int(parts[0].strip()) * int(parts[1].strip())
-                    pdf.cell(0, 6, f"{p_name} - {sqm}sqm x 23 = ${total:,.2f}", ln=True)
-                except:
-                    pdf.cell(0, 6, f"{p_name} x {rate:,.2f} = ${total:,.2f}", ln=True)
-            elif "Weight" in p_name:
-                pdf.cell(0, 6, f"Weights - {qty}EA x {rate:,.2f} = ${total:,.2f}", ln=True)
+                    pdf.cell(0, 6, f"{row['Product']} - {sqm}sqm x 23 = {row['Total']:,.2f}", ln=True)
+                except: pdf.cell(0, 6, f"{row['Product']} x {row['Unit Rate']} = {row['Total']:,.2f}", ln=True)
+            elif "Weight" in row['Product']:
+                pdf.cell(0, 6, f"Weights - {row['Qty']}EA x {row['Unit Rate']} = {row['Total']:,.2f}", ln=True)
             else:
-                pdf.cell(0, 6, f"{p_name} - {qty} x {rate:,.2f} = ${total:,.2f}", ln=True)
+                pdf.cell(0, 6, f"{row['Product']} - {row['Qty']} x {row['Unit Rate']} = {row['Total']:,.2f}", ln=True)
 
-    # --- 2. LABOUR ---
-    pdf.ln(4)
-    pdf.set_font("Arial", "B", 11)
+    # 2. LABOUR
+    pdf.ln(4); pdf.set_font("Arial", "B", 11)
     pdf.cell(0, 8, f"Labour: ${labour:,.2f}", ln=True)
     pdf.set_font("Arial", "", 10)
-    
     for _, row in df.iterrows():
         if row['Is_Lab_Line']:
-            clean_name = row['Product'].replace("Labour: Build/Strike (", "").replace(")", "").replace("Labour (", "")
+            clean_name = row['Product'].replace("Labour (", "").replace(")", "")
             pdf.cell(0, 6, f"{clean_name} x 55% = ${row['Total']:,.2f}", ln=True)
 
-    # --- 3. WAIVER & CARTAGE ---
-    pdf.ln(4)
-    pdf.set_font("Arial", "B", 11)
+    # 3. WAIVER & CARTAGE
+    pdf.ln(4); pdf.set_font("Arial", "B", 11)
     pdf.cell(0, 8, f"Damage Waiver (7%): ${waiver:,.2f}", ln=True)
-    pdf.set_font("Arial", "", 10)
-    pdf.cell(0, 6, f"${subtotal:,.2f} x 0.07", ln=True)
+    pdf.set_font("Arial", "", 10); pdf.cell(0, 6, f"${subtotal:,.2f} x 0.07", ln=True)
     
-    pdf.ln(2)
-    pdf.set_font("Arial", "B", 11)
+    pdf.ln(2); pdf.set_font("Arial", "B", 11)
     pdf.cell(0, 8, f"Cartage Total: ${cartage:,.2f}", ln=True)
-    pdf.set_font("Arial", "", 10)
-    pdf.cell(0, 6, f"{km} km x 4 trips x $3.50/km", ln=True)
+    pdf.set_font("Arial", "", 10); pdf.cell(0, 6, f"{km} km x 4 trips x $3.50/km", ln=True)
     
-    pdf.ln(10)
-    pdf.set_font("Arial", "B", 14)
-    pdf.set_fill_color(240, 240, 240)
+    pdf.ln(10); pdf.set_font("Arial", "B", 14); pdf.set_fill_color(240, 240, 240)
     pdf.cell(0, 12, f"GRAND TOTAL (EX GST): ${grand_total:,.2f}", 1, 1, "R", True)
     
     return bytes(pdf.output())
 
-# 3. APP STYLING
+# 3. APP UI & LOGIC
 st.set_page_config(page_title="No Fuss Quote Pro", page_icon="📦", layout="wide")
 st.markdown("<style>.main { background-color: #FFFFFF !important; } h3 { color: #FFFFFF !important; border-left: 5px solid #00E676; padding: 10px 15px; background-color: #1A1D2D; border-radius: 0 10px 10px 0; margin-top: 20px; } div.stMetric { background-color: #1A1D2D !important; padding: 20px !important; border-radius: 12px !important; border: 2px solid #3D5AFE !important; } div[data-testid='stMetricValue'] { color: #00E676 !important; font-size: 32px !important; font-weight: bold !important; } [data-testid='stMetricLabel'] p { color: #FFFFFF !important; font-weight: bold !important; font-size: 16px !important; } div.stButton > button:first-child { background-color: #3D5AFE; color: white; border-radius: 10px; height: 50px; font-weight: bold; width: 100%; } .stDataFrame { border: 2px solid #00E676 !important; border-radius: 12px; }</style>", unsafe_allow_html=True)
 
-# 4. MASTER CATALOG
 CATALOG = {
     "MARQUEE": {
         "Structures": [
@@ -127,9 +130,7 @@ CATALOG = {
             {"Product": "Marquee 6 X 3", "w1_3": 414.00, "labour": 227.70, "weights_req": 32, "unit": "ea"},
             {"Product": "Marquee 9 X 3", "w1_3": 621.00, "labour": 341.55, "weights_req": 40, "unit": "ea"}
         ],
-        "Accessories": [
-            {"Product": "Orange Weight", "w1_3": 6.60, "labour": 0.00, "unit": "ea", "waiver": True}
-        ]
+        "Accessories": [{"Product": "Orange Weight", "w1_3": 6.60, "labour": 0.00, "unit": "ea", "waiver": True}]
     },
     "FLOORING": {
         "I-Trac": [{"Product": "I-Trac flooring", "w1_3": 23.40, "block": 46.80, "labour": 4.65, "unit": "SQM", "waiver": True}],
@@ -151,7 +152,6 @@ live_weeks = math.ceil(((end_date - start_date).days) / 7) if (end_date - start_
 
 # ADD PRODUCT
 dept_choice = st.selectbox("Department", sorted(CATALOG.keys(), reverse=True))
-selected_group = "Structures" if dept_choice == "MARQUEE" else list(CATALOG[dept_choice].keys())[0]
 bundle_choice = st.selectbox("Select Group", sorted(CATALOG[dept_choice].keys(), reverse=True))
 selected_bundle = CATALOG[dept_choice][bundle_choice]
 
@@ -188,19 +188,13 @@ if not st.session_state.df.empty:
     h_tot, lab_tot, w_tot = 0.0, 0.0, 0.0
     for idx, row in st.session_state.df.iterrows():
         q, r, d, b, is_lab = row["Qty"], row["Unit Rate"], row["Disc %"], row["Block_Rate"], row["Is_Lab_Line"]
-        
-        # Determine Rate based on 4-week block logic
         current_unit_rate = (b / 4) if live_weeks >= 4 else r
-        line_val = q * current_unit_rate * live_weeks * (1 - (d/100))
+        line_val = q * current_unit_rate * (live_weeks if not is_lab else 1) * (1 - (d/100))
         
-        if is_lab:
-            # Labour is usually a one-off setup, adjust if weeks affects it
-            line_val = q * r * (1 - (d/100))
-            lab_tot += line_val
+        if is_lab: lab_tot += line_val
         else:
             if inc_waiv and not row["No_Waiver"]: w_tot += line_val * 0.07
             h_tot += line_val
-            
         st.session_state.df.at[idx, "Total"] = line_val
 
     c_val = (km_input * 14.0 if km_input and inc_cart else 0)
