@@ -77,7 +77,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# 3. MASTER CATALOG (Synced with v22.5 Data)
+# 3. MASTER CATALOG
 CATALOG = {
     "FLOORING": {
         "I-Trac System": [
@@ -124,24 +124,16 @@ if 'df' not in st.session_state:
 
 st.title("📦 No Fuss Quote Pro")
 
-# --- 0. SAVE/LOAD SECTION ---
-st.markdown("### 💾 QUOTE ARCHIVE")
-sl_col1, sl_col2 = st.columns(2)
-with sl_col1:
-    q_name = st.text_input("Quote Name (to save)", placeholder="Client Name / Event")
-    if st.button("SAVE CURRENT QUOTE"):
-        if q_name and not st.session_state.df.empty:
-            save_quote(q_name, st.session_state.df, date.today(), date.today(), 0)
-            st.success(f"Quote '{q_name}' archived.")
-
-with sl_col2:
-    existing = load_quote_list()
-    load_choice = st.selectbox("Load Previous Quote", ["Select..."] + existing)
-    if st.button("LOAD SELECTED"):
-        if load_choice != "Select...":
-            saved = get_quote_data(load_choice)
-            st.session_state.df = pd.DataFrame(saved["df"])
-            st.rerun()
+# --- 0. LOAD ARCHIVE ---
+st.markdown("### 📂 LOAD RECENT QUOTES")
+existing = load_quote_list()
+l_col1, l_col2 = st.columns([3, 1])
+load_choice = l_col1.selectbox("Archive History", ["Select..."] + existing, label_visibility="collapsed")
+if l_col2.button("LOAD DATA"):
+    if load_choice != "Select...":
+        saved = get_quote_data(load_choice)
+        st.session_state.df = pd.DataFrame(saved["df"])
+        st.rerun()
 
 # --- 1. LOGISTICS ---
 st.markdown("### 📍 HIRE DATES & DISTANCE")
@@ -191,11 +183,13 @@ if st.button("ADD SELECTED ITEMS TO QUOTE"):
         st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame(new_rows)], ignore_index=True)
         st.rerun()
 
-# --- 3. DATA GRID & 4. SELECTORS ---
+# --- 3. QUOTED ITEMS ---
 if not st.session_state.df.empty:
     st.markdown("### 🏗️ QUOTED ITEMS")
-    display_cols = ["Qty", "Unit_Type", "Product", "SYSTEM RATE", "Unit Rate", "Disc %", "Total"]
-    edited_df = st.data_editor(st.session_state.df[display_cols], num_rows="dynamic", use_container_width=True, key="editor")
+    # v22.7 Update: Raw Unit Rate is now clearly separated from the dynamic System Rate
+    display_cols = ["Qty", "Unit_Type", "Product", "Unit Rate", "Disc %", "SYSTEM RATE", "Total"]
+    edited_df = st.data_editor(st.session_state.df[display_cols], num_rows="dynamic", use_container_width=True, key="editor",
+                               column_config={"Unit Rate": st.column_config.NumberColumn("Base Price", format="$%.2f"), "SYSTEM RATE": st.column_config.NumberColumn("Final Rate (Incl Lab)", format="$%.2f")})
     if not edited_df.equals(st.session_state.df[display_cols]):
         for col in ["Qty", "Unit Rate", "Disc %"]: st.session_state.df[col] = edited_df[col]
         st.rerun()
@@ -217,9 +211,9 @@ if not st.session_state.df.empty:
     charge_cartage = col_cart.checkbox("🚚 Include Cartage ($3.50/km x 4)", value=True)
     include_damage_waiver = col_waiv.checkbox("🛡️ Include Damage Waiver (7%)", value=True)
 
-    # --- 5. FINANCES (STRICT PRE-LABOUR WAIVER) ---
+    # --- 5. FINANCES ---
     hire_total, lab_total, waiver_total, total_sheets = 0.0, 0.0, 0.0, 0
-    m_baked = (mojo_lab / st.session_state.df[st.session_state.df["Is_Mojo"] == True]["Qty"].sum()) if (has_mojo and labour_mode == "Bake Labour into Unit Rate") else 0.0
+    m_baked = (mojo_lab / st.session_state.df[st.session_state.df["Is_Mojo"] == True]["Qty"].sum()) if (has_mojo and labour_mode == "Bake Labour into Unit Rate" and st.session_state.df[st.session_state.df["Is_Mojo"] == True]["Qty"].sum() > 0) else 0.0
     if has_mojo and labour_mode == "Show Labour as Separate Line Item": lab_total = mojo_lab
 
     for idx, row in st.session_state.df.iterrows():
@@ -250,4 +244,12 @@ if not st.session_state.df.empty:
         init = wk_r + (lr if labour_mode == "Bake Labour into Unit Rate" else 0)
         copy_block = f"PRICING BASED ON {live_weeks} WEEK HIRE PERIOD\nPrice per {ut} = ${init:,.2f} + GST" if round(init, 2) == round(wk_r, 2) else f"PRICING BASED ON {live_weeks} WEEK HIRE PERIOD\nPrice for Initial Week (Incl. Install) = ${init:,.2f} per {ut} + GST\nPrice for weeks 2+ = ${wk_r:,.2f} per {ut}/week + GST"
         st.text_area(f"Line {idx+1}: {row['Product']}", value=copy_block, height=100)
-    if st.button("⚠️ RESET QUOTE"): st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Disc %", "Total", "Labour_Rate", "Block_Rate", "SYSTEM RATE", "No_Waiver", "Is_GS", "Is_Mojo", "Unit_Type", "Is_ST"]); st.rerun()
+
+    st.markdown("### 💾 FINISH & SAVE")
+    save_col1, save_col2 = st.columns([3, 1])
+    finish_name = save_col1.text_input("Save finalized quote as:", placeholder="e.g. Marvel Stadium - Oct 2026", key="finish_save")
+    if save_col2.button("ARCHIVE QUOTE"):
+        if finish_name:
+            save_quote(finish_name, st.session_state.df, start_date, end_date, km_input)
+            st.success(f"Successfully archived: {finish_name}")
+    if st.button("⚠️ RESET ALL & START NEW"): st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Disc %", "Total", "Labour_Rate", "Block_Rate", "SYSTEM RATE", "No_Waiver", "Is_GS", "Is_Mojo", "Unit_Type", "Is_ST"]); st.rerun()
