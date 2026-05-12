@@ -24,7 +24,7 @@ def check_password():
 if not check_password():
     st.stop()
 
-# 2. DATABASE CONNECTION (pausable setup)
+# 2. DATABASE CONNECTION (Standard setup)
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 def save_to_google(name, df, start, end, km):
@@ -44,60 +44,63 @@ def save_to_google(name, df, start, end, km):
         return True
     except: return False
 
-# --- UPDATED PDF GENERATION (v24.3 - CLEAN LAYOUT) ---
-def create_calculation_pdf(name, df, subtotal, labour, waiver, cartage, grand_total, km, weeks, lab_mode):
+# --- RESTORED PDF ENGINE (v24.4 - VERTICAL BREAKDOWN) ---
+def create_calculation_pdf(name, df, hire_total, labour_total, waiver, cartage, grand_total, km, weeks, lab_mode):
     pdf = FPDF()
     pdf.add_page()
     
-    # 1. HEADER
+    # Header
     pdf.set_font("Arial", "B", 16)
-    pdf.cell(0, 10, "INTERNAL QUOTE BREAKDOWN", ln=True)
+    pdf.cell(0, 12, "INTERNAL CALCULATION BREAKDOWN", ln=True)
     pdf.set_font("Arial", "", 10)
-    pdf.cell(0, 5, f"Project: {name}", ln=True)
-    pdf.cell(0, 5, f"Hire Duration: {weeks} Week(s)", ln=True)
+    pdf.cell(0, 5, f"Quote Name: {name}", ln=True)
+    pdf.cell(0, 5, f"Hire Period: {weeks} Week(s)", ln=True)
+    pdf.cell(0, 5, f"Date Generated: {date.today()}", ln=True)
     pdf.ln(10)
-    
-    # 2. ITEM BREAKDOWNS (HEADER > EXPLANATION)
+
+    # Vertical Item Explanations
     for _, row in df.iterrows():
-        base = row['Unit Rate']
-        lab_rate = row['Labour_Rate']
-        unit = row['Unit_Type']
         prod = row['Product']
         qty = row['Qty']
+        unit = row['Unit_Type']
+        base_rate = row['Unit Rate']
+        labour_rate = row['Labour_Rate']
+        block_rate = row['Block_Rate']
         
-        # Header for the item
         pdf.set_font("Arial", "B", 12)
-        pdf.cell(0, 8, f"{prod} - Qty: {qty} {unit}", ln=True)
+        pdf.cell(0, 8, f"ITEM: {prod} (Qty: {qty} {unit})", ln=True)
+        pdf.set_font("Arial", "", 11)
         
-        # Explanation
-        pdf.set_font("Arial", "", 10)
+        # Hire Explanation
         if weeks == 1:
-            pdf.cell(0, 6, f"Hire Rate: ${base:,.2f} per {unit} for 1 week period", ln=True)
+            pdf.cell(0, 6, f" - Week 1 Hire: ${base_rate:,.2f} per {unit}", ln=True)
         else:
-            pdf.cell(0, 6, f"Week 1 Hire: ${base:,.2f} per {unit} (Includes initial setup/delivery logic if applicable)", ln=True)
-            wk2_rate = row['Block_Rate']/4 if not row['Is_GS'] else base
-            pdf.cell(0, 6, f"Week 2+ Hire: ${wk2_rate:,.2f} per {unit}/week", ln=True)
+            pdf.cell(0, 6, f" - Week 1 Hire (Incl. Setup/Admin): ${base_rate:,.2f} per {unit}", ln=True)
+            wk2_val = block_rate/4 if not row['Is_GS'] else base_rate
+            pdf.cell(0, 6, f" - Weeks 2+ Hire: ${wk2_val:,.2f} per {unit}/week", ln=True)
         
-        if lab_mode != "No Labour" and lab_rate > 0:
-            pdf.cell(0, 6, f"Labour Charge: ${lab_rate:,.2f} per {unit} based on standard install rates", ln=True)
+        # Labour Explanation
+        if lab_mode != "No Labour" and labour_rate > 0:
+            pdf.cell(0, 6, f" - Installation Labour: ${labour_rate:,.2f} per {unit}", ln=True)
         
         pdf.set_font("Arial", "B", 10)
-        pdf.cell(0, 6, f"Line Total: ${row['Total']:,.2f}", ln=True)
-        pdf.ln(6)
-        pdf.line(pdf.get_x(), pdf.get_y(), pdf.get_x() + 190, pdf.get_y()) # separator line
-        pdf.ln(4)
+        pdf.cell(0, 6, f" - Line Item Total (Ex GST): ${row['Total']:,.2f}", ln=True)
+        pdf.ln(5)
 
-    # 3. LOGISTICS & WAIVER EXPLANATION
+    pdf.ln(5)
+    pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+    pdf.ln(5)
+
+    # Logistics & Summary
     pdf.set_font("Arial", "B", 12)
-    pdf.cell(0, 10, "LOGISTICS & FEES", ln=True)
-    pdf.set_font("Arial", "", 10)
+    pdf.cell(0, 8, "LOGISTICS & FINAL TOTALS", ln=True)
+    pdf.set_font("Arial", "", 11)
     
-    pdf.cell(0, 6, f"Damage Waiver: ${waiver:,.2f} (Calculated as 7% of discounted hire total)", ln=True)
-    pdf.cell(0, 6, f"Cartage/Delivery: ${cartage:,.2f} (Calculated as {km} km x 4 trips @ $3.50/km)", ln=True)
+    pdf.cell(0, 7, f"Subtotal (Hire & Labour): ${ (hire_total + labour_total):,.2f}", ln=True)
+    pdf.cell(0, 7, f"Damage Waiver (7% of Hire): ${waiver:,.2f}", ln=True)
+    pdf.cell(0, 7, f"Cartage ({km} km x 4 trips @ $3.50): ${cartage:,.2f}", ln=True)
     
-    pdf.ln(10)
-    
-    # 4. FINAL TOTAL
+    pdf.ln(5)
     pdf.set_font("Arial", "B", 14)
     pdf.cell(0, 10, f"GRAND TOTAL (EX GST): ${grand_total:,.2f}", ln=True)
 
@@ -213,26 +216,26 @@ if not st.session_state.df.empty:
         st.session_state.df.at[idx, "Total"], st.session_state.df.at[idx, "SYSTEM RATE"] = total_line, (total_line / q if q > 0 else 0)
         hire_total += total_line
 
-    cartage = (km_input * 14.0 if km_input and charge_cartage else 0)
-    grand_total = hire_total + lab_total + waiver_total + cartage
+    cart_total = (km_input * 14.0 if km_input and charge_cartage else 0)
+    final_grand = hire_total + lab_total + waiver_total + cart_total
 
     st.divider()
     m1, m2, m3, m4 = st.columns(4)
-    m1.metric("SUBTOTAL", f"${hire_total:,.2f}"); m2.metric("LABOUR", f"${lab_total:,.2f}"); m3.metric("WAIVER", f"${waiver_total:,.2f}"); m4.metric("CARTAGE", f"${cartage:,.2f}")
-    st.metric("GRAND TOTAL (EX GST)", f"${grand_total:,.2f}")
+    m1.metric("SUBTOTAL", f"${hire_total:,.2f}"); m2.metric("LABOUR", f"${lab_total:,.2f}"); m3.metric("WAIVER", f"${waiver_total:,.2f}"); m4.metric("CARTAGE", f"${cart_total:,.2f}")
+    st.metric("GRAND TOTAL (EX GST)", f"${final_grand:,.2f}")
 
-    # --- 9. FINISH & SAVE & EXPORT ---
+    # --- SAVE & EXPORT ---
     st.markdown("### 💾 FINISH & EXPORT")
     save_col1, save_col2, save_col3 = st.columns([2, 1, 1])
-    fn = save_col1.text_input("Quote Name:", placeholder="Client Name / Event")
+    fn = save_col1.text_input("Project Name:", placeholder="Client Name")
     
     if save_col2.button("CLOUD ARCHIVE"):
         if fn:
             save_to_google(fn, st.session_state.df, start_date, end_date, km_input)
             st.success("Archived!")
             
-    # PDF DOWNLOAD BUTTON with simplified layout
-    pdf_bytes = create_calculation_pdf(fn if fn else "Internal_Quote", st.session_state.df, hire_total, lab_total, waiver_total, cartage, grand_total, km_input if km_input else 0, live_weeks, labour_mode)
+    # RESTORED PDF DOWNLOAD
+    pdf_bytes = create_calculation_pdf(fn if fn else "Internal_Quote", st.session_state.df, hire_total, lab_total, waiver_total, cart_total, final_grand, km_input if km_input else 0, live_weeks, labour_mode)
     save_col3.download_button(label="📥 DOWNLOAD INTERNAL PDF", data=pdf_bytes, file_name=f"{fn if fn else 'Quote'}_Calculations.pdf", mime="application/pdf")
     
     if st.button("⚠️ RESET ALL"): st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Disc %", "Total", "Labour_Rate", "Block_Rate", "SYSTEM RATE", "No_Waiver", "Is_GS", "Is_Mojo", "Unit_Type", "Is_ST"]); st.rerun()
