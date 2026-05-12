@@ -1,10 +1,8 @@
 import streamlit as st
-from streamlit_gsheets import GSheetsConnection
 import math
 import pandas as pd
 from datetime import date
 from fpdf import FPDF
-import io
 import re
 
 # 1. PASSWORD PROTECTION
@@ -25,7 +23,7 @@ def check_password():
 if not check_password():
     st.stop()
 
-# --- DATA: STRUCTURE RATE CARD ---
+# --- DATA: MASTER RATE CARD (v28.2) ---
 STRUCT_LOGIC = {
     4:  {"bay": 3, "s_rate": 23.00, "m_rate": 18.20, "s_lab": 0.55, "m_lab": 0.40, "min_lab": 350.00},
     6:  {"bay": 3, "s_rate": 23.00, "m_rate": 18.20, "s_lab": 0.55, "m_lab": 0.40, "min_lab": 350.00},
@@ -37,13 +35,13 @@ STRUCT_LOGIC = {
 }
 
 MARQUEE_UNITS = {
-    "3m x 3m Hi Top": {"rate": 198.45, "lab": 0.55, "min_lab": 350.00},
-    "3m x 3m Shade": {"rate": 198.45, "lab": 0.55, "min_lab": 350.00},
-    "3m x 6m Shade": {"rate": 396.90, "lab": 0.55, "min_lab": 350.00},
-    "4.5m x 4.5m": {"rate": 446.51, "lab": 0.55, "min_lab": 350.00}
+    "3x3 Hi Top": {"rate": 198.45, "lab_perc": 0.55, "min_lab": 350.00},
+    "3x3 Shade": {"rate": 198.45, "lab_perc": 0.55, "min_lab": 350.00},
+    "3x6 Shade": {"rate": 396.90, "lab_perc": 0.55, "min_lab": 350.00},
+    "4.5x4.5": {"rate": 446.51, "lab_perc": 0.55, "min_lab": 350.00}
 }
 
-# --- PDF ENGINE (v28.1 - CONSOLIDATED LABOUR) ---
+# 2. PDF ENGINE (v28.2)
 def create_calculation_pdf(name, df, subtotal, final_labour, waiver, cartage, grand_total, km, weeks):
     pdf = FPDF()
     pdf.add_page()
@@ -76,16 +74,16 @@ def create_calculation_pdf(name, df, subtotal, final_labour, waiver, cartage, gr
     pdf.set_font("Arial", "B", 11); pdf.cell(0, 8, f"BASE HIRE SUBTOTAL: ${subtotal:,.2f}", ln=True)
     pdf.set_font("Arial", "", 10)
     for _, row in df.iterrows():
-        if not row['Is_Lab_Line']:
-            qty, total, p_name = row['Qty'], row['Total'], row['Product']
-            meta = f" - {row['Product_Meta']}" if row['Product_Meta'] else ""
-            pdf.cell(0, 6, f"{qty} - {p_name}{meta} x ${row['Unit Rate']:,.2f} = ${total:,.2f}", ln=True)
+        qty, total, p_name = row['Qty'], row['Total'], row['Product']
+        meta = f" ({row['Product_Meta']})" if row['Product_Meta'] else ""
+        pdf.cell(0, 6, f"{qty} - {p_name}{meta} x ${row['Unit Rate']:,.2f} = ${total:,.2f}", ln=True)
 
     # Consolidated Labour
-    pdf.ln(4); pdf.set_font("Arial", "B", 11); pdf.cell(0, 8, f"Labour: ${final_labour:,.2f}", ln=True)
+    pdf.ln(4); pdf.set_font("Arial", "B", 11); pdf.cell(0, 8, f"Labour Total: ${final_labour:,.2f}", ln=True)
     pdf.set_font("Arial", "", 10)
-    pdf.cell(0, 6, "(Consolidated Minimum Labour applied to total job)", ln=True)
+    pdf.cell(0, 6, "(Includes 55% Marquee Lab + $1.03/unit Weight Handling + Min Charge check)", ln=True)
 
+    # Waiver/Cartage
     pdf.ln(4); pdf.set_font("Arial", "B", 11); pdf.cell(0, 8, f"Damage Waiver (7%): ${waiver:,.2f}", ln=True)
     pdf.set_font("Arial", "", 10); pdf.cell(0, 6, f"${subtotal:,.2f} x 0.07", ln=True)
     pdf.ln(2); pdf.set_font("Arial", "B", 11); pdf.cell(0, 8, f"Cartage Total: ${cartage:,.2f}", ln=True)
@@ -95,12 +93,12 @@ def create_calculation_pdf(name, df, subtotal, final_labour, waiver, cartage, gr
     pdf.cell(0, 12, f"GRAND TOTAL (EX GST): ${grand_total:,.2f}", 1, 1, "R", True)
     return bytes(pdf.output())
 
-# 4. APP UI
-st.set_page_config(page_title="No Fuss Quote Pro v28.1", layout="wide")
+# 3. APP UI
+st.set_page_config(page_title="No Fuss Quote Pro v28.2", layout="wide")
 st.markdown("<style>.main { background-color: #FFFFFF !important; } h3 { color: #FFFFFF !important; border-left: 5px solid #00E676; padding: 10px 15px; background-color: #1A1D2D; border-radius: 0 10px 10px 0; margin-top: 20px; } div.stMetric { background-color: #1A1D2D !important; padding: 20px !important; border-radius: 12px !important; border: 2px solid #3D5AFE !important; } div[data-testid='stMetricValue'] { color: #00E676 !important; font-size: 32px !important; font-weight: bold !important; } [data-testid='stMetricLabel'] p { color: #FFFFFF !important; font-weight: bold !important; font-size: 16px !important; } div.stButton > button:first-child { background-color: #3D5AFE; color: white; border-radius: 10px; height: 50px; font-weight: bold; width: 100%; }</style>", unsafe_allow_html=True)
 
 if 'df' not in st.session_state:
-    st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Total", "No_Waiver", "Unit_Type", "Is_Lab_Line", "Product_Meta", "Min_Lab_Floor", "Raw_Lab_Value"])
+    st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Total", "Unit_Type", "Product_Meta", "Min_Lab_Floor", "Raw_Lab_Value"])
 
 st.title("📦 No Fuss Quote Pro")
 
@@ -112,44 +110,47 @@ km_input = c3.number_input("Distance (KM)", min_value=0.0, value=0.0)
 live_weeks = math.ceil(((end_date - start_date).days) / 7) if (end_date - start_date).days > 0 else 1
 
 # --- QUICK-ADD ---
-st.markdown("### ⚡ QUICK-ADD (Structures & Marquees)")
-mode = st.radio("Type", ["Structure (WxL)", "Standard Marquee (Select)"], horizontal=True)
+st.markdown("### ⚡ QUICK-ADD (Smart Logic)")
+q_input = st.text_input("Type Size (e.g., 3x3, 3x6, 10x20)", placeholder="Width x Length...")
+q_qty = st.number_input("Quantity of Units", min_value=1, value=1)
+q_sec = st.radio("Securing", ["Weights", "Pegging"], horizontal=True)
 
-if mode == "Structure (WxL)":
-    mq1, mq2 = st.columns([3, 1])
-    q_input = mq1.text_input("Type Size (e.g., 9x12, 10x20)", placeholder="Width x Length...")
-    q_sec = mq2.radio("Securing", ["Weights", "Pegging"], horizontal=True)
-    
-    if st.button("ADD STRUCTURE"):
-        nums = re.findall(r'\d+', q_input)
-        if len(nums) == 2:
-            v1, v2 = int(nums[0]), int(nums[1])
+if st.button("ADD TO QUOTE"):
+    nums = re.findall(r'\d+', q_input)
+    if len(nums) >= 2:
+        v1, v2 = int(nums[0]), int(nums[1])
+        # Force 3x3 and 3x6 to MARQUEE logic as per DEFAULT RULE
+        if (v1 == 3 and v2 == 3) or (v2 == 3 and v1 == 3):
+            data = MARQUEE_UNITS["3x3 Hi Top"]
+            new_rows = [{"Qty": q_qty, "Product": "3m x 3m Hi Top", "Unit Rate": data['rate'], "Total": 0.0, "Unit_Type": "ea", "Product_Meta": "9sqm", "Min_Lab_Floor": data['min_lab'], "Raw_Lab_Value": data['rate'] * q_qty * data['lab_perc']}]
+            if q_sec == "Weights":
+                # 24 weights for 3x3 as per previous instruction
+                new_rows.append({"Qty": 24 * q_qty, "Product": "Orange Weights", "Unit Rate": 6.60, "Total": 0.0, "Unit_Type": "ea", "Product_Meta": "", "Min_Lab_Floor": 0, "Raw_Lab_Value": (24 * q_qty) * 1.03125})
+        
+        elif (v1 == 3 and v2 == 6) or (v2 == 3 and v1 == 6):
+            data = MARQUEE_UNITS["3x6 Shade"]
+            new_rows = [{"Qty": q_qty, "Product": "3m x 6m Shade", "Unit Rate": data['rate'], "Total": 0.0, "Unit_Type": "ea", "Product_Meta": "18sqm", "Min_Lab_Floor": data['min_lab'], "Raw_Lab_Value": data['rate'] * q_qty * data['lab_perc']}]
+            if q_sec == "Weights":
+                # Scaling weights for 3x6 (32 weights)
+                new_rows.append({"Qty": 32 * q_qty, "Product": "Orange Weights", "Unit Rate": 6.60, "Total": 0.0, "Unit_Type": "ea", "Product_Meta": "", "Min_Lab_Floor": 0, "Raw_Lab_Value": (32 * q_qty) * 1.03125})
+        
+        else:
+            # STRUCTURE LOGIC
             spans = sorted(list(STRUCT_LOGIC.keys()), reverse=True)
             span = next((s for s in spans if v1 == s or v2 == s), v1)
             length = v2 if span == v1 else v1
-            
             logic = STRUCT_LOGIC.get(span, STRUCT_LOGIC[4])
             bays = math.ceil(length / logic['bay'])
             sqm = span * length
             rate = logic['s_rate'] if bays == 1 else logic['m_rate']
-            hire_total = sqm * rate
             lab_perc = logic['s_lab'] if bays == 1 else logic['m_lab']
+            hire_total = sqm * rate
             
-            new_rows = [
-                {"Qty": 1, "Product": f"Structure {span}m x {length}m", "Unit Rate": hire_total, "Total": 0.0, "No_Waiver": False, "Unit_Type": "ea", "Is_Lab_Line": False, "Product_Meta": f"{sqm}sqm", "Min_Lab_Floor": logic['min_lab'], "Raw_Lab_Value": hire_total * lab_perc}
-            ]
+            new_rows = [{"Qty": q_qty, "Product": f"Structure {span}m x {length}m", "Unit Rate": hire_total, "Total": 0.0, "Unit_Type": "ea", "Product_Meta": f"{sqm}sqm", "Min_Lab_Floor": logic['min_lab'], "Raw_Lab_Value": hire_total * q_qty * lab_perc}]
             if q_sec == "Weights":
                 w_qty = bays * (8 if logic['bay']==3 else 12)
-                new_rows.append({"Qty": w_qty, "Product": "Orange Weights", "Unit Rate": 6.60, "Total": 0.0, "No_Waiver": False, "Unit_Type": "ea", "Is_Lab_Line": False, "Product_Meta": "", "Min_Lab_Floor": 0, "Raw_Lab_Value": 0})
-            st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame(new_rows)], ignore_index=True); st.rerun()
+                new_rows.append({"Qty": w_qty * q_qty, "Product": "Orange Weights", "Unit Rate": 6.60, "Total": 0.0, "Unit_Type": "ea", "Product_Meta": "", "Min_Lab_Floor": 0, "Raw_Lab_Value": (w_qty * q_qty) * 1.03125})
 
-else:
-    mq_select = st.selectbox("Select Marquee", list(MARQUEE_UNITS.keys()))
-    if st.button("ADD MARQUEE"):
-        data = MARQUEE_UNITS[mq_select]
-        new_rows = [
-            {"Qty": 1, "Product": mq_select, "Unit Rate": data['rate'], "Total": 0.0, "No_Waiver": False, "Unit_Type": "ea", "Is_Lab_Line": False, "Product_Meta": "", "Min_Lab_Floor": data['min_lab'], "Raw_Lab_Value": data['rate'] * data['lab']}
-        ]
         st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame(new_rows)], ignore_index=True); st.rerun()
 
 # --- FINANCES ---
@@ -159,14 +160,12 @@ if not st.session_state.df.empty:
     
     h_tot, raw_lab_sum, max_min_lab = 0.0, 0.0, 0.0
     for idx, row in st.session_state.df.iterrows():
-        q, r = row["Qty"], row["Unit Rate"]
-        line_hire = q * r * live_weeks
+        line_hire = row["Qty"] * row["Unit Rate"] * live_weeks
         h_tot += line_hire
         raw_lab_sum += row["Raw_Lab_Value"]
         max_min_lab = max(max_min_lab, row["Min_Lab_Floor"])
         st.session_state.df.at[idx, "Total"] = line_hire
 
-    # Global Labour Math
     final_lab_charge = max(max_min_lab, raw_lab_sum)
     w_tot = h_tot * 0.07
     c_val = km_input * 4 * 3.50
