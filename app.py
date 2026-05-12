@@ -5,6 +5,10 @@ import pandas as pd
 from datetime import date
 import json
 
+# --- HARD-LINKED CONFIG (v23.3) ---
+# Your specific sheet URL is now a backup inside the code
+SHEET_URL = "https://docs.google.com/spreadsheets/d/1Fs-WAeLWr-I3oduyIAX0V-cNTLCd8_j91ummWa_k-Rw"
+
 # 1. PASSWORD PROTECTION
 def check_password():
     if "password_correct" not in st.session_state:
@@ -24,7 +28,7 @@ if not check_password():
     st.stop()
 
 # 2. DATABASE CONNECTION
-# Uses the [connections.gsheets] section from your Secrets
+# We pass the URL directly to ensure it never says "Spreadsheet not specified"
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 def save_to_google(name, df, start, end, km):
@@ -37,13 +41,14 @@ def save_to_google(name, df, start, end, km):
             "KM": km,
             "Saved_Date": str(date.today())
         }])
-        existing_data = conn.read(ttl=0)
+        # Explicitly passing the URL to the read and update functions
+        existing_data = conn.read(spreadsheet=SHEET_URL, ttl=0)
         updated_data = pd.concat([existing_data, new_entry], ignore_index=True)
-        conn.update(data=updated_data)
+        conn.update(spreadsheet=SHEET_URL, data=updated_data)
         st.cache_data.clear()
         return True
     except Exception as e:
-        st.error(f"Save Failed. Error: {e}")
+        st.error(f"Save Failed: {e}")
         return False
 
 # 3. PAGE CONFIG
@@ -96,11 +101,11 @@ if 'df' not in st.session_state:
 
 st.title("📦 No Fuss Quote Pro")
 
-# --- 5. CLOUD LOAD (v23.2 Debug Edition) ---
+# --- 5. CLOUD LOAD (v23.3 Hard-Linked) ---
 st.markdown("### 📂 ARCHIVE HISTORY")
 try:
-    archive_df = conn.read(ttl=0)
-    if not archive_df.empty:
+    archive_df = conn.read(spreadsheet=SHEET_URL, ttl=0)
+    if not archive_df.empty and "Quote_Name" in archive_df.columns:
         existing_list = archive_df["Quote_Name"].tolist()
         l_col1, l_col2 = st.columns([3, 1])
         load_choice = l_col1.selectbox("Select Previous Quote", ["Select..."] + existing_list, label_visibility="collapsed")
@@ -109,10 +114,9 @@ try:
                 row = archive_df[archive_df["Quote_Name"] == load_choice].iloc[0]
                 st.session_state.df = pd.read_json(row["Data_JSON"])
                 st.rerun()
-    else: st.info("Archive is empty.")
+    else: st.info("Cloud Archive is empty. Row 1 headers must match exactly.")
 except Exception as e:
-    st.error(f"CONNECTION ERROR: {e}")
-    st.info("Ensure Secrets contain [connections.gsheets] and your URL.")
+    st.error(f"Cloud Connection Failed: {e}")
 
 # --- 6. LOGISTICS ---
 st.markdown("### 📍 HIRE DATES & DISTANCE")
@@ -213,5 +217,5 @@ if not st.session_state.df.empty:
     fn = save_col1.text_input("Quote Name:", placeholder="Client Name / Event")
     if save_col2.button("CLOUD ARCHIVE"):
         if fn and save_to_google(fn, st.session_state.df, start_date, end_date, km_input):
-            st.success(f"Archived: {fn}"); st.rerun()
+            st.success(f"Archived to Cloud: {fn}"); st.rerun()
     if st.button("⚠️ RESET ALL"): st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Disc %", "Total", "Labour_Rate", "Block_Rate", "SYSTEM RATE", "No_Waiver", "Is_GS", "Is_Mojo", "Unit_Type", "Is_ST"]); st.rerun()
