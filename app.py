@@ -40,7 +40,7 @@ def save_to_google(name, df, start, end, km):
         return True
     except: return False
 
-# --- PDF GENERATION (v25.9 - LINE-BY-LINE BREAKDOWN) ---
+# --- PDF GENERATION (v26.0 - RESTORED TABLE LAYOUT) ---
 def create_calculation_pdf(name, df, subtotal, labour, waiver, cartage, grand_total, km, weeks):
     pdf = FPDF()
     pdf.add_page()
@@ -59,72 +59,47 @@ def create_calculation_pdf(name, df, subtotal, labour, waiver, cartage, grand_to
     pdf.cell(0, 8, f"Hire Duration: {weeks} Week(s) | Total Distance: {km} km", ln=True)
     pdf.ln(5)
     
-    # Financial Breakdown Section
-    pdf.set_font("Arial", "B", 13)
-    pdf.cell(0, 10, "Financial Breakdown", ln=True)
+    # Item Table Header
+    pdf.set_fill_color(26, 29, 45); pdf.set_text_color(255, 255, 255)
+    pdf.set_font("Arial", "B", 10)
+    pdf.cell(80, 10, " Product", 1, 0, "L", True); pdf.cell(25, 10, " Qty", 1, 0, "C", True)
+    pdf.cell(35, 10, " Rate", 1, 0, "C", True); pdf.cell(40, 10, " Total", 1, 1, "R", True)
     
-    # 1. Base Hire Subtotal
-    pdf.set_font("Arial", "B", 11)
-    pdf.cell(100, 8, f"Base Hire Subtotal: ${subtotal:,.2f}", ln=True)
-    pdf.set_font("Arial", "I", 9)
-    pdf.set_text_color(100, 100, 100)
-    
-    # Line by Line Hire Math
+    # Item Table Rows
+    pdf.set_text_color(0, 0, 0); pdf.set_font("Arial", "", 9)
     for _, row in df.iterrows():
-        if not row['Is_Lab_Line']:
-            if "Marquee" in row['Product']:
-                size = row['Product'].replace("Marquee ", "")
-                pdf.cell(0, 5, f"({size}) x $23.00 x {row['Qty']}", ln=True)
-            else:
-                pdf.cell(0, 5, f"({row['Product']}) x ${row['Unit Rate']:,.2f} x {row['Qty']}", ln=True)
-
-    # 2. Labour Breakdown
-    pdf.ln(2)
-    pdf.set_text_color(0, 0, 0)
+        pdf.cell(80, 8, f" {row['Product']}", 1)
+        pdf.cell(25, 8, f" {row['Qty']} {row['Unit_Type']}", 1, 0, "C")
+        pdf.cell(35, 8, f" ${row['Unit Rate']:,.2f}", 1, 0, "C")
+        pdf.cell(40, 8, f" ${row['Total']:,.2f}", 1, 1, "R")
+    
+    pdf.ln(10); pdf.set_font("Arial", "B", 13); pdf.cell(0, 10, "Financial Breakdown", ln=True)
+    
+    # Totals Section
     pdf.set_font("Arial", "B", 11)
-    pdf.cell(100, 8, f"Labour: ${labour:,.2f}", ln=True)
-    pdf.set_font("Arial", "I", 9)
-    pdf.set_text_color(100, 100, 100)
+    pdf.cell(100, 8, "Base Hire Subtotal:", 0); pdf.cell(0, 8, f"${subtotal:,.2f}", 0, 1, "R")
     
-    for _, row in df.iterrows():
-        if row['Is_Lab_Line']:
-            # Calculate the original structure total (approx)
-            struct_total = row['Total'] / 0.55 if row['Total'] > 0 else 0
-            # Clean up product name for the label
-            clean_name = row['Product'].replace("Labour: Build/Strike (", "").replace(")", "")
-            pdf.cell(0, 5, f"({clean_name}) x (55%) = ${row['Total']:,.2f}", ln=True)
+    pdf.cell(100, 8, "Labour Total:", 0); pdf.cell(0, 8, f"${labour:,.2f}", 0, 1, "R")
     
-    # 3. Waiver
-    pdf.ln(2)
-    pdf.set_text_color(0, 0, 0)
-    pdf.set_font("Arial", "B", 11)
-    pdf.cell(100, 8, f"Damage Waiver (7%): ${waiver:,.2f}", ln=True)
-    pdf.set_font("Arial", "I", 9)
-    pdf.set_text_color(100, 100, 100)
-    pdf.cell(0, 5, f"${subtotal:,.2f} x 0.07", ln=True)
+    pdf.cell(100, 8, "Damage Waiver (7%):", 0); pdf.cell(0, 8, f"${waiver:,.2f}", 0, 1, "R")
+    pdf.set_font("Arial", "I", 9); pdf.set_text_color(100, 100, 100)
+    pdf.cell(0, 5, f"(Calc: ${subtotal:,.2f} x 0.07)", ln=True)
     
-    # 4. Cartage
-    pdf.ln(2)
-    pdf.set_text_color(0, 0, 0)
-    pdf.set_font("Arial", "B", 11)
-    pdf.cell(100, 8, f"Cartage Total: ${cartage:,.2f}", ln=True)
-    pdf.set_font("Arial", "I", 9)
-    pdf.set_text_color(100, 100, 100)
-    pdf.cell(0, 5, f"{km} km x 4 trips x $3.50/km", ln=True)
+    pdf.ln(2); pdf.set_text_color(0, 0, 0); pdf.set_font("Arial", "B", 11)
+    pdf.cell(100, 8, "Cartage Total:", 0); pdf.cell(0, 8, f"${cartage:,.2f}", 0, 1, "R")
+    pdf.set_font("Arial", "I", 9); pdf.set_text_color(100, 100, 100)
+    pdf.cell(0, 5, f"(Calc: {km} km x 4 trips x $3.50/km)", ln=True)
     
-    # Grand Total
-    pdf.ln(5)
-    pdf.set_text_color(0, 0, 0)
-    pdf.set_font("Arial", "B", 14)
-    pdf.cell(100, 12, "GRAND TOTAL (EX GST):", "T")
-    pdf.cell(0, 12, f"${grand_total:,.2f}", "T", 1, "R")
+    pdf.ln(5); pdf.set_text_color(0, 0, 0); pdf.set_font("Arial", "B", 14)
+    pdf.cell(100, 12, "GRAND TOTAL (EX GST):", "T"); pdf.cell(0, 12, f"${grand_total:,.2f}", "T", 1, "R")
     
     return bytes(pdf.output())
 
-# 3. STYLING & CATALOG (v25.7 Core)
+# 3. APP STYLING
 st.set_page_config(page_title="No Fuss Quote Pro", page_icon="📦", layout="wide")
 st.markdown("<style>.main { background-color: #FFFFFF !important; } h3 { color: #FFFFFF !important; border-left: 5px solid #00E676; padding: 10px 15px; background-color: #1A1D2D; border-radius: 0 10px 10px 0; margin-top: 20px; } div.stMetric { background-color: #1A1D2D !important; padding: 20px !important; border-radius: 12px !important; border: 2px solid #3D5AFE !important; } div[data-testid='stMetricValue'] { color: #00E676 !important; font-size: 32px !important; font-weight: bold !important; } [data-testid='stMetricLabel'] p { color: #FFFFFF !important; font-weight: bold !important; font-size: 16px !important; } div.stButton > button:first-child { background-color: #3D5AFE; color: white; border-radius: 10px; height: 50px; font-weight: bold; width: 100%; } .stDataFrame { border: 2px solid #00E676 !important; border-radius: 12px; }</style>", unsafe_allow_html=True)
 
+# 4. MASTER CATALOG
 CATALOG = {
     "MARQUEE": {
         "Structures": [
@@ -134,8 +109,13 @@ CATALOG = {
             {"Product": "Marquee 9 X 3", "w1_3": 621.00, "labour": 341.55, "weights_req": 40, "unit": "ea"}
         ],
         "Accessories": [
-            {"Product": "Orange Weight", "w1_3": 6.60, "labour": 0.00, "unit": "ea", "waiver": True}
+            {"Product": "Orange Weight", "w1_3": 6.60, "labour": 0.00, "unit": "ea", "waiver": True},
+            {"Product": "Pegging", "w1_3": 0.00, "labour": 0.00, "unit": "ea", "waiver": False}
         ]
+    },
+    "FLOORING": {
+        "I-Trac": [{"Product": "I-Trac flooring", "w1_3": 23.40, "block": 46.80, "labour": 4.65, "unit": "SQM", "waiver": True}],
+        "Supa-Trac": [{"Product": "Supa-trac flooring", "w1_3": 11.55, "block": 25.00, "labour": 4.65, "unit": "SQM", "waiver": True}]
     }
 }
 
@@ -146,37 +126,39 @@ st.title("📦 No Fuss Quote Pro")
 
 # LOGISTICS
 c1, c2, c3 = st.columns(3)
-start_date = c1.date_input("Hire Start", value=date.today())
-end_date = c2.date_input("Hire End", value=date.today())
-km_input = c3.number_input("Distance (KM)", min_value=0.0, value=None)
+start_date = c1.date_input("Hire Start", value=date.today(), format="DD/MM/YYYY")
+end_date = c2.date_input("Hire End", value=date.today(), format="DD/MM/YYYY")
+km_input = c3.number_input("Distance (KM)", min_value=0.0, value=None, placeholder="KM...")
 live_weeks = math.ceil(((end_date - start_date).days) / 7) if (end_date - start_date).days > 0 else 1
 
 # ADD PRODUCT
 dept_choice = st.selectbox("Department", sorted(CATALOG.keys(), reverse=True))
-selected_bundle = CATALOG[dept_choice]["Structures" if dept_choice == "MARQUEE" else list(CATALOG[dept_choice].keys())[0]]
+bundle_choice = st.selectbox("Select Group", sorted(CATALOG[dept_choice].keys(), reverse=True))
+selected_bundle = CATALOG[dept_choice][bundle_choice]
 
 bundle_results = []
 for item in selected_bundle:
     q_val = st.number_input(f"Qty: {item['Product']}", min_value=0.0, key=f"q_{item['Product']}")
-    sec = st.radio(f"Securing?", ["Weights", "Pegging"], horizontal=True, key=f"sec_{item['Product']}") if q_val > 0 else None
+    sec = None
+    if q_val > 0 and dept_choice == "MARQUEE" and "weights_req" in item:
+        sec = st.radio(f"Securing for {item['Product']}?", ["Weights", "Pegging"], horizontal=True, key=f"sec_{item['Product']}")
     if q_val > 0: bundle_results.append({"item": item, "qty": q_val, "secure": sec})
 
 if st.button("ADD SELECTED ITEMS TO QUOTE"):
     new_rows = []
     for entry in bundle_results:
         it, q, secure = entry['item'], entry['qty'], entry['secure']
-        new_rows.append({"Qty": q, "Product": it['Product'], "Unit Rate": it['w1_3'], "Disc %": 0.0, "Total": 0.0, "Block_Rate": it['w1_3'], "No_Waiver": False, "Unit_Type": "ea", "Is_Lab_Line": False})
+        new_rows.append({"Qty": q, "Product": it['Product'], "Unit Rate": it['w1_3'], "Disc %": 0.0, "Total": 0.0, "Block_Rate": it.get('block', it['w1_3']), "No_Waiver": False, "Unit_Type": it.get('unit','ea'), "Is_Lab_Line": False})
         if it.get('labour', 0) > 0:
-            new_rows.append({"Qty": q, "Product": f"Labour: Build/Strike ({it['Product']})", "Unit Rate": it['labour'], "Disc %": 0.0, "Total": 0.0, "Block_Rate": it['labour'], "No_Waiver": True, "Unit_Type": "ea", "Is_Lab_Line": True})
+            new_rows.append({"Qty": q, "Product": f"Labour ({it['Product']})", "Unit Rate": it['labour'], "Disc %": 0.0, "Total": 0.0, "Block_Rate": it['labour'], "No_Waiver": True, "Unit_Type": "ea", "Is_Lab_Line": True})
         if secure == "Weights":
             new_rows.append({"Qty": q * it['weights_req'], "Product": f"Orange Weight (For {it['Product']})", "Unit Rate": 6.60, "Disc %": 0.0, "Total": 0.0, "Block_Rate": 6.60, "No_Waiver": False, "Unit_Type": "ea", "Is_Lab_Line": False})
     st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame(new_rows)], ignore_index=True); st.rerun()
 
 # FINANCES
 if not st.session_state.df.empty:
-    display_df = st.session_state.df[["Qty", "Unit_Type", "Product", "Unit Rate", "Disc %", "Total"]]
-    edited_df = st.data_editor(display_df, use_container_width=True, key="editor")
-    if not edited_df.equals(display_df):
+    edited_df = st.data_editor(st.session_state.df[["Qty", "Unit_Type", "Product", "Unit Rate", "Disc %", "Total"]], use_container_width=True)
+    if not edited_df.equals(st.session_state.df[["Qty", "Unit_Type", "Product", "Unit Rate", "Disc %", "Total"]]):
         for col in ["Qty", "Unit Rate", "Disc %"]: st.session_state.df[col] = edited_df[col]
         st.rerun()
 
