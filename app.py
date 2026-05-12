@@ -40,7 +40,7 @@ def save_to_google(name, df, start, end, km):
         return True
     except: return False
 
-# --- PDF GENERATION (v25.0) ---
+# --- PDF GENERATION (v25.1) ---
 def create_calculation_pdf(name, df, subtotal, labour, waiver, cartage, grand_total, km, weeks, lab_mode):
     pdf = FPDF()
     pdf.add_page()
@@ -51,6 +51,8 @@ def create_calculation_pdf(name, df, subtotal, labour, waiver, cartage, grand_to
     pdf.ln(5)
     pdf.set_font("Arial", "B", 12)
     pdf.cell(0, 10, f"Quote: {name}", ln=True)
+    pdf.set_font("Arial", "", 11)
+    pdf.cell(0, 8, f"Hire Duration: {weeks} Week(s) | Total Distance: {km} km", ln=True)
     pdf.ln(5)
     
     pdf.set_fill_color(26, 29, 45); pdf.set_text_color(255, 255, 255)
@@ -85,11 +87,32 @@ def create_calculation_pdf(name, df, subtotal, labour, waiver, cartage, grand_to
     pdf.ln(5); pdf.set_text_color(0, 0, 0); pdf.set_font("Arial", "B", 14); pdf.cell(100, 12, "GRAND TOTAL (EX GST):", "T"); pdf.cell(0, 12, f"${grand_total:,.2f}", "T", 1, "R")
     return bytes(pdf.output())
 
-# 3. MASTER CATALOG
+# 3. PAGE CONFIG & STYLING
+st.set_page_config(page_title="No Fuss Quote Pro", page_icon="📦", layout="wide")
+
+st.markdown("""
+    <style>
+    .main { background-color: #FFFFFF !important; }
+    h3 { 
+        color: #FFFFFF !important; 
+        border-left: 5px solid #00E676; 
+        padding: 10px 15px; 
+        background-color: #1A1D2D; 
+        border-radius: 0 10px 10px 0; 
+        margin-top: 20px;
+    }
+    div.stMetric { background-color: #1A1D2D !important; padding: 20px !important; border-radius: 12px !important; border: 2px solid #3D5AFE !important; }
+    div[data-testid="stMetricValue"] { color: #00E676 !important; font-size: 32px !important; font-weight: bold !important; }
+    [data-testid="stMetricLabel"] p { color: #FFFFFF !important; font-weight: bold !important; font-size: 16px !important; }
+    div.stButton > button:first-child { background-color: #3D5AFE; color: white; border-radius: 10px; height: 50px; font-weight: bold; width: 100%; }
+    .stDataFrame { border: 2px solid #00E676 !important; border-radius: 12px; }
+    </style>
+    """, unsafe_allow_html=True)
+
+# 4. MASTER CATALOG
 CATALOG = {
     "MARQUEE": {
         "Structures": [
-            # Weights Req synced to Column G "AMMOUNT"
             {"Product": "Marquee 3 X 3", "w1_3": 207.00, "labour": 113.85, "weights_req": 24, "unit": "ea"},
             {"Product": "Marquee 4 X 3", "w1_3": 276.00, "labour": 151.80, "weights_req": 0, "unit": "ea"},
             {"Product": "Marquee 6 X 3", "w1_3": 414.00, "labour": 227.70, "weights_req": 0, "unit": "ea"},
@@ -100,8 +123,21 @@ CATALOG = {
         ]
     },
     "FLOORING": {
+        "I-Trac System": [
+            {"Product": "I-Trac flooring", "w1_3": 23.40, "block": 46.80, "labour": 4.65, "unit": "SQM", "waiver": True},
+            {"Product": "I-Trac Ramp", "w1_3": 42.00, "block": 84.00, "labour": 0.00, "unit": "ea", "waiver": True}
+        ],
         "Supa-Trac System": [
-            {"Product": "Supa-trac flooring", "w1_3": 11.55, "block": 25.00, "labour": 4.65, "unit": "SQM", "waiver": True}
+            {"Product": "Supa-trac flooring", "w1_3": 11.55, "block": 25.00, "labour": 4.65, "unit": "SQM", "waiver": True},
+            {"Product": "Supa-trac Edging", "w1_3": 6.70, "block": 6.70, "labour": 0.00, "unit": "lm", "waiver": False}
+        ],
+        "Trakmat System": [
+            {"Product": "Trakmats", "w1_3": 23.20, "block": 45.00, "labour": 5.85, "unit": "ea", "waiver": True}
+        ],
+        "Specialty": [
+            {"Product": "LD20 Roll", "w1_3": 1800.00, "block": 3300.00, "labour": 0.00, "unit": "Roll", "waiver": True},
+            {"Product": "Geotextile Underlay", "w1_3": 2.60, "block": 2.60, "labour": 0.00, "unit": "SQM", "waiver": True},
+            {"Product": "Black Plastic", "w1_3": 0.90, "block": 0.90, "labour": 0.00, "unit": "SQM", "waiver": True}
         ]
     }
 }
@@ -112,13 +148,15 @@ if 'df' not in st.session_state:
 st.title("📦 No Fuss Quote Pro")
 
 # LOGISTICS
+st.markdown("### 📍 HIRE DATES & DISTANCE")
 c1, c2, c3 = st.columns(3)
-start_date = c1.date_input("Hire Start", value=date.today())
-end_date = c2.date_input("Hire End", value=date.today())
-km_input = c3.number_input("Distance (KM)", min_value=0.0, value=None)
+start_date = c1.date_input("Hire Start", value=date.today(), format="DD/MM/YYYY")
+end_date = c2.date_input("Hire End", value=date.today(), format="DD/MM/YYYY")
+km_input = c3.number_input("Distance (KM)", min_value=0.0, value=None, placeholder="KM...")
 live_weeks = math.ceil(((end_date - start_date).days) / 7) if (end_date - start_date).days > 0 else 1
 
 # ADD PRODUCT
+st.markdown("### ➕ ADD PRODUCT")
 dept_col, bundle_col = st.columns(2)
 dept_choice = dept_col.selectbox("Department", sorted(CATALOG.keys()))
 bundle_choice = bundle_col.selectbox("Select Group", sorted(CATALOG[dept_choice].keys()))
@@ -137,20 +175,38 @@ if st.button("ADD SELECTED ITEMS TO QUOTE"):
     for entry in bundle_results:
         it, q, secure = entry['item'], entry['qty'], entry['secure']
         # Add structure
-        new_rows.append({"Qty": q, "Product": it['Product'], "Unit Rate": it['w1_3'], "Disc %": 0.0, "Total": 0.0, "Labour_Rate": it['labour'], "Block_Rate": it.get('block', it['w1_3']), "SYSTEM RATE": 0.0, "No_Waiver": False, "Unit_Type": it['unit']})
+        new_rows.append({
+            "Qty": q, "Product": it['Product'], "Unit Rate": it['w1_3'], "Disc %": 0.0, 
+            "Total": 0.0, "Labour_Rate": it['labour'], "Block_Rate": it.get('block', it['w1_3']), 
+            "SYSTEM RATE": 0.0, "No_Waiver": False, "Is_GS": False, "Is_Mojo": False, 
+            "Unit_Type": it['unit'], "Is_ST": False
+        })
         # Add securing
         if secure == "Weights" and it.get('weights_req', 0) > 0:
             w_qty = q * it['weights_req']
-            new_rows.append({"Qty": w_qty, "Product": f"Orange Weight (For {it['Product']})", "Unit Rate": 6.60, "Disc %": 0.0, "Total": 0.0, "Labour_Rate": 0.0, "Block_Rate": 6.60, "SYSTEM RATE": 0.0, "No_Waiver": False, "Unit_Type": "ea"})
+            new_rows.append({
+                "Qty": w_qty, "Product": f"Orange Weight (For {it['Product']})", "Unit Rate": 6.60, "Disc %": 0.0, 
+                "Total": 0.0, "Labour_Rate": 0.0, "Block_Rate": 6.60, "SYSTEM RATE": 0.0, 
+                "No_Waiver": False, "Is_GS": False, "Is_Mojo": False, "Unit_Type": "ea", "Is_ST": False
+            })
         elif secure == "Pegging":
-            new_rows.append({"Qty": q, "Product": f"Pegging (For {it['Product']})", "Unit Rate": 0.0, "Disc %": 0.0, "Total": 0.0, "Labour_Rate": 0.0, "Block_Rate": 0.0, "SYSTEM RATE": 0.0, "No_Waiver": True, "Unit_Type": "ea"})
+            new_rows.append({
+                "Qty": q, "Product": f"Pegging (For {it['Product']})", "Unit Rate": 0.0, "Disc %": 0.0, 
+                "Total": 0.0, "Labour_Rate": 0.0, "Block_Rate": 0.0, "SYSTEM RATE": 0.0, 
+                "No_Waiver": True, "Is_GS": False, "Is_Mojo": False, "Unit_Type": "ea", "Is_ST": False
+            })
     if new_rows: st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame(new_rows)], ignore_index=True); st.rerun()
 
 # FINANCES
 if not st.session_state.df.empty:
+    st.markdown("### 🏗️ QUOTED ITEMS")
     display_cols = ["Qty", "Unit_Type", "Product", "Unit Rate", "Disc %", "SYSTEM RATE", "Total"]
-    st.data_editor(st.session_state.df[display_cols], use_container_width=True, key="editor")
+    edited_df = st.data_editor(st.session_state.df[display_cols], use_container_width=True, key="editor")
     
+    if not edited_df.equals(st.session_state.df[display_cols]):
+        for col in ["Qty", "Unit Rate", "Disc %"]: st.session_state.df[col] = edited_df[col]
+        st.rerun()
+
     labour_mode = st.selectbox("Labour Mode", ["Bake Labour into Unit Rate", "Show Labour as Separate Line Item", "No Labour"])
     charge_cartage, include_damage_waiver = st.checkbox("🚚 Include Cartage", value=True), st.checkbox("🛡️ Include Damage Waiver (7%)", value=True)
     
@@ -173,7 +229,17 @@ if not st.session_state.df.empty:
     m1.metric("SUBTOTAL", f"${hire_total:,.2f}"); m2.metric("LABOUR", f"${lab_total:,.2f}"); m3.metric("WAIVER", f"${waiver_total:,.2f}"); m4.metric("CARTAGE", f"${cart_val:,.2f}")
     st.metric("GRAND TOTAL (EX GST)", f"${final_grand:,.2f}")
 
-    fn = st.text_input("Quote Name:", placeholder="Client Name")
+    # --- SAVE & EXPORT ---
+    st.markdown("### 💾 FINISH & EXPORT")
+    save_col1, save_col2, save_col3 = st.columns([2, 1, 1])
+    fn = save_col1.text_input("Project Name:", placeholder="Client Name")
+    
+    if save_col2.button("CLOUD ARCHIVE"):
+        if fn:
+            save_to_google(fn, st.session_state.df, start_date, end_date, km_input)
+            st.success("Archived!")
+            
     pdf_bytes = create_calculation_pdf(fn if fn else "Internal_Quote", st.session_state.df, hire_total, lab_total, waiver_total, cart_val, final_grand, km_input if km_input else 0, live_weeks, labour_mode)
-    st.download_button("📥 DOWNLOAD INTERNAL PDF", data=pdf_bytes, file_name=f"{fn}_Calculations.pdf", mime="application/pdf")
+    save_col3.download_button(label="📥 DOWNLOAD INTERNAL PDF", data=pdf_bytes, file_name=f"{fn if fn else 'Quote'}_Calculations.pdf", mime="application/pdf")
+    
     if st.button("⚠️ RESET ALL"): st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Disc %", "Total", "Labour_Rate", "Block_Rate", "SYSTEM RATE", "No_Waiver", "Is_GS", "Is_Mojo", "Unit_Type", "Is_ST"]); st.rerun()
