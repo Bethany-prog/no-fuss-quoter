@@ -40,7 +40,7 @@ def save_to_google(name, df, start, end, km):
         return True
     except: return False
 
-# --- PDF GENERATION (v26.3 - TABLE + RAW BREAKDOWN) ---
+# --- PDF GENERATION (v26.4 - FINAL MATH & $ SYMBOLS) ---
 def create_calculation_pdf(name, df, subtotal, labour, waiver, cartage, grand_total, km, weeks):
     pdf = FPDF()
     pdf.add_page()
@@ -59,7 +59,7 @@ def create_calculation_pdf(name, df, subtotal, labour, waiver, cartage, grand_to
     pdf.cell(0, 8, f"Hire Duration: {weeks} Week(s) | Total Distance: {km} km", ln=True)
     pdf.ln(5)
 
-    # --- PART 1: THE TABLE (Like image on the right) ---
+    # --- PART 1: THE TABLE ---
     pdf.set_fill_color(26, 29, 45); pdf.set_text_color(255, 255, 255)
     pdf.set_font("Arial", "B", 10)
     pdf.cell(80, 10, " Product", 1, 0, "L", True); pdf.cell(25, 10, " Qty", 1, 0, "C", True)
@@ -74,7 +74,7 @@ def create_calculation_pdf(name, df, subtotal, labour, waiver, cartage, grand_to
     
     pdf.ln(10)
 
-    # --- PART 2: THE FINANCIAL BREAKDOWN (The Math) ---
+    # --- PART 2: THE FINANCIAL BREAKDOWN ---
     pdf.set_font("Arial", "B", 13)
     pdf.cell(0, 10, "Financial Breakdown", ln=True)
     
@@ -84,16 +84,23 @@ def create_calculation_pdf(name, df, subtotal, labour, waiver, cartage, grand_to
     pdf.set_font("Arial", "", 10)
     for _, row in df.iterrows():
         if not row['Is_Lab_Line']:
-            if "Marquee" in row['Product']:
+            qty = row['Qty']
+            rate = row['Unit Rate']
+            total = row['Total']
+            p_name = row['Product']
+            
+            if "Marquee" in p_name:
                 try:
-                    parts = row['Product'].replace("Marquee ", "").upper().split("X")
+                    parts = p_name.replace("Marquee ", "").upper().split("X")
                     sqm = int(parts[0].strip()) * int(parts[1].strip())
-                    pdf.cell(0, 6, f"{row['Product']} - {sqm}sqm x 23 = {row['Total']:,.2f}", ln=True)
-                except: pdf.cell(0, 6, f"{row['Product']} x {row['Unit Rate']} = {row['Total']:,.2f}", ln=True)
-            elif "Weight" in row['Product']:
-                pdf.cell(0, 6, f"Weights - {row['Qty']}EA x {row['Unit Rate']} = {row['Total']:,.2f}", ln=True)
+                    # Format: Qty - Name - SQM x $23 = $Total
+                    pdf.cell(0, 6, f"{qty} - {p_name} - {sqm}sqm x $23 = ${total:,.2f}", ln=True)
+                except:
+                    pdf.cell(0, 6, f"{qty} - {p_name} x ${rate:,.2f} = ${total:,.2f}", ln=True)
+            elif "Weight" in p_name:
+                pdf.cell(0, 6, f"{qty} - Weights - EA x ${rate:,.2f} = ${total:,.2f}", ln=True)
             else:
-                pdf.cell(0, 6, f"{row['Product']} - {row['Qty']} x {row['Unit Rate']} = {row['Total']:,.2f}", ln=True)
+                pdf.cell(0, 6, f"{qty} - {p_name} x ${rate:,.2f} = ${total:,.2f}", ln=True)
 
     # 2. LABOUR
     pdf.ln(4); pdf.set_font("Arial", "B", 11)
@@ -101,17 +108,22 @@ def create_calculation_pdf(name, df, subtotal, labour, waiver, cartage, grand_to
     pdf.set_font("Arial", "", 10)
     for _, row in df.iterrows():
         if row['Is_Lab_Line']:
+            qty = row['Qty']
+            total = row['Total']
+            # Remove "Labour (" and ")" for clean name
             clean_name = row['Product'].replace("Labour (", "").replace(")", "")
-            pdf.cell(0, 6, f"{clean_name} x 55% = ${row['Total']:,.2f}", ln=True)
+            pdf.cell(0, 6, f"{qty} - {clean_name} x 55% = ${total:,.2f}", ln=True)
 
     # 3. WAIVER & CARTAGE
     pdf.ln(4); pdf.set_font("Arial", "B", 11)
     pdf.cell(0, 8, f"Damage Waiver (7%): ${waiver:,.2f}", ln=True)
-    pdf.set_font("Arial", "", 10); pdf.cell(0, 6, f"${subtotal:,.2f} x 0.07", ln=True)
+    pdf.set_font("Arial", "", 10)
+    pdf.cell(0, 6, f"${subtotal:,.2f} x 0.07", ln=True)
     
     pdf.ln(2); pdf.set_font("Arial", "B", 11)
     pdf.cell(0, 8, f"Cartage Total: ${cartage:,.2f}", ln=True)
-    pdf.set_font("Arial", "", 10); pdf.cell(0, 6, f"{km} km x 4 trips x $3.50/km", ln=True)
+    pdf.set_font("Arial", "", 10)
+    pdf.cell(0, 6, f"{km} km x 4 trips x $3.50/km", ln=True)
     
     pdf.ln(10); pdf.set_font("Arial", "B", 14); pdf.set_fill_color(240, 240, 240)
     pdf.cell(0, 12, f"GRAND TOTAL (EX GST): ${grand_total:,.2f}", 1, 1, "R", True)
@@ -128,7 +140,10 @@ CATALOG = {
             {"Product": "Marquee 3 X 3", "w1_3": 207.00, "labour": 113.85, "weights_req": 24, "unit": "ea"},
             {"Product": "Marquee 4 X 3", "w1_3": 276.00, "labour": 151.80, "weights_req": 24, "unit": "ea"},
             {"Product": "Marquee 6 X 3", "w1_3": 414.00, "labour": 227.70, "weights_req": 32, "unit": "ea"},
-            {"Product": "Marquee 9 X 3", "w1_3": 621.00, "labour": 341.55, "weights_req": 40, "unit": "ea"}
+            {"Product": "Marquee 9 X 3", "w1_3": 621.00, "labour": 341.55, "weights_req": 40, "unit": "ea"},
+            {"Product": "Marquee 10 X 5", "w1_3": 1150.00, "labour": 632.50, "weights_req": 48, "unit": "ea"},
+            {"Product": "Marquee 12 X 5", "w1_3": 1380.00, "labour": 759.00, "weights_req": 48, "unit": "ea"},
+            {"Product": "Marquee 15 X 5", "w1_3": 1725.00, "labour": 948.75, "weights_req": 60, "unit": "ea"}
         ],
         "Accessories": [{"Product": "Orange Weight", "w1_3": 6.60, "labour": 0.00, "unit": "ea", "waiver": True}]
     },
