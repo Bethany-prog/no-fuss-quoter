@@ -44,7 +44,7 @@ def save_to_google(name, df, start, end, km):
         return True
     except: return False
 
-# --- UPDATED PDF GENERATION (v24.5 - TABLE + MATH EXPLANATIONS) ---
+# --- UPDATED PDF GENERATION (v24.6 - ACTUAL MATH STRINGS) ---
 def create_calculation_pdf(name, df, subtotal, labour, waiver, cartage, grand_total, km, weeks):
     pdf = FPDF()
     pdf.add_page()
@@ -84,7 +84,7 @@ def create_calculation_pdf(name, df, subtotal, labour, waiver, cartage, grand_to
     
     pdf.ln(10)
     
-    # FINANCIAL BREAKDOWN WITH MATH EXPLANATIONS
+    # FINANCIAL BREAKDOWN WITH LIVE MATH
     pdf.set_font("Arial", "B", 13)
     pdf.cell(0, 10, "Financial Breakdown", ln=True)
     
@@ -94,7 +94,7 @@ def create_calculation_pdf(name, df, subtotal, labour, waiver, cartage, grand_to
     pdf.cell(0, 8, f"${subtotal:,.2f}", 0, 1, "R")
     pdf.set_font("Arial", "I", 9)
     pdf.set_text_color(100, 100, 100)
-    pdf.cell(0, 5, f"(Sum of items x weeks x discount)", ln=True)
+    pdf.cell(0, 5, f"(Sum of items above after discounts and weekly multipliers)", ln=True)
     pdf.ln(2)
     
     # Labour
@@ -104,7 +104,7 @@ def create_calculation_pdf(name, df, subtotal, labour, waiver, cartage, grand_to
     pdf.cell(0, 8, f"${labour:,.2f}", 0, 1, "R")
     pdf.set_font("Arial", "I", 9)
     pdf.set_text_color(100, 100, 100)
-    pdf.cell(0, 5, f"(Additional install fees not baked into unit rates)", ln=True)
+    pdf.cell(0, 5, f"(Additional labour lines not baked into SQM/Unit rates)", ln=True)
     pdf.ln(2)
     
     # Waiver
@@ -114,7 +114,8 @@ def create_calculation_pdf(name, df, subtotal, labour, waiver, cartage, grand_to
     pdf.cell(0, 8, f"${waiver:,.2f}", 0, 1, "R")
     pdf.set_font("Arial", "I", 9)
     pdf.set_text_color(100, 100, 100)
-    pdf.cell(0, 5, f"(7% of the Base Hire Subtotal)", ln=True)
+    # LIVE MATH
+    pdf.cell(0, 5, f"Calc: ${subtotal:,.2f} x 0.07", ln=True)
     pdf.ln(2)
     
     # Cartage
@@ -124,7 +125,8 @@ def create_calculation_pdf(name, df, subtotal, labour, waiver, cartage, grand_to
     pdf.cell(0, 8, f"${cartage:,.2f}", 0, 1, "R")
     pdf.set_font("Arial", "I", 9)
     pdf.set_text_color(100, 100, 100)
-    pdf.cell(0, 5, f"(Calc: {km} km x 4 trips x $3.50/km)", ln=True)
+    # LIVE MATH
+    pdf.cell(0, 5, f"Calc: {km} km x 4 trips x $3.50/km", ln=True)
     
     pdf.ln(5)
     pdf.set_text_color(0, 0, 0)
@@ -262,7 +264,7 @@ if not st.session_state.df.empty:
             save_to_google(fn, st.session_state.df, start_date, end_date, km_input)
             st.success("Archived!")
             
-    # PDF Logic
+    # PDF Logic with Updated Math Strings
     pdf_bytes = create_calculation_pdf(fn if fn else "Internal_Quote", st.session_state.df, hire_total, lab_total, waiver_total, cart_val, final_grand, km_input if km_input else 0, live_weeks)
     save_col3.download_button(label="📥 DOWNLOAD INTERNAL PDF", data=pdf_bytes, file_name=f"{fn if fn else 'Quote'}_Calculations.pdf", mime="application/pdf")
     
