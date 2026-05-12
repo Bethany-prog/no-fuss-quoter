@@ -44,7 +44,7 @@ def save_to_google(name, df, start, end, km):
         return True
     except: return False
 
-# --- ORIGINAL PDF GENERATION (v24.0 Logic) ---
+# --- UPDATED PDF GENERATION (v24.5 - TABLE + MATH EXPLANATIONS) ---
 def create_calculation_pdf(name, df, subtotal, labour, waiver, cartage, grand_total, km, weeks):
     pdf = FPDF()
     pdf.add_page()
@@ -84,26 +84,53 @@ def create_calculation_pdf(name, df, subtotal, labour, waiver, cartage, grand_to
     
     pdf.ln(10)
     
-    # Totals Section
-    pdf.set_font("Arial", "B", 12)
+    # FINANCIAL BREAKDOWN WITH MATH EXPLANATIONS
+    pdf.set_font("Arial", "B", 13)
     pdf.cell(0, 10, "Financial Breakdown", ln=True)
-    pdf.set_font("Arial", "", 11)
+    
+    # Subtotal
+    pdf.set_font("Arial", "B", 11)
     pdf.cell(100, 8, "Base Hire Subtotal:", 0)
     pdf.cell(0, 8, f"${subtotal:,.2f}", 0, 1, "R")
+    pdf.set_font("Arial", "I", 9)
+    pdf.set_text_color(100, 100, 100)
+    pdf.cell(0, 5, f"(Sum of items x weeks x discount)", ln=True)
+    pdf.ln(2)
     
-    pdf.cell(100, 8, "Labour Charges:", 0)
+    # Labour
+    pdf.set_text_color(0, 0, 0)
+    pdf.set_font("Arial", "B", 11)
+    pdf.cell(100, 8, "Separate Labour Charges:", 0)
     pdf.cell(0, 8, f"${labour:,.2f}", 0, 1, "R")
+    pdf.set_font("Arial", "I", 9)
+    pdf.set_text_color(100, 100, 100)
+    pdf.cell(0, 5, f"(Additional install fees not baked into unit rates)", ln=True)
+    pdf.ln(2)
     
+    # Waiver
+    pdf.set_text_color(0, 0, 0)
+    pdf.set_font("Arial", "B", 11)
     pdf.cell(100, 8, "Damage Waiver (7%):", 0)
     pdf.cell(0, 8, f"${waiver:,.2f}", 0, 1, "R")
+    pdf.set_font("Arial", "I", 9)
+    pdf.set_text_color(100, 100, 100)
+    pdf.cell(0, 5, f"(7% of the Base Hire Subtotal)", ln=True)
+    pdf.ln(2)
     
+    # Cartage
+    pdf.set_text_color(0, 0, 0)
+    pdf.set_font("Arial", "B", 11)
     pdf.cell(100, 8, "Cartage Total:", 0)
     pdf.cell(0, 8, f"${cartage:,.2f}", 0, 1, "R")
+    pdf.set_font("Arial", "I", 9)
+    pdf.set_text_color(100, 100, 100)
+    pdf.cell(0, 5, f"(Calc: {km} km x 4 trips x $3.50/km)", ln=True)
     
-    pdf.ln(2)
-    pdf.set_font("Arial", "B", 13)
-    pdf.cell(100, 10, "GRAND TOTAL (EX GST):", "T")
-    pdf.cell(0, 10, f"${grand_total:,.2f}", "T", 1, "R")
+    pdf.ln(5)
+    pdf.set_text_color(0, 0, 0)
+    pdf.set_font("Arial", "B", 14)
+    pdf.cell(100, 12, "GRAND TOTAL (EX GST):", "T")
+    pdf.cell(0, 12, f"${grand_total:,.2f}", "T", 1, "R")
     
     return bytes(pdf.output())
 
@@ -111,7 +138,7 @@ def create_calculation_pdf(name, df, subtotal, labour, waiver, cartage, grand_to
 st.set_page_config(page_title="No Fuss Quote Pro", page_icon="📦", layout="wide")
 st.markdown("<style>.main { background-color: #FFFFFF !important; } h3 { color: #FFFFFF !important; border-left: 5px solid #00E676; padding: 10px 15px; background-color: #1A1D2D; border-radius: 0 10px 10px 0; } div.stMetric { background-color: #1A1D2D !important; padding: 20px !important; border-radius: 12px !important; border: 2px solid #3D5AFE !important; } div[data-testid='stMetricValue'] { color: #00E676 !important; font-size: 32px !important; font-weight: bold !important; } [data-testid='stMetricLabel'] p { color: #FFFFFF !important; font-weight: bold !important; font-size: 16px !important; } div.stButton > button:first-child { background-color: #3D5AFE; color: white; border-radius: 10px; height: 50px; font-weight: bold; width: 100%; } .stDataFrame { border: 2px solid #00E676 !important; border-radius: 12px; }</style>", unsafe_allow_html=True)
 
-# 4. MASTER CATALOG
+# 4. MASTER CATALOG (v22.5 Sync)
 CATALOG = {
     "FLOORING": {
         "I-Trac System": [
@@ -217,12 +244,12 @@ if not st.session_state.df.empty:
         st.session_state.df.at[idx, "Total"], st.session_state.df.at[idx, "SYSTEM RATE"] = total_line, (total_line / q if q > 0 else 0)
         hire_total += total_line
 
-    cart_total = (km_input * 14.0 if km_input and charge_cartage else 0)
-    final_grand = hire_total + lab_total + waiver_total + cart_total
+    cart_val = (km_input * 14.0 if km_input and charge_cartage else 0)
+    final_grand = hire_total + lab_total + waiver_total + cart_val
 
     st.divider()
     m1, m2, m3, m4 = st.columns(4)
-    m1.metric("SUBTOTAL", f"${hire_total:,.2f}"); m2.metric("LABOUR", f"${lab_total:,.2f}"); m3.metric("WAIVER", f"${waiver_total:,.2f}"); m4.metric("CARTAGE", f"${cart_total:,.2f}")
+    m1.metric("SUBTOTAL", f"${hire_total:,.2f}"); m2.metric("LABOUR", f"${lab_total:,.2f}"); m3.metric("WAIVER", f"${waiver_total:,.2f}"); m4.metric("CARTAGE", f"${cart_val:,.2f}")
     st.metric("GRAND TOTAL (EX GST)", f"${final_grand:,.2f}")
 
     # --- SAVE & EXPORT ---
@@ -235,8 +262,8 @@ if not st.session_state.df.empty:
             save_to_google(fn, st.session_state.df, start_date, end_date, km_input)
             st.success("Archived!")
             
-    # RESTORED PDF Logic
-    pdf_bytes = create_calculation_pdf(fn if fn else "Internal_Quote", st.session_state.df, hire_total, lab_total, waiver_total, cart_total, final_grand, km_input if km_input else 0, live_weeks)
+    # PDF Logic
+    pdf_bytes = create_calculation_pdf(fn if fn else "Internal_Quote", st.session_state.df, hire_total, lab_total, waiver_total, cart_val, final_grand, km_input if km_input else 0, live_weeks)
     save_col3.download_button(label="📥 DOWNLOAD INTERNAL PDF", data=pdf_bytes, file_name=f"{fn if fn else 'Quote'}_Calculations.pdf", mime="application/pdf")
     
     if st.button("⚠️ RESET ALL"): st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Disc %", "Total", "Labour_Rate", "Block_Rate", "SYSTEM RATE", "No_Waiver", "Is_GS", "Is_Mojo", "Unit_Type", "Is_ST"]); st.rerun()
