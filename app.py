@@ -44,77 +44,62 @@ def save_to_google(name, df, start, end, km):
         return True
     except: return False
 
-# --- UPDATED PDF GENERATION (v24.2) ---
+# --- UPDATED PDF GENERATION (v24.3 - CLEAN LAYOUT) ---
 def create_calculation_pdf(name, df, subtotal, labour, waiver, cartage, grand_total, km, weeks, lab_mode):
     pdf = FPDF()
     pdf.add_page()
     
     # 1. HEADER
     pdf.set_font("Arial", "B", 16)
-    pdf.cell(0, 10, "INTERNAL QUOTE BREAKDOWN", ln=True, align="L")
+    pdf.cell(0, 10, "INTERNAL QUOTE BREAKDOWN", ln=True)
     pdf.set_font("Arial", "", 10)
     pdf.cell(0, 5, f"Project: {name}", ln=True)
-    pdf.cell(0, 5, f"Date: {date.today()}", ln=True)
+    pdf.cell(0, 5, f"Hire Duration: {weeks} Week(s)", ln=True)
     pdf.ln(10)
     
-    # 2. EXPLANATION SECTION
-    pdf.set_font("Arial", "B", 12)
-    pdf.cell(0, 10, "1. HIRE & LABOR LOGIC", ln=True)
-    pdf.set_font("Arial", "", 10)
-    
+    # 2. ITEM BREAKDOWNS (HEADER > EXPLANATION)
     for _, row in df.iterrows():
         base = row['Unit Rate']
         lab_rate = row['Labour_Rate']
         unit = row['Unit_Type']
         prod = row['Product']
+        qty = row['Qty']
+        
+        # Header for the item
+        pdf.set_font("Arial", "B", 12)
+        pdf.cell(0, 8, f"{prod} - Qty: {qty} {unit}", ln=True)
+        
+        # Explanation
+        pdf.set_font("Arial", "", 10)
+        if weeks == 1:
+            pdf.cell(0, 6, f"Hire Rate: ${base:,.2f} per {unit} for 1 week period", ln=True)
+        else:
+            pdf.cell(0, 6, f"Week 1 Hire: ${base:,.2f} per {unit} (Includes initial setup/delivery logic if applicable)", ln=True)
+            wk2_rate = row['Block_Rate']/4 if not row['Is_GS'] else base
+            pdf.cell(0, 6, f"Week 2+ Hire: ${wk2_rate:,.2f} per {unit}/week", ln=True)
+        
+        if lab_mode != "No Labour" and lab_rate > 0:
+            pdf.cell(0, 6, f"Labour Charge: ${lab_rate:,.2f} per {unit} based on standard install rates", ln=True)
         
         pdf.set_font("Arial", "B", 10)
-        pdf.cell(0, 7, f"Product: {prod}", ln=True)
-        pdf.set_font("Arial", "", 10)
-        
-        # Initial vs Weekly Breakdown
-        if weeks == 1:
-            pdf.cell(0, 5, f" - Hire Rate: ${base:,.2f} per {unit}", ln=True)
-        else:
-            pdf.cell(0, 5, f" - Week 1 (Initial): ${base:,.2f} per {unit}", ln=True)
-            pdf.cell(0, 5, f" - Weeks 2+: ${(row['Block_Rate']/4 if not row['Is_GS'] else base):,.2f} per {unit}/week", ln=True)
-        
-        # Labor Explanation
-        if lab_mode != "No Labour" and lab_rate > 0:
-            pdf.cell(0, 5, f" - Labor: ${lab_rate:,.2f} per {unit} (Included in Week 1 Total)", ln=True)
-        pdf.ln(3)
-    
-    # 3. FINANCIAL SUMMARY TABLE
-    pdf.ln(5)
+        pdf.cell(0, 6, f"Line Total: ${row['Total']:,.2f}", ln=True)
+        pdf.ln(6)
+        pdf.line(pdf.get_x(), pdf.get_y(), pdf.get_x() + 190, pdf.get_y()) # separator line
+        pdf.ln(4)
+
+    # 3. LOGISTICS & WAIVER EXPLANATION
     pdf.set_font("Arial", "B", 12)
-    pdf.cell(0, 10, "2. COST SUMMARY", ln=True)
-    
-    pdf.set_fill_color(240, 240, 240)
-    pdf.set_font("Arial", "B", 10)
-    pdf.cell(80, 10, " Description", 1, 0, "L", True)
-    pdf.cell(40, 10, " Calculation", 1, 0, "C", True)
-    pdf.cell(40, 10, " Total (Ex GST)", 1, 1, "R", True)
-    
+    pdf.cell(0, 10, "LOGISTICS & FEES", ln=True)
     pdf.set_font("Arial", "", 10)
-    pdf.cell(80, 10, " Base Hire Subtotal", 1)
-    pdf.cell(40, 10, f"{weeks} Week(s)", 1, 0, "C")
-    pdf.cell(40, 10, f"${subtotal:,.2f}", 1, 1, "R")
     
-    pdf.cell(80, 10, " Total Labor Charge", 1)
-    pdf.cell(40, 10, "Fixed/SQM", 1, 0, "C")
-    pdf.cell(40, 10, f"${labour:,.2f}", 1, 1, "R")
+    pdf.cell(0, 6, f"Damage Waiver: ${waiver:,.2f} (Calculated as 7% of discounted hire total)", ln=True)
+    pdf.cell(0, 6, f"Cartage/Delivery: ${cartage:,.2f} (Calculated as {km} km x 4 trips @ $3.50/km)", ln=True)
     
-    pdf.cell(80, 10, " Damage Waiver", 1)
-    pdf.cell(40, 10, "7% of Hire", 1, 0, "C")
-    pdf.cell(40, 10, f"${waiver:,.2f}", 1, 1, "R")
+    pdf.ln(10)
     
-    pdf.cell(80, 10, " Delivery & Cartage", 1)
-    pdf.cell(40, 10, f"{km} km x 4", 1, 0, "C")
-    pdf.cell(40, 10, f"${cartage:,.2f}", 1, 1, "R")
-    
-    pdf.set_font("Arial", "B", 11)
-    pdf.cell(120, 12, " GRAND TOTAL (EX GST)", 1, 0, "R", True)
-    pdf.cell(40, 12, f"${grand_total:,.2f}", 1, 1, "R", True)
+    # 4. FINAL TOTAL
+    pdf.set_font("Arial", "B", 14)
+    pdf.cell(0, 10, f"GRAND TOTAL (EX GST): ${grand_total:,.2f}", ln=True)
 
     return bytes(pdf.output())
 
@@ -246,7 +231,7 @@ if not st.session_state.df.empty:
             save_to_google(fn, st.session_state.df, start_date, end_date, km_input)
             st.success("Archived!")
             
-    # PDF DOWNLOAD BUTTON with updated layout
+    # PDF DOWNLOAD BUTTON with simplified layout
     pdf_bytes = create_calculation_pdf(fn if fn else "Internal_Quote", st.session_state.df, hire_total, lab_total, waiver_total, cartage, grand_total, km_input if km_input else 0, live_weeks, labour_mode)
     save_col3.download_button(label="📥 DOWNLOAD INTERNAL PDF", data=pdf_bytes, file_name=f"{fn if fn else 'Quote'}_Calculations.pdf", mime="application/pdf")
     
