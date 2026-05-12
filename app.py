@@ -40,26 +40,22 @@ def save_to_google(name, df, start, end, km):
         return True
     except: return False
 
-# --- PDF GENERATION (v26.1 - REQUESTED MATH LAYOUT) ---
+# --- PDF GENERATION (v26.2 - MATH STRINGS & BLOCK PRICING) ---
 def create_calculation_pdf(name, df, subtotal, labour, waiver, cartage, grand_total, km, weeks):
     pdf = FPDF()
     pdf.add_page()
-    
-    # Header Section
     pdf.set_font("Arial", "B", 16)
     pdf.cell(0, 10, "No Fuss Event Hire - Internal Calculation Sheet", ln=True, align="C")
     pdf.set_font("Arial", "", 10)
     pdf.cell(0, 10, f"Generated on: {date.today()}", ln=True, align="C")
     pdf.ln(5)
     
-    # Project Info
     pdf.set_font("Arial", "B", 12)
     pdf.cell(0, 10, f"Quote: {name}", ln=True)
     pdf.set_font("Arial", "", 11)
     pdf.cell(0, 8, f"Hire Duration: {weeks} Week(s) | Total Distance: {km} km", ln=True)
     pdf.ln(5)
     
-    # Financial Breakdown Header
     pdf.set_font("Arial", "B", 13)
     pdf.cell(0, 10, "Financial Breakdown", ln=True)
     
@@ -76,17 +72,16 @@ def create_calculation_pdf(name, df, subtotal, labour, waiver, cartage, grand_to
             total = row['Total']
             
             if "Marquee" in p_name:
-                # Try to extract SQM from name (e.g., "Marquee 3 X 3")
                 try:
                     parts = p_name.replace("Marquee ", "").upper().split("X")
                     sqm = int(parts[0].strip()) * int(parts[1].strip())
-                    pdf.cell(0, 6, f"{p_name} - {sqm}sqm x 23 = {total:,.2f}", ln=True)
+                    pdf.cell(0, 6, f"{p_name} - {sqm}sqm x 23 = ${total:,.2f}", ln=True)
                 except:
-                    pdf.cell(0, 6, f"{p_name} x {rate:,.2f} = {total:,.2f}", ln=True)
+                    pdf.cell(0, 6, f"{p_name} x {rate:,.2f} = ${total:,.2f}", ln=True)
             elif "Weight" in p_name:
-                pdf.cell(0, 6, f"Weights - {qty}EA x {rate:,.2f} = {total:,.2f}", ln=True)
+                pdf.cell(0, 6, f"Weights - {qty}EA x {rate:,.2f} = ${total:,.2f}", ln=True)
             else:
-                pdf.cell(0, 6, f"{p_name} - {qty} x {rate:,.2f} = {total:,.2f}", ln=True)
+                pdf.cell(0, 6, f"{p_name} - {qty} x {rate:,.2f} = ${total:,.2f}", ln=True)
 
     # --- 2. LABOUR ---
     pdf.ln(4)
@@ -96,8 +91,7 @@ def create_calculation_pdf(name, df, subtotal, labour, waiver, cartage, grand_to
     
     for _, row in df.iterrows():
         if row['Is_Lab_Line']:
-            # Clean name: "Labour (Marquee 3 X 3)" -> "3 X 3 Marquee"
-            clean_name = row['Product'].replace("Labour (", "").replace(")", "")
+            clean_name = row['Product'].replace("Labour: Build/Strike (", "").replace(")", "").replace("Labour (", "")
             pdf.cell(0, 6, f"{clean_name} x 55% = ${row['Total']:,.2f}", ln=True)
 
     # --- 3. WAIVER & CARTAGE ---
@@ -113,7 +107,6 @@ def create_calculation_pdf(name, df, subtotal, labour, waiver, cartage, grand_to
     pdf.set_font("Arial", "", 10)
     pdf.cell(0, 6, f"{km} km x 4 trips x $3.50/km", ln=True)
     
-    # Grand Total
     pdf.ln(10)
     pdf.set_font("Arial", "B", 14)
     pdf.set_fill_color(240, 240, 240)
@@ -158,6 +151,7 @@ live_weeks = math.ceil(((end_date - start_date).days) / 7) if (end_date - start_
 
 # ADD PRODUCT
 dept_choice = st.selectbox("Department", sorted(CATALOG.keys(), reverse=True))
+selected_group = "Structures" if dept_choice == "MARQUEE" else list(CATALOG[dept_choice].keys())[0]
 bundle_choice = st.selectbox("Select Group", sorted(CATALOG[dept_choice].keys(), reverse=True))
 selected_bundle = CATALOG[dept_choice][bundle_choice]
 
@@ -194,11 +188,19 @@ if not st.session_state.df.empty:
     h_tot, lab_tot, w_tot = 0.0, 0.0, 0.0
     for idx, row in st.session_state.df.iterrows():
         q, r, d, b, is_lab = row["Qty"], row["Unit Rate"], row["Disc %"], row["Block_Rate"], row["Is_Lab_Line"]
-        line_val = (q * r * (1 - (d/100)))
-        if is_lab: lab_tot += line_val
+        
+        # Determine Rate based on 4-week block logic
+        current_unit_rate = (b / 4) if live_weeks >= 4 else r
+        line_val = q * current_unit_rate * live_weeks * (1 - (d/100))
+        
+        if is_lab:
+            # Labour is usually a one-off setup, adjust if weeks affects it
+            line_val = q * r * (1 - (d/100))
+            lab_tot += line_val
         else:
-            h_tot += line_val
             if inc_waiv and not row["No_Waiver"]: w_tot += line_val * 0.07
+            h_tot += line_val
+            
         st.session_state.df.at[idx, "Total"] = line_val
 
     c_val = (km_input * 14.0 if km_input and inc_cart else 0)
