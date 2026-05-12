@@ -41,15 +41,18 @@ def save_to_google(name, df, start, end, km):
         return True
     except: return False
 
-# --- PDF GENERATION (v27.0) ---
+# --- PDF GENERATION (v27.1 - SINGLE UNIT CONSOLIDATION) ---
 def create_calculation_pdf(name, df, subtotal, labour, waiver, cartage, grand_total, km, weeks):
     pdf = FPDF()
     pdf.add_page()
+    
+    # Header
     pdf.set_font("Arial", "B", 16)
     pdf.cell(0, 10, "No Fuss Event Hire - Internal Calculation Sheet", ln=True, align="C")
     pdf.set_font("Arial", "", 10)
     pdf.cell(0, 10, f"Generated on: {date.today()}", ln=True, align="C")
     pdf.ln(5)
+    
     pdf.set_font("Arial", "B", 12); pdf.cell(0, 10, f"Quote: {name}", ln=True)
     pdf.set_font("Arial", "", 11); pdf.cell(0, 8, f"Hire Duration: {weeks} Week(s) | Total Distance: {km} km", ln=True)
     pdf.ln(5)
@@ -74,17 +77,23 @@ def create_calculation_pdf(name, df, subtotal, labour, waiver, cartage, grand_to
     pdf.set_font("Arial", "", 10)
     for _, row in df.iterrows():
         if not row['Is_Lab_Line']:
-            p_name, qty, rate, total = row['Product'], row['Qty'], row['Unit Rate'], row['Total']
-            pdf.cell(0, 6, f"{qty} - {p_name} x ${rate:,.2f} = ${total:,.2f}", ln=True)
+            qty, total, p_name = row['Qty'], row['Total'], row['Product']
+            if "Marquee" in p_name:
+                try:
+                    parts = p_name.replace("Marquee ", "").upper().split("X")
+                    sqm = int(parts[0].strip()) * int(parts[1].strip())
+                    pdf.cell(0, 6, f"{qty} - {p_name} - {sqm}sqm x $23 = ${total:,.2f}", ln=True)
+                except: pdf.cell(0, 6, f"{qty} - {p_name} x ${row['Unit Rate']:,.2f} = ${total:,.2f}", ln=True)
+            else: pdf.cell(0, 6, f"{qty} - {p_name} x ${row['Unit Rate']:,.2f} = ${total:,.2f}", ln=True)
 
     # Labour
     pdf.ln(4); pdf.set_font("Arial", "B", 11); pdf.cell(0, 8, f"Labour: ${labour:,.2f}", ln=True)
     pdf.set_font("Arial", "", 10)
     for _, row in df.iterrows():
         if row['Is_Lab_Line']:
-            pdf.cell(0, 6, f"{row['Qty']} - {row['Product']} = ${row['Total']:,.2f}", ln=True)
+            clean_name = row['Product'].replace("Labour (", "").replace(")", "")
+            pdf.cell(0, 6, f"{row['Qty']} - {clean_name} x 55% = ${row['Total']:,.2f}", ln=True)
 
-    # Waiver/Cartage
     pdf.ln(4); pdf.set_font("Arial", "B", 11); pdf.cell(0, 8, f"Damage Waiver (7%): ${waiver:,.2f}", ln=True)
     pdf.set_font("Arial", "", 10); pdf.cell(0, 6, f"${subtotal:,.2f} x 0.07", ln=True)
     pdf.ln(2); pdf.set_font("Arial", "B", 11); pdf.cell(0, 8, f"Cartage Total: ${cartage:,.2f}", ln=True)
@@ -94,14 +103,14 @@ def create_calculation_pdf(name, df, subtotal, labour, waiver, cartage, grand_to
     pdf.cell(0, 12, f"GRAND TOTAL (EX GST): ${grand_total:,.2f}", 1, 1, "R", True)
     return bytes(pdf.output())
 
-# 3. MODULAR DATA
+# 3. MODULAR DATA (Behind the scenes math)
 MARQUEE_SERIES = {
-    3: {"name": "3M Series", "starter_hire": 350.0, "starter_lab": 150.0, "ext_hire": 180.0, "ext_lab": 80.0, "bay_len": 3, "w_per_bay": 8},
-    10: {"name": "10M Series", "starter_hire": 1250.0, "starter_lab": 550.0, "ext_hire": 750.0, "ext_lab": 350.0, "bay_len": 5, "w_per_bay": 12}
+    3: {"name": "3m Series", "starter_hire": 350.0, "starter_lab": 150.0, "ext_hire": 180.0, "ext_lab": 80.0, "bay_len": 3, "w_per_bay": 8},
+    10: {"name": "10m Series", "starter_hire": 1250.0, "starter_lab": 550.0, "ext_hire": 750.0, "ext_lab": 350.0, "bay_len": 5, "w_per_bay": 12}
 }
 
 # 4. APP UI
-st.set_page_config(page_title="No Fuss Quote Pro v27.0", layout="wide")
+st.set_page_config(page_title="No Fuss Quote Pro v27.1", layout="wide")
 st.markdown("<style>.main { background-color: #FFFFFF !important; } h3 { color: #FFFFFF !important; border-left: 5px solid #00E676; padding: 10px 15px; background-color: #1A1D2D; border-radius: 0 10px 10px 0; margin-top: 20px; } div.stMetric { background-color: #1A1D2D !important; padding: 20px !important; border-radius: 12px !important; border: 2px solid #3D5AFE !important; } div[data-testid='stMetricValue'] { color: #00E676 !important; font-size: 32px !important; font-weight: bold !important; } [data-testid='stMetricLabel'] p { color: #FFFFFF !important; font-weight: bold !important; font-size: 16px !important; } div.stButton > button:first-child { background-color: #3D5AFE; color: white; border-radius: 10px; height: 50px; font-weight: bold; width: 100%; }</style>", unsafe_allow_html=True)
 
 if 'df' not in st.session_state:
@@ -118,47 +127,44 @@ live_weeks = math.ceil(((end_date - start_date).days) / 7) if (end_date - start_
 
 # SMART QUICK-ADD
 st.markdown("### ⚡ QUICK-ADD MARQUEE")
-q_input = st.text_input("Type Size (e.g., 3x9, 6x3, 10x20)", placeholder="Width x Length...")
+q_input = st.text_input("Type Size (e.g., 3x9, 4x3, 10x20)", placeholder="Width x Length...")
 q_sec = st.radio("Securing", ["Weights", "Pegging"], horizontal=True)
 
 if st.button("ADD TO QUOTE"):
     try:
-        # Parse 3x9 or 10x20
         match = re.search(r'(\d+)\s*[xX]\s*(\d+)', q_input)
         if match:
             w, l = int(match.group(1)), int(match.group(2))
-            # Determine Series (If user types 6x3, width is 3)
             series_w = w if w in [3, 10] else (l if l in [3, 10] else 3)
-            data = MARQUEE_SERIES[series_w]
             total_len = l if series_w == w else w
+            data = MARQUEE_SERIES[series_w]
             bays = math.ceil(total_len / data['bay_len'])
-            ext_bays = bays - 1
             
-            # Build rows
+            # CONSOLIDATED PRICING (1 Starter + (Bays-1) Extensions)
+            total_hire_cost = data['starter_hire'] + ((bays - 1) * data['ext_hire'])
+            total_labour_cost = data['starter_lab'] + ((bays - 1) * data['ext_lab'])
+            
             new_rows = []
-            # Starter
-            new_rows.append({"Qty": 1, "Product": f"Starter Bay ({series_w}m Series)", "Unit Rate": data['starter_hire'], "Total": 0.0, "Block_Rate": data['starter_hire'], "No_Waiver": False, "Unit_Type": "ea", "Is_Lab_Line": False, "Disc %": 0.0})
-            new_rows.append({"Qty": 1, "Product": f"Labour: Starter Bay ({series_w}m)", "Unit Rate": data['starter_lab'], "Total": 0.0, "Block_Rate": data['starter_lab'], "No_Waiver": True, "Unit_Type": "ea", "Is_Lab_Line": True, "Disc %": 0.0})
-            # Extensions
-            if ext_bays > 0:
-                new_rows.append({"Qty": ext_bays, "Product": f"Extension Bay ({series_w}m Series)", "Unit Rate": data['ext_hire'], "Total": 0.0, "Block_Rate": data['ext_hire'], "No_Waiver": False, "Unit_Type": "ea", "Is_Lab_Line": False, "Disc %": 0.0})
-                new_rows.append({"Qty": ext_bays, "Product": f"Labour: Extension Bay ({series_w}m)", "Unit Rate": data['ext_lab'], "Total": 0.0, "Block_Rate": data['ext_lab'], "No_Waiver": True, "Unit_Type": "ea", "Is_Lab_Line": True, "Disc %": 0.0})
+            # Single Consoldiated Structure Line
+            new_rows.append({"Qty": 1, "Product": f"Marquee {series_w} X {total_len}", "Unit Rate": total_hire_cost, "Total": 0.0, "Block_Rate": total_hire_cost, "No_Waiver": False, "Unit_Type": "ea", "Is_Lab_Line": False, "Disc %": 0.0})
+            # Single Consolidate Labour Line
+            new_rows.append({"Qty": 1, "Product": f"Labour (Marquee {series_w} X {total_len})", "Unit Rate": total_labour_cost, "Total": 0.0, "Block_Rate": total_labour_cost, "No_Waiver": True, "Unit_Type": "ea", "Is_Lab_Line": True, "Disc %": 0.0})
+            
             # Weights
             if q_sec == "Weights":
                 w_qty = bays * data['w_per_bay']
-                new_rows.append({"Qty": w_qty, "Product": f"Orange Weights ({series_w}m Series)", "Unit Rate": 6.60, "Total": 0.0, "Block_Rate": 6.60, "No_Waiver": False, "Unit_Type": "ea", "Is_Lab_Line": False, "Disc %": 0.0})
+                new_rows.append({"Qty": w_qty, "Product": f"Orange Weights (For {series_w}x{total_len})", "Unit Rate": 6.60, "Total": 0.0, "Block_Rate": 6.60, "No_Waiver": False, "Unit_Type": "ea", "Is_Lab_Line": False, "Disc %": 0.0})
             
             st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame(new_rows)], ignore_index=True)
-            st.success(f"Added {series_w}x{total_len} Marquee ({bays} Bays)")
+            st.rerun()
         else: st.error("Please use format Width x Length (e.g. 3x9)")
-    except: st.error("Size not recognized. Use 3m or 10m widths.")
+    except Exception as e: st.error(f"Error: {e}")
 
 # QUOTE TABLE
 if not st.session_state.df.empty:
     st.markdown("### 🏗️ QUOTED ITEMS")
     edited_df = st.data_editor(st.session_state.df[["Qty", "Unit_Type", "Product", "Unit Rate", "Total"]], use_container_width=True)
     
-    # CALCS
     h_tot, lab_tot, w_tot = 0.0, 0.0, 0.0
     for idx, row in st.session_state.df.iterrows():
         q, r, is_lab = row["Qty"], row["Unit Rate"], row["Is_Lab_Line"]
