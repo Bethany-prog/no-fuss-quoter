@@ -65,7 +65,7 @@ CATALOG = {
             {"Product": "Plastorip Corner", "w1_3": 0.00, "block": 0.00, "labour": 0.00, "unit": "ea", "waiver": True}
         ],
         "Supa-Trac System": [
-            {"Product": "Supa-Trac flooring", "w1_3": 11.55, "block": 25.00, "labour": 4.65, "unit": "SQM", "waiver": True, "note": "4 Week Hire Block - Invoiced Upfront", "is_st": True},
+            {"Product": "Supa-Trac flooring", "w1_3": 11.55, "block": 25.00, "labour": 4.65, "unit": "SQM", "waiver": True, "is_st": True},
             {"Product": "Supa-Trac Edging", "w1_3": 6.70, "block": 6.70, "labour": 0.00, "unit": "lm", "waiver": True}
         ],
         "Trakmats": [
@@ -98,7 +98,7 @@ CATALOG = {
 }
 
 if 'df' not in st.session_state:
-    st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Disc %", "Total", "Labour_Rate", "Block_Rate", "SYSTEM RATE", "No_Waiver", "Is_GS", "Is_Mojo", "Unit_Type", "Note", "Is_ST"])
+    st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Disc %", "Total", "Labour_Rate", "Block_Rate", "SYSTEM RATE", "No_Waiver", "Is_GS", "Is_Mojo", "Unit_Type", "Is_ST"])
 
 st.title("📦 No Fuss Quote Pro")
 
@@ -166,7 +166,7 @@ if st.button("ADD SELECTED ITEMS TO QUOTE"):
             "Qty": q, "Product": it['Product'], "Unit Rate": base_r, "Disc %": discount_pct if discount_pct else 0.0, 
             "Total": 0.0, "Labour_Rate": lab_r, "Block_Rate": block_r, "SYSTEM RATE": 0.0, 
             "No_Waiver": not it.get("waiver", True), "Is_GS": is_gs, "Is_Mojo": is_mojo, "Unit_Type": it['unit'],
-            "Note": it.get("note", ""), "Is_ST": is_st
+            "Is_ST": is_st
         })
     if new_rows:
         st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame(new_rows)], ignore_index=True)
@@ -185,10 +185,10 @@ if not st.session_state.df.empty:
 
     # --- 4. SELECTORS ---
     st.markdown("### ⚙️ LABOUR & CARTAGE")
-    lab_mode = "Bake Labour into Unit Rate" if has_gs else st.selectbox("Labour Mode", ["Bake Labour into Unit Rate", "Show Labour as Separate Line Item", "No Labour"])
+    labour_mode = "Bake Labour into Unit Rate" if has_gs else st.selectbox("Labour Mode", ["Bake Labour into Unit Rate", "Show Labour as Separate Line Item", "No Labour"])
     
     mojo_lab = 0.0
-    if has_mojo and lab_mode != "No Labour":
+    if has_mojo and labour_mode != "No Labour":
         m_qty = st.session_state.df[st.session_state.df["Is_Mojo"] == True]["Qty"].sum()
         if m_qty <= 30: sup, hand, h_in, h_out = 1, 1, 4, 4
         elif m_qty <= 60: sup, hand, h_in, h_out = 1, 2, 4, 4
@@ -203,20 +203,21 @@ if not st.session_state.df.empty:
     include_waiver = col_waiv.checkbox("🛡️ Include Damage Waiver (7%)", value=True)
 
     # --- 5. FINANCES ---
-    hire_only, lab_only = 0.0, (mojo_lab if lab_mode == "Show Labour as Separate Line Item" else 0.0)
+    hire_only, lab_only, total_sheets = 0.0, (mojo_lab if lab_mode == "Show Labour as Separate Line Item" else 0.0), 0
     m_baked = (mojo_lab / st.session_state.df[st.session_state.df["Is_Mojo"] == True]["Qty"].sum()) if (has_mojo and lab_mode == "Bake Labour into Unit Rate") else 0.0
     
     for idx, row in st.session_state.df.iterrows():
-        q, r, d, b, lr, ig, im = row["Qty"], row["Unit Rate"], row["Disc %"], row["Block_Rate"], row["Labour_Rate"], row["Is_GS"], row["Is_Mojo"]
+        q, r, d, b, lr, ig, im, ist = row["Qty"], row["Unit Rate"], row["Disc %"], row["Block_Rate"], row["Labour_Rate"], row["Is_GS"], row["Is_Mojo"], row["Is_ST"]
         
-        # PRICING FIX: Ensure Block Rate logic ONLY triggers for hires of 4 weeks or more
+        if ist: # Track total sheets for logistics box
+            total_sheets += math.ceil(q / 3.135)
+
         if not ig and not im and live_weeks >= 4:
             wk_r = b / 4
             hire = (q * wk_r * live_weeks)
         elif ig:
             hire = q * r
         else:
-            # Under 4 weeks uses the Standard Rate (w1_3)
             hire = (q * r * live_weeks)
         
         item_lab = (q * m_baked) if im and lab_mode == "Bake Labour into Unit Rate" else (q * lr) if lab_mode == "Bake Labour into Unit Rate" else 0.0
@@ -228,28 +229,23 @@ if not st.session_state.df.empty:
     subtotal = max(2000.0 if has_gs else 300.0, (hire_only + (350.0 - st.session_state.df[st.session_state.df["Is_Mojo"] == True]["Total"].sum()) if (has_mojo and st.session_state.df[st.session_state.df["Is_Mojo"] == True]["Total"].sum() < 350.0) else hire_only))
     waiver = (st.session_state.df[st.session_state.df["No_Waiver"] == False]["Total"].sum() * 0.07) if include_waiver else 0.0
     cartage = (km_input * 4 * 3.50) if km_input and charge_cartage else 0.0
+    
     st.divider()
-    m1, m2, m3, m4 = st.columns(4)
-    m1.metric("SUBTOTAL (HIRE)", f"${subtotal:,.2f}"); m2.metric("LABOUR", f"${lab_only:,.2f}"); m3.metric("WAIVER", f"${waiver:,.2f}"); m4.metric("CARTAGE", f"${cartage:,.2f}")
-    st.metric("GRAND TOTAL (EX GST)", f"${(subtotal + lab_only + waiver + cartage):,.2f}")
+    m_col1, m_col2, m_col3, m_col4 = st.columns(4)
+    m_col1.metric("SUBTOTAL (HIRE)", f"${subtotal:,.2f}"); m_col2.metric("LABOUR", f"${lab_only:,.2f}"); m_col3.metric("WAIVER", f"${waiver:,.2f}"); m_col4.metric("CARTAGE", f"${cartage:,.2f}")
+    
+    c_tot1, c_tot2 = st.columns(2)
+    c_tot1.metric("GRAND TOTAL (EX GST)", f"${(subtotal + lab_only + waiver + cartage):,.2f}")
+    if total_sheets > 0:
+        c_tot2.metric("TOTAL SHEETS (Supa-Trac)", f"{total_sheets}")
 
-    # LOGISTICS CALCULATOR & DESCRIPTION BLOCKS
     st.markdown("### 📋 DESCRIPTION BLOCKS")
     for idx, row in st.session_state.df.iterrows():
-        p, lr, igs, br, ut, note, ist = row["Unit Rate"], row["Labour_Rate"], row["Is_GS"], row["Block_Rate"], row["Unit_Type"], row["Note"], row["Is_ST"]
+        p, lr, igs, br, ut = row["Unit Rate"], row["Labour_Rate"], row["Is_GS"], row["Block_Rate"], row["Unit_Type"]
         wk_r = br/4 if (live_weeks >= 4 and not igs) else p
         init = wk_r + (lr if lab_mode == "Bake Labour into Unit Rate" else 0)
         
         copy_block = f"PRICING BASED ON {live_weeks} WEEK HIRE PERIOD\n"
-        if note: copy_block += f"NOTE: {note}\n"
-
-        # Supa-Trac Sheet Calculator (1.14m x 2.75m = 3.135 sqm)
-        if ist:
-            sheets = math.ceil(row["Qty"] / 3.135)
-            sheet_rate = init * 3.135
-            copy_block += f"LOGISTICS: Required {sheets} Sheets (1.14m x 2.75m)\n"
-            copy_block += f"SYSTEM ENTRY: Enter {sheets} units @ ${sheet_rate:,.2f} per sheet\n"
-
         if round(init, 2) == round(wk_r, 2):
             copy_block += f"Price per {ut} = ${init:,.2f} + GST"
         else:
@@ -257,8 +253,8 @@ if not st.session_state.df.empty:
             if live_weeks > 1:
                 copy_block += f"Price for weeks 2+ = ${wk_r:,.2f} per {ut}/week + GST"
         
-        st.text_area(f"Line {idx+1}: {row['Product']}", value=copy_block, height=150)
+        st.text_area(f"Line {idx+1}: {row['Product']}", value=copy_block, height=100)
     
     if st.button("⚠️ RESET QUOTE"):
-        st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Disc %", "Total", "Labour_Rate", "Block_Rate", "SYSTEM RATE", "No_Waiver", "Is_GS", "Is_Mojo", "Unit_Type", "Note", "Is_ST"])
+        st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Disc %", "Total", "Labour_Rate", "Block_Rate", "SYSTEM RATE", "No_Waiver", "Is_GS", "Is_Mojo", "Unit_Type", "Is_ST"])
         st.rerun()
