@@ -1,35 +1,9 @@
 import streamlit as st
+from streamlit_gsheets import GSheetsConnection
 import math
 import pandas as pd
 from datetime import date
 import json
-import os
-
-# --- SAVE/LOAD UTILITIES ---
-DB_FILE = "quote_db.json"
-
-def save_quote(name, data_df, start_d, end_d, km):
-    db = {}
-    if os.path.exists(DB_FILE):
-        try:
-            with open(DB_FILE, "r") as f:
-                db = json.load(f)
-        except: db = {}
-    db[name] = {"df": data_df.to_dict('records'), "start": str(start_d), "end": str(end_d), "km": km, "saved_at": str(date.today())}
-    with open(DB_FILE, "w") as f:
-        json.dump(db, f)
-
-def load_quote_list():
-    if os.path.exists(DB_FILE):
-        try:
-            with open(DB_FILE, "r") as f:
-                return list(json.load(f).keys())
-        except: return []
-    return []
-
-def get_quote_data(name):
-    with open(DB_FILE, "r") as f:
-        return json.load(f)[name]
 
 # 1. PASSWORD PROTECTION
 def check_password():
@@ -50,7 +24,33 @@ def check_password():
 if not check_password():
     st.stop()
 
-# 2. PAGE CONFIG & STYLING
+# 2. DATABASE CONNECTION (Google Sheets)
+# This pulls the URL you saved in Streamlit Secrets
+conn = st.connection("gsheets", type=GSheetsConnection)
+
+def save_to_google(name, df, start, end, km):
+    try:
+        # Prepare the data for a single row in the sheet
+        new_entry = pd.DataFrame([{
+            "Quote_Name": name,
+            "Data_JSON": df.to_json(orient='records'),
+            "Start_Date": str(start),
+            "End_Date": str(end),
+            "KM": km,
+            "Saved_Date": str(date.today())
+        }])
+        
+        # Read current data, append new row, and update sheet
+        existing_data = conn.read(ttl=0)
+        updated_data = pd.concat([existing_data, new_entry], ignore_index=True)
+        conn.update(data=updated_data)
+        st.cache_data.clear()
+        return True
+    except Exception as e:
+        st.error(f"Cloud Save Error: {e}")
+        return False
+
+# 3. PAGE CONFIG & STYLING
 st.set_page_config(page_title="No Fuss Quote Pro", page_icon="📦", layout="wide")
 
 st.markdown("""
@@ -59,25 +59,20 @@ st.markdown("""
     h3 { 
         color: #FFFFFF !important; 
         border-left: 5px solid #00E676; 
-        padding-left: 15px; 
-        margin-top: 25px;
-        background-color: #1A1D2D;
-        padding-top: 10px;
-        padding-bottom: 10px;
-        border-radius: 0 10px 10px 0;
+        padding: 10px 15px; 
+        background-color: #1A1D2D; 
+        border-radius: 0 10px 10px 0; 
+        margin-top: 20px;
     }
-    div[data-testid="stNumberInput"] label p, 
-    div[data-testid="stDateInput"] label p,
-    div[data-testid="stSelectbox"] label p { color: #333333 !important; font-weight: bold !important; }
+    div.stMetric { background-color: #1A1D2D !important; padding: 20px !important; border-radius: 12px !important; border: 2px solid #3D5AFE !important; }
     div[data-testid="stMetricValue"] { color: #00E676 !important; font-size: 32px !important; font-weight: bold !important; }
     [data-testid="stMetricLabel"] p { color: #FFFFFF !important; font-weight: bold !important; font-size: 16px !important; }
-    div.stMetric { background-color: #1A1D2D !important; padding: 20px !important; border-radius: 12px !important; border: 2px solid #3D5AFE !important; }
     div.stButton > button:first-child { background-color: #3D5AFE; color: white; border-radius: 10px; height: 50px; font-weight: bold; width: 100%; }
     .stDataFrame { border: 2px solid #00E676 !important; border-radius: 12px; }
     </style>
     """, unsafe_allow_html=True)
 
-# 3. MASTER CATALOG
+# 4. MASTER CATALOG (Synced v22.5)
 CATALOG = {
     "FLOORING": {
         "I-Trac System": [
@@ -96,8 +91,7 @@ CATALOG = {
         "Plastorip System": [
             {"Product": "Plastorip", "w1_3": 10.15, "block": 20.30, "labour": 3.05, "unit": "SQM", "waiver": True, "is_p": True},
             {"Product": "Plastorip Edging", "w1_3": 1.65, "block": 1.65, "labour": 0.00, "unit": "pc", "waiver": False},
-            {"Product": "Plastorip Corners", "w1_3": 0.00, "block": 0.00, "labour": 0.00, "unit": "ea", "waiver": False},
-            {"Product": "Plastorip Expansion Joiners", "w1_3": 12.15, "block": 12.15, "labour": 0.00, "unit": "ea", "waiver": False}
+            {"Product": "Plastorip Corners", "w1_3": 0.00, "block": 0.00, "labour": 0.00, "unit": "ea", "waiver": False}
         ],
         "No Fuss Floor": [
             {"Product": "No Fuss Floor (Grey/Green)", "w1_3": 7.10, "block": 15.00, "labour": 3.05, "unit": "SQM", "waiver": True},
@@ -124,18 +118,26 @@ if 'df' not in st.session_state:
 
 st.title("📦 No Fuss Quote Pro")
 
-# --- 0. LOAD ARCHIVE ---
-st.markdown("### 📂 LOAD RECENT QUOTES")
-existing = load_quote_list()
-l_col1, l_col2 = st.columns([3, 1])
-load_choice = l_col1.selectbox("Archive History", ["Select..."] + existing, label_visibility="collapsed")
-if l_col2.button("LOAD DATA"):
-    if load_choice != "Select...":
-        saved = get_quote_data(load_choice)
-        st.session_state.df = pd.DataFrame(saved["df"])
-        st.rerun()
+# --- 5. CLOUD LOAD (TOP) ---
+st.markdown("### 📂 ARCHIVE HISTORY (GOOGLE SHEETS)")
+try:
+    archive_df = conn.read(ttl=0)
+    if not archive_df.empty:
+        existing_list = archive_df["Quote_Name"].tolist()
+        l_col1, l_col2 = st.columns([3, 1])
+        load_choice = l_col1.selectbox("Select Previous Quote", ["Select..."] + existing_list, label_visibility="collapsed")
+        if l_col2.button("LOAD FROM CLOUD"):
+            if load_choice != "Select...":
+                row = archive_df[archive_df["Quote_Name"] == load_choice].iloc[0]
+                st.session_state.df = pd.read_json(row["Data_JSON"])
+                st.success(f"Loaded: {load_choice}")
+                st.rerun()
+    else:
+        st.info("Archive is currently empty.")
+except Exception as e:
+    st.warning("Archive connection pending. Ensure Google Sheet headers match and URL is in Secrets.")
 
-# --- 1. LOGISTICS ---
+# --- 6. LOGISTICS ---
 st.markdown("### 📍 HIRE DATES & DISTANCE")
 c1, c2, c3 = st.columns(3)
 start_date = c1.date_input("Hire Start", value=date.today(), format="DD/MM/YYYY")
@@ -143,7 +145,7 @@ end_date = c2.date_input("Hire End", value=date.today(), format="DD/MM/YYYY")
 km_input = c3.number_input("Distance (KM)", min_value=0.0, value=None, placeholder="KM...")
 live_weeks = math.ceil(((end_date - start_date).days) / 7) if (end_date - start_date).days > 0 else 1
 
-# --- 2. ADD PRODUCT ---
+# --- 7. ADD PRODUCT ---
 st.markdown("### ➕ ADD PRODUCT")
 dept_col, bundle_col = st.columns(2)
 dept_choice = dept_col.selectbox("Department", sorted(CATALOG.keys()))
@@ -183,10 +185,9 @@ if st.button("ADD SELECTED ITEMS TO QUOTE"):
         st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame(new_rows)], ignore_index=True)
         st.rerun()
 
-# --- 3. QUOTED ITEMS ---
+# --- 8. QUOTED ITEMS & FINANCES ---
 if not st.session_state.df.empty:
     st.markdown("### 🏗️ QUOTED ITEMS")
-    # Improved labels to clarify where the $23.20 vs $29.05 comes from
     display_cols = ["Qty", "Unit_Type", "Product", "Unit Rate", "Disc %", "SYSTEM RATE", "Total"]
     edited_df = st.data_editor(st.session_state.df[display_cols], num_rows="dynamic", use_container_width=True, key="editor",
                                column_config={
@@ -197,24 +198,23 @@ if not st.session_state.df.empty:
         for col in ["Qty", "Unit Rate", "Disc %"]: st.session_state.df[col] = edited_df[col]
         st.rerun()
 
-    st.markdown("### ⚙️ LABOUR & CARTAGE")
     labour_mode = st.selectbox("Labour Mode", ["Bake Labour into Unit Rate", "Show Labour as Separate Line Item", "No Labour"])
     
     mojo_lab, has_mojo = 0.0, st.session_state.df["Is_Mojo"].any()
     if has_mojo and labour_mode != "No Labour":
         m_qty = st.session_state.df[st.session_state.df["Is_Mojo"] == True]["Qty"].sum()
-        if m_qty <= 30: sup, hand, h_in, h_out = 1, 1, 4, 4
-        elif m_qty <= 60: sup, hand, h_in, h_out = 1, 2, 4, 4
-        elif m_qty <= 100: sup, hand, h_in, h_out = 1, 4, 4, 4
-        elif m_qty <= 200: sup, hand, h_in, h_out = 1, 6, 6, 4
-        else: sup, hand, h_in, h_out = 2, 8, 6, 6
-        mojo_lab = ((sup + hand) * (h_in + h_out) * 55.0)
+        if m_qty <= 30: s, h, hi, ho = 1, 1, 4, 4
+        elif m_qty <= 60: s, h, hi, ho = 1, 2, 4, 4
+        elif m_qty <= 100: s, h, hi, ho = 1, 4, 4, 4
+        elif m_qty <= 200: s, h, hi, ho = 1, 6, 6, 4
+        else: s, h, hi, ho = 2, 8, 6, 6
+        mojo_lab = ((s + h) * (hi + ho) * 55.0)
 
     col_cart, col_waiv = st.columns(2)
     charge_cartage = col_cart.checkbox("🚚 Include Cartage ($3.50/km x 4)", value=True)
     include_damage_waiver = col_waiv.checkbox("🛡️ Include Damage Waiver (7%)", value=True)
 
-    # --- 5. FINANCES ---
+    # Financial Engine (v22.8 logic)
     hire_total, lab_total, waiver_total, total_sheets = 0.0, 0.0, 0.0, 0
     m_baked = (mojo_lab / st.session_state.df[st.session_state.df["Is_Mojo"] == True]["Qty"].sum()) if (has_mojo and labour_mode == "Bake Labour into Unit Rate" and st.session_state.df[st.session_state.df["Is_Mojo"] == True]["Qty"].sum() > 0) else 0.0
     if has_mojo and labour_mode == "Show Labour as Separate Line Item": lab_total = mojo_lab
@@ -233,6 +233,7 @@ if not st.session_state.df.empty:
 
     subtotal = max(300.0, (hire_total + (350.0 - st.session_state.df[st.session_state.df["Is_Mojo"] == True]["Total"].sum()) if (has_mojo and st.session_state.df[st.session_state.df["Is_Mojo"] == True]["Total"].sum() < 350.0) else hire_total))
     cartage = (km_input * 4 * 3.50) if km_input and charge_cartage else 0.0
+    
     st.divider()
     m_col1, m_col2, m_col3, m_col4 = st.columns(4)
     m_col1.metric("SUBTOTAL (HIRE)", f"${subtotal:,.2f}"); m_col2.metric("LABOUR", f"${lab_total:,.2f}"); m_col3.metric("WAIVER", f"${waiver_total:,.2f}"); m_col4.metric("CARTAGE", f"${cartage:,.2f}")
@@ -240,33 +241,30 @@ if not st.session_state.df.empty:
     c1.metric("GRAND TOTAL (EX GST)", f"${(subtotal + lab_total + waiver_total + cartage):,.2f}")
     if total_sheets > 0: c2.metric("TOTAL SHEETS (Supa-Trac)", f"{total_sheets}")
 
-    # --- UPDATED DESCRIPTION BLOCKS ---
+    # Description Blocks
     st.markdown("### 📋 DESCRIPTION BLOCKS")
     for idx, row in st.session_state.df.iterrows():
         p, lr, br, ut = row["Unit Rate"], row["Labour_Rate"], row["Block_Rate"], row["Unit_Type"]
         wk_r = br/4 if live_weeks >= 4 else p
         init = wk_r + (lr if labour_mode == "Bake Labour into Unit Rate" else 0)
-        
         copy_block = f"PRICING BASED ON {live_weeks} WEEK HIRE PERIOD\n"
-        
-        # 1-Week simplified logic
-        if live_weeks == 1:
-            copy_block += f"Price per {ut} = ${init:,.2f} + GST"
+        if live_weeks == 1: copy_block += f"Price per {ut} = ${init:,.2f} + GST"
         else:
-            # Multi-week logic
-            if round(init, 2) == round(wk_r, 2):
-                copy_block += f"Price per {ut} = ${init:,.2f} + GST"
-            else:
-                copy_block += f"Price for Initial Week (Incl. Install) = ${init:,.2f} per {ut} + GST\n"
-                copy_block += f"Price for weeks 2+ = ${wk_r:,.2f} per {ut}/week + GST"
-        
+            if round(init, 2) == round(wk_r, 2): copy_block += f"Price per {ut} = ${init:,.2f} + GST"
+            else: copy_block += f"Price for Initial Week (Incl. Install) = ${init:,.2f} per {ut} + GST\nPrice for weeks 2+ = ${wk_r:,.2f} per {ut}/week + GST"
         st.text_area(f"Line {idx+1}: {row['Product']}", value=copy_block, height=100)
 
-    st.markdown("### 💾 FINISH & SAVE")
+    # --- 9. CLOUD SAVE (BOTTOM) ---
+    st.markdown("### 💾 FINISH & SAVE TO CLOUD")
     save_col1, save_col2 = st.columns([3, 1])
-    finish_name = save_col1.text_input("Save finalized quote as:", placeholder="Client Name / Project", key="finish_save")
-    if save_col2.button("ARCHIVE QUOTE"):
+    finish_name = save_col1.text_input("Finalize quote name:", placeholder="Client Name / Project")
+    if save_col2.button("CLOUD ARCHIVE"):
         if finish_name:
-            save_quote(finish_name, st.session_state.df, start_date, end_date, km_input)
-            st.success(f"Archived: {finish_name}")
-    if st.button("⚠️ RESET ALL"): st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Disc %", "Total", "Labour_Rate", "Block_Rate", "SYSTEM RATE", "No_Waiver", "Is_GS", "Is_Mojo", "Unit_Type", "Is_ST"]); st.rerun()
+            if save_to_google(finish_name, st.session_state.df, start_date, end_date, km_input):
+                st.success(f"Archived to Cloud: {finish_name}")
+                st.rerun()
+        else: st.error("Please enter a name.")
+
+    if st.button("⚠️ RESET ALL"): 
+        st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Disc %", "Total", "Labour_Rate", "Block_Rate", "SYSTEM RATE", "No_Waiver", "Is_GS", "Is_Mojo", "Unit_Type", "Is_ST"])
+        st.rerun()
