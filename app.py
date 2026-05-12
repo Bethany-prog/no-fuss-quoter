@@ -186,10 +186,13 @@ if st.button("ADD SELECTED ITEMS TO QUOTE"):
 # --- 3. QUOTED ITEMS ---
 if not st.session_state.df.empty:
     st.markdown("### 🏗️ QUOTED ITEMS")
-    # v22.7 Update: Raw Unit Rate is now clearly separated from the dynamic System Rate
+    # Improved labels to clarify where the $23.20 vs $29.05 comes from
     display_cols = ["Qty", "Unit_Type", "Product", "Unit Rate", "Disc %", "SYSTEM RATE", "Total"]
     edited_df = st.data_editor(st.session_state.df[display_cols], num_rows="dynamic", use_container_width=True, key="editor",
-                               column_config={"Unit Rate": st.column_config.NumberColumn("Base Price", format="$%.2f"), "SYSTEM RATE": st.column_config.NumberColumn("Final Rate (Incl Lab)", format="$%.2f")})
+                               column_config={
+                                   "Unit Rate": st.column_config.NumberColumn("Hire Rate (Rent Only)", format="$%.2f"), 
+                                   "SYSTEM RATE": st.column_config.NumberColumn("Total Rate (Rent + Lab)", format="$%.2f")
+                               })
     if not edited_df.equals(st.session_state.df[display_cols]):
         for col in ["Qty", "Unit Rate", "Disc %"]: st.session_state.df[col] = edited_df[col]
         st.rerun()
@@ -237,19 +240,33 @@ if not st.session_state.df.empty:
     c1.metric("GRAND TOTAL (EX GST)", f"${(subtotal + lab_total + waiver_total + cartage):,.2f}")
     if total_sheets > 0: c2.metric("TOTAL SHEETS (Supa-Trac)", f"{total_sheets}")
 
+    # --- UPDATED DESCRIPTION BLOCKS ---
     st.markdown("### 📋 DESCRIPTION BLOCKS")
     for idx, row in st.session_state.df.iterrows():
         p, lr, br, ut = row["Unit Rate"], row["Labour_Rate"], row["Block_Rate"], row["Unit_Type"]
         wk_r = br/4 if live_weeks >= 4 else p
         init = wk_r + (lr if labour_mode == "Bake Labour into Unit Rate" else 0)
-        copy_block = f"PRICING BASED ON {live_weeks} WEEK HIRE PERIOD\nPrice per {ut} = ${init:,.2f} + GST" if round(init, 2) == round(wk_r, 2) else f"PRICING BASED ON {live_weeks} WEEK HIRE PERIOD\nPrice for Initial Week (Incl. Install) = ${init:,.2f} per {ut} + GST\nPrice for weeks 2+ = ${wk_r:,.2f} per {ut}/week + GST"
+        
+        copy_block = f"PRICING BASED ON {live_weeks} WEEK HIRE PERIOD\n"
+        
+        # 1-Week simplified logic
+        if live_weeks == 1:
+            copy_block += f"Price per {ut} = ${init:,.2f} + GST"
+        else:
+            # Multi-week logic
+            if round(init, 2) == round(wk_r, 2):
+                copy_block += f"Price per {ut} = ${init:,.2f} + GST"
+            else:
+                copy_block += f"Price for Initial Week (Incl. Install) = ${init:,.2f} per {ut} + GST\n"
+                copy_block += f"Price for weeks 2+ = ${wk_r:,.2f} per {ut}/week + GST"
+        
         st.text_area(f"Line {idx+1}: {row['Product']}", value=copy_block, height=100)
 
     st.markdown("### 💾 FINISH & SAVE")
     save_col1, save_col2 = st.columns([3, 1])
-    finish_name = save_col1.text_input("Save finalized quote as:", placeholder="e.g. Marvel Stadium - Oct 2026", key="finish_save")
+    finish_name = save_col1.text_input("Save finalized quote as:", placeholder="Client Name / Project", key="finish_save")
     if save_col2.button("ARCHIVE QUOTE"):
         if finish_name:
             save_quote(finish_name, st.session_state.df, start_date, end_date, km_input)
-            st.success(f"Successfully archived: {finish_name}")
-    if st.button("⚠️ RESET ALL & START NEW"): st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Disc %", "Total", "Labour_Rate", "Block_Rate", "SYSTEM RATE", "No_Waiver", "Is_GS", "Is_Mojo", "Unit_Type", "Is_ST"]); st.rerun()
+            st.success(f"Archived: {finish_name}")
+    if st.button("⚠️ RESET ALL"): st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Disc %", "Total", "Labour_Rate", "Block_Rate", "SYSTEM RATE", "No_Waiver", "Is_GS", "Is_Mojo", "Unit_Type", "Is_ST"]); st.rerun()
