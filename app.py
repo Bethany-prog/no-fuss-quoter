@@ -44,8 +44,8 @@ def save_to_google(name, df, start, end, km):
         return True
     except: return False
 
-# --- UPDATED PDF GENERATION (v24.6 - ACTUAL MATH STRINGS) ---
-def create_calculation_pdf(name, df, subtotal, labour, waiver, cartage, grand_total, km, weeks):
+# --- UPDATED PDF GENERATION (v24.7 - RAW MATH STRINGS) ---
+def create_calculation_pdf(name, df, subtotal, labour, waiver, cartage, grand_total, km, weeks, lab_mode):
     pdf = FPDF()
     pdf.add_page()
     
@@ -64,27 +64,31 @@ def create_calculation_pdf(name, df, subtotal, labour, waiver, cartage, grand_to
     pdf.cell(0, 8, f"Total Distance: {km} km", ln=True)
     pdf.ln(5)
     
-    # Item Table Header
+    # Item Table
     pdf.set_fill_color(26, 29, 45)
     pdf.set_text_color(255, 255, 255)
     pdf.set_font("Arial", "B", 10)
     pdf.cell(80, 10, " Product", 1, 0, "L", True)
     pdf.cell(25, 10, " Qty", 1, 0, "C", True)
-    pdf.cell(35, 10, " Rate (Inc Lab)", 1, 0, "C", True)
+    pdf.cell(35, 10, " Rate", 1, 0, "C", True)
     pdf.cell(40, 10, " Total", 1, 1, "R", True)
     
-    # Item Table Rows
     pdf.set_text_color(0, 0, 0)
     pdf.set_font("Arial", "", 9)
+    
+    math_summary_parts = []
     for _, row in df.iterrows():
         pdf.cell(80, 8, f" {row['Product']}", 1)
         pdf.cell(25, 8, f" {row['Qty']} {row['Unit_Type']}", 1, 0, "C")
-        pdf.cell(35, 8, f" ${row['SYSTEM RATE']:,.2f}", 1, 0, "C")
+        pdf.cell(35, 8, f" ${row['Unit Rate']:,.2f}", 1, 0, "C")
         pdf.cell(40, 8, f" ${row['Total']:,.2f}", 1, 1, "R")
+        
+        # Build the math string for the subtotal section
+        math_summary_parts.append(f"{row['Qty']} x ${row['Unit Rate']:,.2f}")
     
     pdf.ln(10)
     
-    # FINANCIAL BREAKDOWN WITH LIVE MATH
+    # FINANCIAL BREAKDOWN
     pdf.set_font("Arial", "B", 13)
     pdf.cell(0, 10, "Financial Breakdown", ln=True)
     
@@ -94,7 +98,10 @@ def create_calculation_pdf(name, df, subtotal, labour, waiver, cartage, grand_to
     pdf.cell(0, 8, f"${subtotal:,.2f}", 0, 1, "R")
     pdf.set_font("Arial", "I", 9)
     pdf.set_text_color(100, 100, 100)
-    pdf.cell(0, 5, f"(Sum of items above after discounts and weekly multipliers)", ln=True)
+    # Combine the parts: "50 x 23.20 + 10 x 5.00..."
+    sub_math = " + ".join(math_summary_parts)
+    if weeks > 1: sub_math = f"({sub_math}) x {weeks} weeks"
+    pdf.cell(0, 5, f"Calc: {sub_math}", ln=True)
     pdf.ln(2)
     
     # Labour
@@ -104,7 +111,12 @@ def create_calculation_pdf(name, df, subtotal, labour, waiver, cartage, grand_to
     pdf.cell(0, 8, f"${labour:,.2f}", 0, 1, "R")
     pdf.set_font("Arial", "I", 9)
     pdf.set_text_color(100, 100, 100)
-    pdf.cell(0, 5, f"(Additional labour lines not baked into SQM/Unit rates)", ln=True)
+    if lab_mode == "No Labour":
+        pdf.cell(0, 5, "(Mode: No Labour selected)", ln=True)
+    elif lab_mode == "Bake Labour into Unit Rate":
+        pdf.cell(0, 5, "(Mode: Baked into SQM rates above)", ln=True)
+    else:
+        pdf.cell(0, 5, "(Mode: Separate Line Item)", ln=True)
     pdf.ln(2)
     
     # Waiver
@@ -114,7 +126,6 @@ def create_calculation_pdf(name, df, subtotal, labour, waiver, cartage, grand_to
     pdf.cell(0, 8, f"${waiver:,.2f}", 0, 1, "R")
     pdf.set_font("Arial", "I", 9)
     pdf.set_text_color(100, 100, 100)
-    # LIVE MATH
     pdf.cell(0, 5, f"Calc: ${subtotal:,.2f} x 0.07", ln=True)
     pdf.ln(2)
     
@@ -125,7 +136,6 @@ def create_calculation_pdf(name, df, subtotal, labour, waiver, cartage, grand_to
     pdf.cell(0, 8, f"${cartage:,.2f}", 0, 1, "R")
     pdf.set_font("Arial", "I", 9)
     pdf.set_text_color(100, 100, 100)
-    # LIVE MATH
     pdf.cell(0, 5, f"Calc: {km} km x 4 trips x $3.50/km", ln=True)
     
     pdf.ln(5)
@@ -140,7 +150,7 @@ def create_calculation_pdf(name, df, subtotal, labour, waiver, cartage, grand_to
 st.set_page_config(page_title="No Fuss Quote Pro", page_icon="📦", layout="wide")
 st.markdown("<style>.main { background-color: #FFFFFF !important; } h3 { color: #FFFFFF !important; border-left: 5px solid #00E676; padding: 10px 15px; background-color: #1A1D2D; border-radius: 0 10px 10px 0; } div.stMetric { background-color: #1A1D2D !important; padding: 20px !important; border-radius: 12px !important; border: 2px solid #3D5AFE !important; } div[data-testid='stMetricValue'] { color: #00E676 !important; font-size: 32px !important; font-weight: bold !important; } [data-testid='stMetricLabel'] p { color: #FFFFFF !important; font-weight: bold !important; font-size: 16px !important; } div.stButton > button:first-child { background-color: #3D5AFE; color: white; border-radius: 10px; height: 50px; font-weight: bold; width: 100%; } .stDataFrame { border: 2px solid #00E676 !important; border-radius: 12px; }</style>", unsafe_allow_html=True)
 
-# 4. MASTER CATALOG (v22.5 Sync)
+# 4. MASTER CATALOG
 CATALOG = {
     "FLOORING": {
         "I-Trac System": [
@@ -264,8 +274,8 @@ if not st.session_state.df.empty:
             save_to_google(fn, st.session_state.df, start_date, end_date, km_input)
             st.success("Archived!")
             
-    # PDF Logic with Updated Math Strings
-    pdf_bytes = create_calculation_pdf(fn if fn else "Internal_Quote", st.session_state.df, hire_total, lab_total, waiver_total, cart_val, final_grand, km_input if km_input else 0, live_weeks)
+    # PDF Logic with specific RAW Math Strings
+    pdf_bytes = create_calculation_pdf(fn if fn else "Internal_Quote", st.session_state.df, hire_total, lab_total, waiver_total, cart_val, final_grand, km_input if km_input else 0, live_weeks, labour_mode)
     save_col3.download_button(label="📥 DOWNLOAD INTERNAL PDF", data=pdf_bytes, file_name=f"{fn if fn else 'Quote'}_Calculations.pdf", mime="application/pdf")
     
     if st.button("⚠️ RESET ALL"): st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Disc %", "Total", "Labour_Rate", "Block_Rate", "SYSTEM RATE", "No_Waiver", "Is_GS", "Is_Mojo", "Unit_Type", "Is_ST"]); st.rerun()
