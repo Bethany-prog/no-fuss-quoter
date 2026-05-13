@@ -11,7 +11,7 @@ def check_password():
         st.session_state.password_correct = False
     if not st.session_state.password_correct:
         st.title("🔒 Unified Engine Access")
-        password = st.text_input("Access Code", type="password", help="Enter the 2026 master code")
+        password = st.text_input("Access Code", type="password")
         if st.button("Unlock Engine"):
             if password == "NoFuss2026":
                 st.session_state.password_correct = True
@@ -23,7 +23,7 @@ if not check_password():
     st.stop()
 
 # --- v29.0 VISUAL STYLING ---
-st.set_page_config(page_title="No Fuss Quote Pro v31.0", layout="wide")
+st.set_page_config(page_title="No Fuss Quote Pro v31.1", layout="wide")
 st.markdown("""
     <style>
     .main { background-color: #FFFFFF !important; }
@@ -49,12 +49,11 @@ st.markdown("""
         border-radius: 10px;
         height: 50px;
         font-weight: bold;
-        width: 100%;
     }
     </style>
     """, unsafe_allow_html=True)
 
-# --- LOCKED MASTER DATA ---
+# --- LOCKED MASTER DATA (v31.1) ---
 STRUCT_LOGIC = {
     4:  {"bay": 3, "s_rate": 23.00, "m_rate": 18.20, "s_lab": 0.55, "m_lab": 0.40, "min_lab": 350.00},
     6:  {"bay": 3, "s_rate": 23.00, "m_rate": 18.20, "s_lab": 0.55, "m_lab": 0.40, "min_lab": 350.00},
@@ -72,11 +71,12 @@ MARQUEE_UNITS = {
 GENERAL_PRODUCTS = {
     "Flooring": {
         "Supa-Trac®": {"rate": 11.55, "block": 25.00, "lab_fix": 4.65, "kg_sqm": 4.5, "unit": "SQM"},
-        "I-Trac®": {"rate": 23.40, "block": 46.80, "lab_fix": 4.65, "kg_sqm": 15.0, "unit": "SQM"}
+        "I-Trac®": {"rate": 23.40, "block": 46.80, "lab_fix": 4.65, "kg_sqm": 15.0, "unit": "SQM"},
+        "Plastorip": {"rate": 14.00, "block": 30.00, "lab_fix": 4.65, "kg_sqm": 4.0, "unit": "SQM"}
     }
 }
 
-# --- PDF ENGINE (FULL MATH EXPLANATION) ---
+# --- PDF ENGINE ---
 def create_calculation_pdf(name, df, subtotal, labour, waiver, cartage, grand, km, weeks, start, end, h_maths, l_details, kg, trucks):
     pdf = FPDF()
     pdf.add_page()
@@ -113,7 +113,7 @@ def create_calculation_pdf(name, df, subtotal, labour, waiver, cartage, grand, k
 if 'df' not in st.session_state:
     st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Total", "Min_Lab", "Raw_Lab", "Lab_Math", "KG", "Is_Marquee", "Hire_Math_Str"])
 
-st.title("📦 No Fuss Unified Engine (v31.0)")
+st.title("📦 No Fuss Unified Engine (v31.1)")
 
 c1, c2, c3 = st.columns(3)
 start_d = c1.date_input("Hire Start", value=date.today())
@@ -153,16 +153,39 @@ with col_mq:
             st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame(new_rows)], ignore_index=True); st.rerun()
 
 with col_cat:
-    st.markdown("### 🪵 Catalog Range")
+    st.markdown("### 🪵 Catalog Range (Flooring)")
     p_sel = st.selectbox("Product", list(GENERAL_PRODUCTS["Flooring"].keys()))
-    f_qty = st.number_input("Amount (Qty/SQM)", min_value=0.0)
-    if st.button("Add Product"):
+    # Plastorip Area Entry
+    f_len = st.number_input("Floor Length (m)", min_value=0.0)
+    f_wid = st.number_input("Floor Width (m)", min_value=0.0)
+    if st.button("Add Flooring + Edging"):
         data = GENERAL_PRODUCTS["Flooring"][p_sel]
+        sqm = f_len * f_wid
         f_rate = (data['block']/4) if (weeks >= 4) else data['rate']
-        h_val = f_qty * f_rate; l_val = f_qty * data['lab_fix']
-        st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame([{
-            "Qty": f_qty, "Product": p_sel, "Unit Rate": f_rate, "Total": 0.0, "Min_Lab": 0, "Raw_Lab": l_val, "Lab_Math": f"{p_sel} Lab: {f_qty}sqm x ${data['lab_fix']} = ${l_val:,.2f}", "KG": f_qty * data['kg_sqm'], "Is_Marquee": False, "Hire_Math_Str": f"{f_qty} - {p_sel} x ${f_rate:,.2f} = ${h_val:,.2f}"
-        }])], ignore_index=True); st.rerun()
+        h_val = sqm * f_rate; l_val = sqm * data['lab_fix']
+        
+        new_items = []
+        # Area Item
+        new_items.append({
+            "Qty": sqm, "Product": p_sel, "Unit Rate": f_rate, "Total": 0.0, "Min_Lab": 0, "Raw_Lab": l_val, 
+            "Lab_Math": f"{p_sel} Lab: {sqm}sqm x ${data['lab_fix']} = ${l_val:,.2f}", 
+            "KG": sqm * data['kg_sqm'], "Is_Marquee": False, "Hire_Math_Str": f"{sqm}sqm - {p_sel} ({f_len}m x {f_wid}m) x ${f_rate:,.2f} = ${h_val:,.2f}"
+        })
+        
+        # Plastorip Edging Logic (25% Hire, $1.50 Lab)
+        if p_sel == "Plastorip":
+            perimeter = 2 * (f_len + f_wid)
+            e_rate = 5.00 # Hire Linear Meter
+            e_lab = 1.50 # Lab Linear Meter
+            e_h_val = perimeter * e_rate
+            e_l_val = perimeter * e_lab
+            new_items.append({
+                "Qty": perimeter, "Product": "Plastorip Edging (Linear Metres)", "Unit Rate": e_rate, "Total": 0.0, "Min_Lab": 0, "Raw_Lab": e_l_val, 
+                "Lab_Math": f"Edging Lab: {perimeter}lm x $1.50 = ${e_l_val:,.2f}", 
+                "KG": perimeter * 1.5, "Is_Marquee": False, "Hire_Math_Str": f"{perimeter}lm - Plastorip Edging x $5.00 = ${e_h_val:,.2f}"
+            })
+
+        st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame(new_items)], ignore_index=True); st.rerun()
 
 if not st.session_state.df.empty:
     st.divider(); st.data_editor(st.session_state.df[["Qty", "Product", "Unit Rate", "Total"]], use_container_width=True)
