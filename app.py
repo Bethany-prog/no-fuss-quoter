@@ -23,7 +23,7 @@ def check_password():
 if not check_password():
     st.stop()
 
-# --- DATA: MASTER RATE CARD (v28.8) ---
+# --- DATA: MASTER RATE CARD (v28.9) ---
 STRUCT_LOGIC = {
     3:  {"bay": 3, "s_rate": 23.00, "m_rate": 18.20, "s_lab": 0.55, "m_lab": 0.40, "min_lab": 350.00},
     4:  {"bay": 3, "s_rate": 23.00, "m_rate": 18.20, "s_lab": 0.55, "m_lab": 0.40, "min_lab": 350.00},
@@ -75,7 +75,7 @@ def create_calculation_pdf(name, df, subtotal, final_labour, waiver, cartage, gr
             meta = f" ({row['Product_Meta']})" if row['Product_Meta'] else ""
             pdf.cell(0, 6, f"{row['Qty']} - {row['Product']}{meta} x ${row['Unit Rate']:,.2f} = ${row['Total']:,.2f}", ln=True)
 
-    # LABOUR BREAKDOWN (Maths only)
+    # LABOUR BREAKDOWN
     pdf.ln(4); pdf.set_font("Arial", "B", 11); pdf.cell(0, 8, f"Labour Total: ${final_labour:,.2f}", ln=True)
     pdf.set_font("Arial", "", 10)
     for line in lab_details:
@@ -92,7 +92,7 @@ def create_calculation_pdf(name, df, subtotal, final_labour, waiver, cartage, gr
     return bytes(pdf.output())
 
 # 4. APP UI
-st.set_page_config(page_title="No Fuss Quote Pro v28.8", layout="wide")
+st.set_page_config(page_title="No Fuss Quote Pro v28.9", layout="wide")
 st.markdown("<style>.main { background-color: #FFFFFF !important; } h3 { color: #FFFFFF !important; border-left: 5px solid #00E676; padding: 10px 15px; background-color: #1A1D2D; border-radius: 0 10px 10px 0; margin-top: 20px; } div.stMetric { background-color: #1A1D2D !important; padding: 20px !important; border-radius: 12px !important; border: 2px solid #3D5AFE !important; } div[data-testid='stMetricValue'] { color: #00E676 !important; font-size: 32px !important; font-weight: bold !important; } [data-testid='stMetricLabel'] p { color: #FFFFFF !important; font-weight: bold !important; font-size: 16px !important; } div.stButton > button:first-child { background-color: #3D5AFE; color: white; border-radius: 10px; height: 50px; font-weight: bold; width: 100%; }</style>", unsafe_allow_html=True)
 
 if 'df' not in st.session_state:
@@ -144,8 +144,9 @@ if st.button("ADD TO QUOTE"):
 
         if q_sec == "Weights":
             w_total = int(legs * 6 * q_qty)
-            lab_val = w_total * 1.65
-            new_rows.append({"Qty": w_total, "Product": "Orange Weights", "Unit Rate": 6.60, "Total": 0.0, "Unit_Type": "ea", "Product_Meta": f"{int(legs)} legs", "Min_Lab_Floor": 0, "Raw_Lab_Value": lab_val, "Is_Lab_Line": False, "Lab_Math_Str": f"Weights: {w_total} units x $1.65 = ${lab_val:,.2f}"})
+            w_hire_total = w_total * 6.60
+            lab_val = w_hire_total * 0.25 # 25% Labour
+            new_rows.append({"Qty": w_total, "Product": "Orange Weights", "Unit Rate": 6.60, "Total": 0.0, "Unit_Type": "ea", "Product_Meta": f"{int(legs)} legs", "Min_Lab_Floor": 0, "Raw_Lab_Value": lab_val, "Is_Lab_Line": False, "Lab_Math_Str": f"Weights: ${w_hire_total:,.2f} hire x 25% = ${lab_val:,.2f}"})
 
         st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame(new_rows)], ignore_index=True); st.rerun()
 
