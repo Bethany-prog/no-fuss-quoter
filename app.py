@@ -23,9 +23,8 @@ def check_password():
 if not check_password():
     st.stop()
 
-# --- DATA: MASTER RATE CARD (v28.9) ---
+# --- TARGETED DATA: UPDATED MARQUEE & STRUCTURE MODULE (v29.0) ---
 STRUCT_LOGIC = {
-    3:  {"bay": 3, "s_rate": 23.00, "m_rate": 18.20, "s_lab": 0.55, "m_lab": 0.40, "min_lab": 350.00},
     4:  {"bay": 3, "s_rate": 23.00, "m_rate": 18.20, "s_lab": 0.55, "m_lab": 0.40, "min_lab": 350.00},
     6:  {"bay": 3, "s_rate": 23.00, "m_rate": 18.20, "s_lab": 0.55, "m_lab": 0.40, "min_lab": 350.00},
     9:  {"bay": 3, "s_rate": 23.00, "m_rate": 18.20, "s_lab": 0.55, "m_lab": 0.40, "min_lab": 350.00},
@@ -36,10 +35,10 @@ STRUCT_LOGIC = {
 }
 
 MARQUEE_UNITS = {
-    "3x3 Hi Top": {"rate": 198.45, "lab_perc": 0.55, "min_lab": 0.00, "legs": 4},
-    "3x3 Shade": {"rate": 198.45, "lab_perc": 0.55, "min_lab": 0.00, "legs": 4},
-    "3x6 Shade": {"rate": 396.90, "lab_perc": 0.55, "min_lab": 0.00, "legs": 6},
-    "4.5x4.5": {"rate": 446.51, "lab_perc": 0.55, "min_lab": 0.00, "legs": 4}
+    "3x3 Hi Top": {"rate": 198.45, "lab_perc": 0.55, "min_lab": 350.00, "legs": 4},
+    "3x3 Shade": {"rate": 198.45, "lab_perc": 0.55, "min_lab": 350.00, "legs": 4},
+    "3x6 Shade": {"rate": 396.90, "lab_perc": 0.55, "min_lab": 350.00, "legs": 6},
+    "4.5x4.5": {"rate": 446.51, "lab_perc": 0.55, "min_lab": 350.00, "legs": 4}
 }
 
 # --- PDF ENGINE ---
@@ -75,7 +74,7 @@ def create_calculation_pdf(name, df, subtotal, final_labour, waiver, cartage, gr
             meta = f" ({row['Product_Meta']})" if row['Product_Meta'] else ""
             pdf.cell(0, 6, f"{row['Qty']} - {row['Product']}{meta} x ${row['Unit Rate']:,.2f} = ${row['Total']:,.2f}", ln=True)
 
-    # LABOUR BREAKDOWN
+    # Labour Details
     pdf.ln(4); pdf.set_font("Arial", "B", 11); pdf.cell(0, 8, f"Labour Total: ${final_labour:,.2f}", ln=True)
     pdf.set_font("Arial", "", 10)
     for line in lab_details:
@@ -92,8 +91,7 @@ def create_calculation_pdf(name, df, subtotal, final_labour, waiver, cartage, gr
     return bytes(pdf.output())
 
 # 4. APP UI
-st.set_page_config(page_title="No Fuss Quote Pro v28.9", layout="wide")
-st.markdown("<style>.main { background-color: #FFFFFF !important; } h3 { color: #FFFFFF !important; border-left: 5px solid #00E676; padding: 10px 15px; background-color: #1A1D2D; border-radius: 0 10px 10px 0; margin-top: 20px; } div.stMetric { background-color: #1A1D2D !important; padding: 20px !important; border-radius: 12px !important; border: 2px solid #3D5AFE !important; } div[data-testid='stMetricValue'] { color: #00E676 !important; font-size: 32px !important; font-weight: bold !important; } [data-testid='stMetricLabel'] p { color: #FFFFFF !important; font-weight: bold !important; font-size: 16px !important; } div.stButton > button:first-child { background-color: #3D5AFE; color: white; border-radius: 10px; height: 50px; font-weight: bold; width: 100%; }</style>", unsafe_allow_html=True)
+st.set_page_config(page_title="No Fuss Quote Pro v29.0", layout="wide")
 
 if 'df' not in st.session_state:
     st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Total", "Unit_Type", "Product_Meta", "Min_Lab_Floor", "Raw_Lab_Value", "Is_Lab_Line", "Lab_Math_Str"])
@@ -108,8 +106,8 @@ km_input = c3.number_input("Distance (KM)", min_value=0.0, value=0.0)
 live_weeks = math.ceil(((end_date - start_date).days) / 7) if (end_date - start_date).days > 0 else 1
 
 # --- QUICK-ADD ---
-st.markdown("### ⚡ QUICK-ADD")
-q_input = st.text_input("e.g., 3x3, 4x12", placeholder="Span x Length...")
+st.markdown("### ⚡ MARQUEE & STRUCTURE MODULE")
+q_input = st.text_input("e.g., 3x3, 4x12, 12x20", placeholder="Span x Length...")
 q_qty = st.number_input("Unit Quantity", min_value=1, value=1)
 q_sec = st.radio("Securing", ["Weights", "Pegging"], horizontal=True)
 
@@ -119,34 +117,37 @@ if st.button("ADD TO QUOTE"):
         span, length = int(nums[0]), int(nums[1])
         new_rows = []
         
+        # 3x3 or 3x6 DEFAULT RULE
         if span == 3 and length == 3:
             data = MARQUEE_UNITS["3x3 Hi Top"]
             hire_val = data['rate'] * q_qty
             lab_val = hire_val * data['lab_perc']
-            new_rows.append({"Qty": q_qty, "Product": "3m x 3m Hi Top", "Unit Rate": data['rate'], "Total": 0.0, "Unit_Type": "ea", "Product_Meta": "9sqm", "Min_Lab_Floor": 0.00, "Raw_Lab_Value": lab_val, "Is_Lab_Line": False, "Lab_Math_Str": f"3m x 3m Hi Top: ${hire_val:,.2f} hire x 55% = ${lab_val:,.2f}"})
+            new_rows.append({"Qty": q_qty, "Product": "3m x 3m Hi Top", "Unit Rate": data['rate'], "Total": 0.0, "Unit_Type": "ea", "Product_Meta": "9sqm", "Min_Lab_Floor": data['min_lab'], "Raw_Lab_Value": lab_val, "Is_Lab_Line": False, "Lab_Math_Str": f"3m x 3m Hi Top: ${hire_val:,.2f} x 55% = ${lab_val:,.2f}"})
             legs = data['legs']
         elif span == 3 and length == 6:
             data = MARQUEE_UNITS["3x6 Shade"]
             hire_val = data['rate'] * q_qty
             lab_val = hire_val * data['lab_perc']
-            new_rows.append({"Qty": q_qty, "Product": "3m x 6m Shade", "Unit Rate": data['rate'], "Total": 0.0, "Unit_Type": "ea", "Product_Meta": "18sqm", "Min_Lab_Floor": 0.00, "Raw_Lab_Value": lab_val, "Is_Lab_Line": False, "Lab_Math_Str": f"3m x 6m Shade: ${hire_val:,.2f} hire x 55% = ${lab_val:,.2f}"})
+            new_rows.append({"Qty": q_qty, "Product": "3m x 6m Shade", "Unit Rate": data['rate'], "Total": 0.0, "Unit_Type": "ea", "Product_Meta": "18sqm", "Min_Lab_Floor": data['min_lab'], "Raw_Lab_Value": lab_val, "Is_Lab_Line": False, "Lab_Math_Str": f"3m x 6m Shade: ${hire_val:,.2f} x 55% = ${lab_val:,.2f}"})
             legs = data['legs']
         else:
+            # STRUCTURE LOGIC
             logic = STRUCT_LOGIC.get(span, STRUCT_LOGIC[4])
             bays = math.ceil(length / logic['bay'])
             sqm = span * length
+            # If 1 bay, use Single Rate, if 2+ use Modular Rate
             rate = logic['s_rate'] if bays == 1 else logic['m_rate']
-            hire_val = sqm * rate * q_qty
             lab_perc = logic['s_lab'] if bays == 1 else logic['m_lab']
+            hire_val = sqm * rate * q_qty
             lab_val = hire_val * lab_perc
-            new_rows.append({"Qty": q_qty, "Product": f"Structure {span}m x {length}m", "Unit Rate": sqm * rate, "Total": 0.0, "Unit_Type": "ea", "Product_Meta": f"{sqm}sqm", "Min_Lab_Floor": logic['min_lab'], "Raw_Lab_Value": lab_val, "Is_Lab_Line": False, "Lab_Math_Str": f"Structure {span}x{length}: ${hire_val:,.2f} hire x {int(lab_perc*100)}% = ${lab_val:,.2f}"})
+            new_rows.append({"Qty": q_qty, "Product": f"Structure {span}m x {length}m", "Unit Rate": sqm * rate, "Total": 0.0, "Unit_Type": "ea", "Product_Meta": f"{sqm}sqm", "Min_Lab_Floor": logic['min_lab'], "Raw_Lab_Value": lab_val, "Is_Lab_Line": False, "Lab_Math_Str": f"Structure {span}x{length}: ${hire_val:,.2f} x {int(lab_perc*100)}% = ${lab_val:,.2f}"})
             legs = ((length / logic['bay']) + 1) * 2
 
         if q_sec == "Weights":
             w_total = int(legs * 6 * q_qty)
             w_hire_total = w_total * 6.60
-            lab_val = w_hire_total * 0.25 # 25% Labour
-            new_rows.append({"Qty": w_total, "Product": "Orange Weights", "Unit Rate": 6.60, "Total": 0.0, "Unit_Type": "ea", "Product_Meta": f"{int(legs)} legs", "Min_Lab_Floor": 0, "Raw_Lab_Value": lab_val, "Is_Lab_Line": False, "Lab_Math_Str": f"Weights: ${w_hire_total:,.2f} hire x 25% = ${lab_val:,.2f}"})
+            lab_val_w = w_hire_total * 0.25 
+            new_rows.append({"Qty": w_total, "Product": "Orange Weights (30kg)", "Unit Rate": 6.60, "Total": 0.0, "Unit_Type": "ea", "Product_Meta": f"{int(legs)} legs", "Min_Lab_Floor": 0, "Raw_Lab_Value": lab_val_w, "Is_Lab_Line": False, "Lab_Math_Str": f"Weights: ${w_hire_total:,.2f} x 25% = ${lab_val_w:,.2f}"})
 
         st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame(new_rows)], ignore_index=True); st.rerun()
 
