@@ -23,9 +23,8 @@ def check_password():
 if not check_password():
     st.stop()
 
-# --- RECONSTRUCTED MASTER CATALOG (v29.5) ---
+# --- RE-ALIGNED MASTER CATALOG (v29.6) ---
 
-# A. STRUCTURES (Modular M2 Logic)
 STRUCT_LOGIC = {
     3:  {"bay": 3, "s_rate": 23.00, "m_rate": 18.20, "s_lab": 0.55, "m_lab": 0.40, "min_lab": 350.00},
     4:  {"bay": 3, "s_rate": 23.00, "m_rate": 18.20, "s_lab": 0.55, "m_lab": 0.40, "min_lab": 350.00},
@@ -37,7 +36,6 @@ STRUCT_LOGIC = {
     20: {"bay": 5, "s_rate": 19.95, "m_rate": 19.95, "s_lab": 0.40, "m_lab": 0.40, "min_lab": 0.00},
 }
 
-# B. POP-UP MARQUEES
 MARQUEE_UNITS = {
     "3x3 Hi Top": {"rate": 198.45, "lab_perc": 0.55, "min_lab": 350.00, "legs": 4, "kg": 50},
     "3x3 Shade": {"rate": 198.45, "lab_perc": 0.55, "min_lab": 350.00, "legs": 4, "kg": 50},
@@ -45,34 +43,16 @@ MARQUEE_UNITS = {
     "4.5x4.5": {"rate": 446.51, "lab_perc": 0.55, "min_lab": 350.00, "legs": 4, "kg": 75}
 }
 
-# C. ALL OTHER PRODUCTS
 GENERAL_PRODUCTS = {
-    "Flooring & Turf Protection": {
-        "Supa-Trac® Turf Protection": {"rate": 11.55, "block": 25.00, "lab_perc": 0.40, "kg_sqm": 4.5, "unit": "SQM"},
-        "I-Trac® Ground Protection": {"rate": 23.40, "block": 46.80, "lab_perc": 0.40, "kg_sqm": 15.0, "unit": "SQM"},
-        "Plastorip High Presentation": {"rate": 14.00, "block": 30.00, "lab_perc": 0.40, "kg_sqm": 4.0, "unit": "SQM"},
-        "No Fuss Rollout Flooring": {"rate": 12.50, "block": 28.00, "lab_perc": 0.40, "kg_sqm": 3.5, "unit": "SQM"},
-        "Terratrak Plus® Heavy Duty": {"rate": 25.00, "block": 55.00, "lab_perc": 0.40, "kg_sqm": 20.0, "unit": "SQM"},
-        "LD Rolls (Drivable Aluminium)": {"rate": 28.00, "block": 60.00, "lab_perc": 0.40, "kg_sqm": 35.0, "unit": "SQM"},
-        "Supa-Mat Bog Mats": {"rate": 35.00, "lab_perc": 0.40, "kg": 40.0, "unit": "ea"},
-        "Synthetic Grass (Premium)": {"rate": 16.50, "lab_perc": 0.40, "kg_sqm": 3.0, "unit": "SQM"},
-        "Timber Dance Floor (3x3 Module)": {"rate": 200.00, "lab_perc": 0.40, "kg": 150.0, "unit": "ea"}
+    "Flooring": {
+        "Supa-Trac®": {"rate": 11.55, "lab_perc": 0.40, "kg_sqm": 4.5, "unit": "SQM"},
+        "I-Trac®": {"rate": 23.40, "lab_perc": 0.40, "kg_sqm": 15.0, "unit": "SQM"},
+        "Plastorip": {"rate": 14.00, "lab_perc": 0.40, "kg_sqm": 4.0, "unit": "SQM"},
+        "Dance Floor": {"rate": 200.00, "lab_perc": 0.40, "kg": 150.0, "unit": "ea"}
     },
     "Furniture": {
-        "White Stacking Chair": {"rate": 2.50, "lab_perc": 0.25, "kg": 5, "unit": "ea"},
-        "Black Folding Chair": {"rate": 2.50, "lab_perc": 0.25, "kg": 5, "unit": "ea"},
-        "Tolix Stool (Black)": {"rate": 8.00, "lab_perc": 0.25, "kg": 6, "unit": "ea"},
-        "Trestle Table (1.8m)": {"rate": 13.00, "lab_perc": 0.25, "kg": 15, "unit": "ea"},
-        "Timber Trestle Table": {"rate": 15.00, "lab_perc": 0.25, "kg": 20, "unit": "ea"},
-        "Round Banquet Table (1.8m)": {"rate": 30.00, "lab_perc": 0.25, "kg": 25, "unit": "ea"}
-    },
-    "Crowd Control": {
-        "MOJO Barrier (Straight)": {"rate": 70.00, "lab_perc": 0.40, "kg": 60, "unit": "ea"},
-        "Tensa Barrier (Silver)": {"rate": 18.00, "lab_perc": 0.25, "kg": 10, "unit": "ea"},
-        "Crowd Barrier (Fencing Panel)": {"rate": 12.00, "lab_perc": 0.40, "kg": 20, "unit": "ea"}
-    },
-    "Accessories": {
-        "Orange Weight (30kg Block)": {"rate": 6.60, "lab_perc": 0.25, "kg": 30, "unit": "ea"}
+        "Stacking Chair": {"rate": 2.50, "lab_perc": 0.25, "kg": 5, "unit": "ea"},
+        "Trestle Table": {"rate": 13.00, "lab_perc": 0.25, "kg": 15, "unit": "ea"}
     }
 }
 
@@ -85,8 +65,8 @@ def create_calculation_pdf(name, df, subtotal, final_labour, waiver, cartage, gr
     pdf.set_font("Arial", "", 10); pdf.cell(0, 10, f"Generated on: {date.today()}", ln=True, align="C"); pdf.ln(5)
     pdf.set_font("Arial", "B", 12); pdf.cell(0, 10, f"Quote: {name}", ln=True)
     pdf.set_font("Arial", "", 11)
-    pdf.cell(0, 8, f"Duration: {weeks} Week(s) | Distance: {km} km | Payload: {total_kg:,.0f} kg", ln=True)
-    pdf.cell(0, 8, f"Logistics Plan: {trucks} x 6,000kg Truck(s) Required", ln=True); pdf.ln(5)
+    pdf.cell(0, 8, f"Duration: {weeks} Week(s) | Payload: {total_kg:,.0f} kg", ln=True)
+    pdf.cell(0, 8, f"Logistics: {trucks} x 6,000kg Truck(s)", ln=True); pdf.ln(5)
 
     pdf.set_fill_color(26, 29, 45); pdf.set_text_color(255, 255, 255); pdf.set_font("Arial", "B", 10)
     pdf.cell(80, 10, " Product", 1, 0, "L", True); pdf.cell(25, 10, " Qty", 1, 0, "C", True)
@@ -120,14 +100,13 @@ def create_calculation_pdf(name, df, subtotal, final_labour, waiver, cartage, gr
     return bytes(pdf.output())
 
 # --- APP UI ---
-st.set_page_config(page_title="No Fuss Quote Pro v29.5", layout="wide")
+st.set_page_config(page_title="No Fuss Quote Pro v29.6", layout="wide")
 
 if 'df' not in st.session_state:
     st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Total", "Unit_Type", "Product_Meta", "Min_Lab_Floor", "Raw_Lab_Value", "Lab_Math_Str", "Weight_KG", "Is_Lab_Line", "Hire_Math_Str"])
 
 st.title("📦 No Fuss Quote Pro")
 
-# LOGISTICS
 c1, c2, c3 = st.columns(3)
 start_date = c1.date_input("Hire Start", value=date.today())
 end_date = c2.date_input("Hire End", value=date.today())
@@ -137,7 +116,7 @@ live_weeks = math.ceil(((end_date - start_date).days) / 7) if (end_date - start_
 # --- SECTION 1: MARQUEES ---
 st.markdown("### ⚡ MARQUEE QUICK-ADD")
 mq_in, mq_q, mq_s = st.columns([3, 1, 1])
-q_input = mq_in.text_input("Size (Span x Length) - e.g. 4x12", placeholder="4x12...")
+q_input = mq_in.text_input("Size (Span x Length)", placeholder="4x12...")
 q_qty = mq_q.number_input("Unit Qty", min_value=1, value=1)
 q_sec = mq_s.radio("Securing", ["Weights", "Pegging"], horizontal=True)
 
@@ -150,11 +129,6 @@ if st.button("ADD MARQUEE"):
             data = MARQUEE_UNITS["3x3 Hi Top"]
             h_val = data['rate'] * q_qty; lab_val = h_val * data['lab_perc']
             new_rows.append({"Qty": q_qty, "Product": "3m x 3m Hi Top", "Unit Rate": data['rate'], "Total": 0.0, "Unit_Type": "ea", "Product_Meta": "9sqm", "Min_Lab_Floor": data['min_lab'], "Raw_Lab_Value": lab_val, "Lab_Math_Str": f"3m x 3m Hi Top: ${h_val:,.2f} x 55% = ${lab_val:,.2f}", "Weight_KG": data['kg'] * q_qty, "Is_Lab_Line": False, "Hire_Math_Str": f"{q_qty} - 3m x 3m Hi Top x ${data['rate']:,.2f} = ${h_val:,.2f}"})
-            legs = data['legs']
-        elif span == 3 and length == 6:
-            data = MARQUEE_UNITS["3x6 Shade"]
-            h_val = data['rate'] * q_qty; lab_val = h_val * data['lab_perc']
-            new_rows.append({"Qty": q_qty, "Product": "3m x 6m Shade", "Unit Rate": data['rate'], "Total": 0.0, "Unit_Type": "ea", "Product_Meta": "18sqm", "Min_Lab_Floor": data['min_lab'], "Raw_Lab_Value": lab_val, "Lab_Math_Str": f"3m x 6m Shade: ${h_val:,.2f} x 55% = ${lab_val:,.2f}", "Weight_KG": data['kg'] * q_qty, "Is_Lab_Line": False, "Hire_Math_Str": f"{q_qty} - 3m x 6m Shade x ${data['rate']:,.2f} = ${h_val:,.2f}"})
             legs = data['legs']
         else:
             logic = STRUCT_LOGIC.get(span, STRUCT_LOGIC[4])
@@ -171,24 +145,23 @@ if st.button("ADD MARQUEE"):
             new_rows.append({"Qty": w_total, "Product": "30kg Orange Weights", "Unit Rate": 6.60, "Total": 0.0, "Unit_Type": "ea", "Product_Meta": f"{int(legs)} legs", "Min_Lab_Floor": 0, "Raw_Lab_Value": lab_w, "Lab_Math_Str": f"Weights: ${w_h_total:,.2f} x 25% = ${lab_w:,.2f}", "Weight_KG": w_total * 30, "Is_Lab_Line": False, "Hire_Math_Str": f"{w_total} - 30kg Orange Weights x $6.60 = ${w_h_total:,.2f}"})
         st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame(new_rows)], ignore_index=True); st.rerun()
 
-# --- SECTION 2: CATALOG PRODUCTS ---
+# --- SECTION 2: CATALOG ---
 st.markdown("### 🪵 GENERAL CATALOG")
-cat_sel, prod_sel, qty_sel = st.columns([2, 2, 1])
-category = cat_sel.selectbox("Category", list(GENERAL_PRODUCTS.keys()))
-product_name = prod_sel.selectbox("Product", list(GENERAL_PRODUCTS[category].keys()))
-qty_val = qty_sel.number_input("Qty / SQM", min_value=0.0, step=1.0)
+c_sel, p_sel, q_sel = st.columns([2, 2, 1])
+category = c_sel.selectbox("Category", list(GENERAL_PRODUCTS.keys()))
+product_name = p_sel.selectbox("Product", list(GENERAL_PRODUCTS[category].keys()))
+qty_val = q_sel.number_input("Qty / SQM", min_value=0.0, step=1.0)
 
-if st.button("ADD TO QUOTE", key="cat_add"):
+if st.button("ADD TO QUOTE"):
     data = GENERAL_PRODUCTS[category][product_name]
-    rate_to_use = (data['block'] / 4) if (live_weeks >= 4 and 'block' in data) else data['rate']
-    h_total = qty_val * rate_to_use
+    h_total = qty_val * data['rate']
     lab_total = h_total * data['lab_perc']
     kg_total = (qty_val * data['kg_sqm']) if 'kg_sqm' in data else (qty_val * data.get('kg', 0))
     st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame([{
-        "Qty": qty_val, "Product": product_name, "Unit Rate": rate_to_use, "Total": 0.0, "Unit_Type": data['unit'], 
+        "Qty": qty_val, "Product": product_name, "Unit Rate": data['rate'], "Total": 0.0, "Unit_Type": data['unit'], 
         "Product_Meta": "", "Min_Lab_Floor": 0, "Raw_Lab_Value": lab_total, 
         "Lab_Math_Str": f"{product_name}: ${h_total:,.2f} x {int(data['lab_perc']*100)}% = ${lab_total:,.2f}", 
-        "Weight_KG": kg_total, "Is_Lab_Line": False, "Hire_Math_Str": f"{qty_val} - {product_name} x ${rate_to_use:,.2f} = ${h_total:,.2f}"
+        "Weight_KG": kg_total, "Is_Lab_Line": False, "Hire_Math_Str": f"{qty_val} - {product_name} x ${data['rate']:,.2f} = ${h_total:,.2f}"
     }])], ignore_index=True); st.rerun()
 
 # --- FINANCES ---
@@ -211,7 +184,6 @@ if not st.session_state.df.empty:
 
     st.divider(); m1, m2, m3, m4 = st.columns(4)
     m1.metric("HIRE", f"${h_tot:,.2f}"); m2.metric("LABOUR", f"${final_lab_charge:,.2f}"); m3.metric("WAIVER", f"${w_tot:,.2f}"); m4.metric("CARTAGE", f"${c_val:,.2f}")
-    st.markdown(f"**🚚 Payload Status:** {total_weight:,.0f} kg | **Logistics:** {truck_count} x 6,000kg Truck(s)")
     
     fn = st.text_input("Project Name:")
     pdf_bytes = create_calculation_pdf(fn, st.session_state.df, h_tot, final_lab_charge, w_tot, c_val, grand, km_input, live_weeks, lab_math_lines, total_weight, truck_count)
