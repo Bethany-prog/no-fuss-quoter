@@ -11,8 +11,8 @@ def check_password():
         st.session_state.password_correct = False
     if not st.session_state.password_correct:
         st.title("🔒 Unified Engine Access")
-        password = st.text_input("Access Code", type="password")
-        if st.button("Unlock"):
+        password = st.text_input("Access Code", type="password", help="Enter the 2026 master code")
+        if st.button("Unlock Engine"):
             if password == "NoFuss2026":
                 st.session_state.password_correct = True
                 st.rerun()
@@ -22,7 +22,39 @@ def check_password():
 if not check_password():
     st.stop()
 
-# --- TARGETED MODULE DATA (Sourced from provided file) ---
+# --- v29.0 VISUAL STYLING ---
+st.set_page_config(page_title="No Fuss Quote Pro v31.0", layout="wide")
+st.markdown("""
+    <style>
+    .main { background-color: #FFFFFF !important; }
+    h3 { 
+        color: #FFFFFF !important; 
+        border-left: 5px solid #00E676; 
+        padding: 10px 15px; 
+        background-color: #1A1D2D; 
+        border-radius: 0 10px 10px 0; 
+        margin-top: 20px; 
+    }
+    div.stMetric {
+        background-color: #1A1D2D !important;
+        padding: 20px !important;
+        border-radius: 12px !important;
+        border: 2px solid #3D5AFE !important;
+    }
+    div[data-testid="stMetricValue"] { color: #00E676 !important; font-size: 32px !important; font-weight: bold !important; }
+    [data-testid="stMetricLabel"] p { color: #FFFFFF !important; font-weight: bold !important; font-size: 16px !important; }
+    div.stButton > button:first-child {
+        background-color: #3D5AFE;
+        color: white;
+        border-radius: 10px;
+        height: 50px;
+        font-weight: bold;
+        width: 100%;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+# --- LOCKED MASTER DATA ---
 STRUCT_LOGIC = {
     4:  {"bay": 3, "s_rate": 23.00, "m_rate": 18.20, "s_lab": 0.55, "m_lab": 0.40, "min_lab": 350.00},
     6:  {"bay": 3, "s_rate": 23.00, "m_rate": 18.20, "s_lab": 0.55, "m_lab": 0.40, "min_lab": 350.00},
@@ -32,31 +64,26 @@ STRUCT_LOGIC = {
     15: {"bay": 5, "s_rate": 23.00, "m_rate": 15.45, "s_lab": 0.55, "m_lab": 0.40, "min_lab": 1500.00},
     20: {"bay": 5, "s_rate": 19.95, "m_rate": 19.95, "s_lab": 0.40, "m_lab": 0.40, "min_lab": 0.00},
 }
-
 MARQUEE_UNITS = {
     "3m x 3m Hi Top": {"rate": 198.45, "lab": 0.55, "min": 350.0, "legs": 4, "kg": 50},
     "3m x 3m Shade": {"rate": 198.45, "lab": 0.55, "min": 350.0, "legs": 4, "kg": 50},
-    "3m x 6m Shade": {"rate": 396.90, "lab": 0.55, "min": 350.0, "legs": 6, "kg": 80},
-    "4.5m x 4.5m Marquee": {"rate": 446.51, "lab": 0.55, "min": 350.0, "legs": 4, "kg": 75}
+    "3m x 6m Shade": {"rate": 396.90, "lab": 0.55, "min": 350.0, "legs": 6, "kg": 80}
 }
-
 GENERAL_PRODUCTS = {
     "Flooring": {
         "Supa-Trac®": {"rate": 11.55, "block": 25.00, "lab_fix": 4.65, "kg_sqm": 4.5, "unit": "SQM"},
-        "I-Trac®": {"rate": 23.40, "block": 46.80, "lab_fix": 4.65, "kg_sqm": 15.0, "unit": "SQM"},
-        "Plastorip": {"rate": 14.00, "block": 30.00, "lab_fix": 4.65, "kg_sqm": 4.0, "unit": "SQM"}
+        "I-Trac®": {"rate": 23.40, "block": 46.80, "lab_fix": 4.65, "kg_sqm": 15.0, "unit": "SQM"}
     }
 }
 
-# --- PDF ENGINE ---
+# --- PDF ENGINE (FULL MATH EXPLANATION) ---
 def create_calculation_pdf(name, df, subtotal, labour, waiver, cartage, grand, km, weeks, start, end, h_maths, l_details, kg, trucks):
     pdf = FPDF()
     pdf.add_page()
-    pdf.set_font("Arial", "B", 15); pdf.cell(0, 10, "No Fuss Event Hire - Calculation Analysis", ln=True, align="C")
+    pdf.set_font("Arial", "B", 15); pdf.cell(0, 10, "No Fuss Event Hire - Quote Calculation Sheet", ln=True, align="C")
     pdf.set_font("Arial", "B", 10); pdf.cell(0, 7, f"HIRE PERIOD: {start} to {end} ({weeks} Week(s))", ln=True, align="C")
-    pdf.set_font("Arial", "", 9); pdf.cell(0, 7, f"Logistics: {trucks} x 6,000kg Trucks | Payload: {kg:,.0f}kg", ln=True, align="C"); pdf.ln(5)
+    pdf.set_font("Arial", "", 9); pdf.cell(0, 7, f"Payload: {kg:,.0f}kg | Logistics: {trucks} x 6,000kg Trucks", ln=True, align="C"); pdf.ln(5)
 
-    # Item Table
     pdf.set_fill_color(26, 29, 45); pdf.set_text_color(255, 255, 255)
     pdf.cell(85, 10, " Product Description", 1, 0, "L", True); pdf.cell(20, 10, " Qty", 1, 0, "C", True)
     pdf.cell(35, 10, " Rate", 1, 0, "C", True); pdf.cell(45, 10, " Total", 1, 1, "R", True)
@@ -66,39 +93,39 @@ def create_calculation_pdf(name, df, subtotal, labour, waiver, cartage, grand, k
         pdf.cell(85, 8, f" {row['Product']}", 1); pdf.cell(20, 8, f" {row['Qty']}", 1, 0, "C")
         pdf.cell(35, 8, f" ${row['Unit Rate']:,.2f}", 1, 0, "C"); pdf.cell(45, 8, f" ${row['Total']:,.2f}", 1, 1, "R")
     
-    pdf.ln(10); pdf.set_font("Arial", "B", 11); pdf.cell(0, 8, "DETAILED CALCULATION BREAKDOWN:", ln=True)
+    pdf.ln(10); pdf.set_font("Arial", "B", 11); pdf.cell(0, 8, "EXPLICIT MATH BREAKDOWN:", ln=True)
     pdf.set_font("Arial", "", 9)
-    for h in h_maths: pdf.cell(0, 5, f"> {h}", ln=True)
-    pdf.ln(2)
-    for l in l_details: pdf.cell(0, 5, f"> {l}", ln=True)
+    pdf.cell(0, 6, "-- Hire Calculation Proof --", ln=True)
+    for h in h_maths: pdf.cell(0, 5, f"   {h}", ln=True)
+    pdf.ln(3); pdf.cell(0, 6, "-- Labour Pool Proof --", ln=True)
+    for l in l_details: pdf.cell(0, 5, f"   {l}", ln=True)
     
     pdf.ln(5); pdf.set_font("Arial", "B", 10)
     pdf.cell(0, 7, f"Hire Subtotal: ${subtotal:,.2f}", ln=True)
-    pdf.cell(0, 7, f"Labour Pool: ${labour:,.2f}", ln=True)
+    pdf.cell(0, 7, f"Labour Total: ${labour:,.2f}", ln=True)
     pdf.cell(0, 7, f"Damage Waiver (7%): ${subtotal:,.2f} x 0.07 = ${waiver:,.2f}", ln=True)
-    pdf.cell(0, 7, f"Cartage: {trucks} Trucks x {km}km x 4 trips x $3.50 = ${cartage:,.2f}", ln=True)
+    pdf.cell(0, 7, f"Cartage Total: {trucks} Trucks x {km}km x 4 trips x $3.50 = ${cartage:,.2f}", ln=True)
     pdf.ln(5); pdf.set_fill_color(240, 240, 240); pdf.set_font("Arial", "B", 12)
     pdf.cell(0, 12, f"GRAND TOTAL (EX GST): ${grand:,.2f}", 1, 1, "R", True)
     return bytes(pdf.output())
 
 # --- APP UI ---
-st.set_page_config(page_title="No Fuss Quoter v30.9", layout="wide")
 if 'df' not in st.session_state:
     st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Total", "Min_Lab", "Raw_Lab", "Lab_Math", "KG", "Is_Marquee", "Hire_Math_Str"])
 
-st.title("📦 No Fuss Unified Engine (v30.9)")
+st.title("📦 No Fuss Unified Engine (v31.0)")
 
 c1, c2, c3 = st.columns(3)
 start_d = c1.date_input("Hire Start", value=date.today())
 end_d = c2.date_input("Hire End", value=date.today())
-km_in = c3.number_input("One-Way KM Distance", min_value=0.0)
+km_in = c3.number_input("One-Way Distance (KM)", min_value=0.0)
 weeks = math.ceil(((end_d - start_d).days) / 7) if (end_d - start_d).days > 0 else 1
 
 st.divider(); col_mq, col_cat = st.columns(2)
 
 with col_mq:
     st.markdown("### ⚡ Targeted Marquee Module")
-    m_in = st.text_input("Size (e.g. 10x15 or 3x3)")
+    m_in = st.text_input("Size (e.g. 10x15)")
     m_q = st.number_input("Quantity", min_value=1, key="mq")
     m_sec = st.radio("Securing", ["Weights", "Pegging"], horizontal=True)
     if st.button("Add Marquee"):
@@ -106,15 +133,13 @@ with col_mq:
         if len(nums) >= 2:
             span, length = int(nums[0]), int(nums[1])
             new_rows = []
-            # UNIT MARQUEE LOGIC
             if span == 3 and (length == 3 or length == 6):
                 key = f"3m x {length}m {'Hi Top' if length==3 else 'Shade'}"
                 data = MARQUEE_UNITS.get(key, MARQUEE_UNITS["3m x 3m Hi Top"])
                 h_val = data['rate'] * m_q; l_val = h_val * data['lab']
                 new_rows.append({"Qty": m_q, "Product": key, "Unit Rate": data['rate'], "Total": 0.0, "Min_Lab": data['min'], "Raw_Lab": l_val, "Lab_Math": f"{key} Lab: ${h_val:,.2f} x 55% = ${l_val:,.2f}", "KG": data['kg']*m_q, "Is_Marquee": True, "Hire_Math_Str": f"{m_q} - {key} x ${data['rate']:,.2f} = ${h_val:,.2f}"})
-                legs = data['legs']
+                legs = 4
             else:
-                # MODULAR STRUCTURE LOGIC
                 logic = STRUCT_LOGIC.get(span, STRUCT_LOGIC[4])
                 bays = math.ceil(length/logic['bay']); sqm = span*length
                 rate = logic['s_rate'] if bays == 1 else logic['m_rate']
