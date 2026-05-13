@@ -23,23 +23,23 @@ def check_password():
 if not check_password():
     st.stop()
 
-# --- DATA: MASTER RATE CARD (v28.4 - STRICT SPAN LOGIC) ---
+# --- DATA: MASTER RATE CARD (v28.5) ---
 STRUCT_LOGIC = {
-    3:  {"bay": 3, "s_rate": 23.00, "m_rate": 18.20, "s_lab": 0.55, "m_lab": 0.40, "min_lab": 350.00, "w_bay": 8},
-    4:  {"bay": 3, "s_rate": 23.00, "m_rate": 18.20, "s_lab": 0.55, "m_lab": 0.40, "min_lab": 350.00, "w_bay": 8},
-    6:  {"bay": 3, "s_rate": 23.00, "m_rate": 18.20, "s_lab": 0.55, "m_lab": 0.40, "min_lab": 350.00, "w_bay": 8},
-    9:  {"bay": 3, "s_rate": 23.00, "m_rate": 18.20, "s_lab": 0.55, "m_lab": 0.40, "min_lab": 350.00, "w_bay": 8},
-    10: {"bay": 5, "s_rate": 23.00, "m_rate": 16.55, "s_lab": 0.55, "m_lab": 0.40, "min_lab": 350.00, "w_bay": 12},
-    12: {"bay": 5, "s_rate": 23.00, "m_rate": 15.45, "s_lab": 0.55, "m_lab": 0.40, "min_lab": 1500.00, "w_bay": 12},
-    15: {"bay": 5, "s_rate": 23.00, "m_rate": 15.45, "s_lab": 0.55, "m_lab": 0.40, "min_lab": 1500.00, "w_bay": 12},
-    20: {"bay": 5, "s_rate": 19.95, "m_rate": 19.95, "s_lab": 0.40, "m_lab": 0.40, "min_lab": 0.00, "w_bay": 16},
+    3:  {"bay": 3, "s_rate": 23.00, "m_rate": 18.20, "s_lab": 0.55, "m_lab": 0.40, "min_lab": 350.00},
+    4:  {"bay": 3, "s_rate": 23.00, "m_rate": 18.20, "s_lab": 0.55, "m_lab": 0.40, "min_lab": 350.00},
+    6:  {"bay": 3, "s_rate": 23.00, "m_rate": 18.20, "s_lab": 0.55, "m_lab": 0.40, "min_lab": 350.00},
+    9:  {"bay": 3, "s_rate": 23.00, "m_rate": 18.20, "s_lab": 0.55, "m_lab": 0.40, "min_lab": 350.00},
+    10: {"bay": 5, "s_rate": 23.00, "m_rate": 16.55, "s_lab": 0.55, "m_lab": 0.40, "min_lab": 350.00},
+    12: {"bay": 5, "s_rate": 23.00, "m_rate": 15.45, "s_lab": 0.55, "m_lab": 0.40, "min_lab": 1500.00},
+    15: {"bay": 5, "s_rate": 23.00, "m_rate": 15.45, "s_lab": 0.55, "m_lab": 0.40, "min_lab": 1500.00},
+    20: {"bay": 5, "s_rate": 19.95, "m_rate": 19.95, "s_lab": 0.40, "m_lab": 0.40, "min_lab": 0.00},
 }
 
 MARQUEE_UNITS = {
-    "3x3 Hi Top": {"rate": 198.45, "lab_perc": 0.55, "min_lab": 350.00, "w": 24},
-    "3x3 Shade": {"rate": 198.45, "lab_perc": 0.55, "min_lab": 350.00, "w": 24},
-    "3x6 Shade": {"rate": 396.90, "lab_perc": 0.55, "min_lab": 350.00, "w": 32},
-    "4.5x4.5": {"rate": 446.51, "lab_perc": 0.55, "min_lab": 350.00, "w": 32}
+    "3x3 Hi Top": {"rate": 198.45, "lab_perc": 0.55, "min_lab": 350.00, "legs": 4},
+    "3x3 Shade": {"rate": 198.45, "lab_perc": 0.55, "min_lab": 350.00, "legs": 4},
+    "3x6 Shade": {"rate": 396.90, "lab_perc": 0.55, "min_lab": 350.00, "legs": 6},
+    "4.5x4.5": {"rate": 446.51, "lab_perc": 0.55, "min_lab": 350.00, "legs": 4}
 }
 
 # --- PDF ENGINE ---
@@ -73,7 +73,7 @@ def create_calculation_pdf(name, df, subtotal, final_labour, waiver, cartage, gr
             pdf.cell(0, 6, f"{row['Qty']} - {row['Product']}{meta} x ${row['Unit Rate']:,.2f} = ${row['Total']:,.2f}", ln=True)
 
     pdf.ln(4); pdf.set_font("Arial", "B", 11); pdf.cell(0, 8, f"Labour Total: ${final_labour:,.2f}", ln=True)
-    pdf.set_font("Arial", "", 10); pdf.cell(0, 6, "Includes: Marquee/Struct Lab % + Weight Lab ($1.65/ea) + Min Charge logic", ln=True)
+    pdf.set_font("Arial", "", 10); pdf.cell(0, 6, "Notes: Weights @ $1.65/ea Lab. Structures @ Lab % or Global Min Charge.", ln=True)
 
     pdf.ln(4); pdf.set_font("Arial", "B", 11); pdf.cell(0, 8, f"Damage Waiver (7%): ${waiver:,.2f}", ln=True)
     pdf.set_font("Arial", "", 10); pdf.cell(0, 6, f"${subtotal:,.2f} x 0.07", ln=True)
@@ -85,7 +85,7 @@ def create_calculation_pdf(name, df, subtotal, final_labour, waiver, cartage, gr
     return bytes(pdf.output())
 
 # 4. APP UI
-st.set_page_config(page_title="No Fuss Quote Pro v28.4", layout="wide")
+st.set_page_config(page_title="No Fuss Quote Pro v28.5", layout="wide")
 st.markdown("<style>.main { background-color: #FFFFFF !important; } h3 { color: #FFFFFF !important; border-left: 5px solid #00E676; padding: 10px 15px; background-color: #1A1D2D; border-radius: 0 10px 10px 0; margin-top: 20px; } div.stMetric { background-color: #1A1D2D !important; padding: 20px !important; border-radius: 12px !important; border: 2px solid #3D5AFE !important; } div[data-testid='stMetricValue'] { color: #00E676 !important; font-size: 32px !important; font-weight: bold !important; } [data-testid='stMetricLabel'] p { color: #FFFFFF !important; font-weight: bold !important; font-size: 16px !important; } div.stButton > button:first-child { background-color: #3D5AFE; color: white; border-radius: 10px; height: 50px; font-weight: bold; width: 100%; }</style>", unsafe_allow_html=True)
 
 if 'df' not in st.session_state:
@@ -101,9 +101,9 @@ km_input = c3.number_input("Distance (KM)", min_value=0.0, value=0.0)
 live_weeks = math.ceil(((end_date - start_date).days) / 7) if (end_date - start_date).days > 0 else 1
 
 # --- QUICK-ADD ---
-st.markdown("### ⚡ QUICK-ADD")
-q_input = st.text_input("Type Size (Span x Length) - e.g., 4x12", placeholder="4x12...")
-q_qty = st.number_input("Quantity of Units", min_value=1, value=1)
+st.markdown("### ⚡ QUICK-ADD (Span x Length)")
+q_input = st.text_input("e.g., 4x12, 10x20", placeholder="Span x Length...")
+q_qty = st.number_input("Unit Quantity", min_value=1, value=1)
 q_sec = st.radio("Securing", ["Weights", "Pegging"], horizontal=True)
 
 if st.button("ADD TO QUOTE"):
@@ -112,17 +112,17 @@ if st.button("ADD TO QUOTE"):
         span, length = int(nums[0]), int(nums[1])
         new_rows = []
         
-        # STRICT DEFAULT RULE: 3x3 or 3x6
+        # 3x3 or 3x6 Default Rule
         if span == 3 and length == 3:
             data = MARQUEE_UNITS["3x3 Hi Top"]
             new_rows.append({"Qty": q_qty, "Product": "3m x 3m Hi Top", "Unit Rate": data['rate'], "Total": 0.0, "Unit_Type": "ea", "Product_Meta": "9sqm", "Min_Lab_Floor": data['min_lab'], "Raw_Lab_Value": data['rate'] * q_qty * data['lab_perc'], "Is_Lab_Line": False})
-            weights_needed = data['w'] * q_qty
+            legs = data['legs']
         elif span == 3 and length == 6:
             data = MARQUEE_UNITS["3x6 Shade"]
             new_rows.append({"Qty": q_qty, "Product": "3m x 6m Shade", "Unit Rate": data['rate'], "Total": 0.0, "Unit_Type": "ea", "Product_Meta": "18sqm", "Min_Lab_Floor": data['min_lab'], "Raw_Lab_Value": data['rate'] * q_qty * data['lab_perc'], "Is_Lab_Line": False})
-            weights_needed = data['w'] * q_qty
+            legs = data['legs']
         else:
-            # STRUCTURE LOGIC (Strict: First Num = Span)
+            # STRUCTURE LOGIC (Formula: ((Len/Bay)+1)*2)
             logic = STRUCT_LOGIC.get(span, STRUCT_LOGIC[4])
             bays = math.ceil(length / logic['bay'])
             sqm = span * length
@@ -130,16 +130,18 @@ if st.button("ADD TO QUOTE"):
             lab_perc = logic['s_lab'] if bays == 1 else logic['m_lab']
             hire_val = sqm * rate
             new_rows.append({"Qty": q_qty, "Product": f"Structure {span}m x {length}m", "Unit Rate": hire_val, "Total": 0.0, "Unit_Type": "ea", "Product_Meta": f"{sqm}sqm", "Min_Lab_Floor": logic['min_lab'], "Raw_Lab_Value": hire_val * q_qty * lab_perc, "Is_Lab_Line": False})
-            weights_needed = bays * logic['w_bay'] * q_qty
+            legs = ((length / logic['bay']) + 1) * 2
 
         if q_sec == "Weights":
-            new_rows.append({"Qty": weights_needed, "Product": "Orange Weights", "Unit Rate": 6.60, "Total": 0.0, "Unit_Type": "ea", "Product_Meta": "", "Min_Lab_Floor": 0, "Raw_Lab_Value": weights_needed * 1.65, "Is_Lab_Line": False})
+            # Rule: 6 weights per leg
+            w_total = int(legs * 6 * q_qty)
+            new_rows.append({"Qty": w_total, "Product": "Orange Weights (6 per leg)", "Unit Rate": 6.60, "Total": 0.0, "Unit_Type": "ea", "Product_Meta": f"{int(legs)} legs", "Min_Lab_Floor": 0, "Raw_Lab_Value": w_total * 1.65, "Is_Lab_Line": False})
 
         st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame(new_rows)], ignore_index=True); st.rerun()
 
 # --- FINANCES ---
 if not st.session_state.df.empty:
-    st.markdown("### 🏗️ QUOTED ITEMS")
+    st.markdown("### 🏗️ CURRENT QUOTE")
     st.data_editor(st.session_state.df[["Qty", "Unit_Type", "Product", "Unit Rate", "Total"]], use_container_width=True)
     
     h_tot, raw_lab_sum, max_min_lab = 0.0, 0.0, 0.0
@@ -153,8 +155,8 @@ if not st.session_state.df.empty:
     final_lab_charge = max(max_min_lab, raw_lab_sum)
     w_tot = h_tot * 0.07; c_val = km_input * 4 * 3.50; grand = h_tot + final_lab_charge + w_tot + c_val
 
-    st.divider(); col_m1, col_m2, col_m3, col_m4 = st.columns(4)
-    col_m1.metric("HIRE", f"${h_tot:,.2f}"); col_m2.metric("LABOUR", f"${final_lab_charge:,.2f}"); col_m3.metric("WAIVER", f"${w_tot:,.2f}"); col_m4.metric("CARTAGE", f"${c_val:,.2f}")
+    st.divider(); col1, col2, col3, col4 = st.columns(4)
+    col1.metric("HIRE", f"${h_tot:,.2f}"); col2.metric("LABOUR", f"${final_lab_charge:,.2f}"); col3.metric("WAIVER", f"${w_tot:,.2f}"); col4.metric("CARTAGE", f"${c_val:,.2f}")
     
     fn = st.text_input("Project Name:")
     pdf_bytes = create_calculation_pdf(fn, st.session_state.df, h_tot, final_lab_charge, w_tot, c_val, grand, km_input, live_weeks)
