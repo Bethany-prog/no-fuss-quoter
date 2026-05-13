@@ -23,7 +23,7 @@ def check_password():
 if not check_password():
     st.stop()
 
-# --- RE-ALIGNED MASTER CATALOG (v29.6) ---
+# --- RE-ALIGNED MASTER CATALOG (v29.7) ---
 
 STRUCT_LOGIC = {
     3:  {"bay": 3, "s_rate": 23.00, "m_rate": 18.20, "s_lab": 0.55, "m_lab": 0.40, "min_lab": 350.00},
@@ -45,10 +45,10 @@ MARQUEE_UNITS = {
 
 GENERAL_PRODUCTS = {
     "Flooring": {
-        "Supa-Trac®": {"rate": 11.55, "lab_perc": 0.40, "kg_sqm": 4.5, "unit": "SQM"},
-        "I-Trac®": {"rate": 23.40, "lab_perc": 0.40, "kg_sqm": 15.0, "unit": "SQM"},
-        "Plastorip": {"rate": 14.00, "lab_perc": 0.40, "kg_sqm": 4.0, "unit": "SQM"},
-        "Dance Floor": {"rate": 200.00, "lab_perc": 0.40, "kg": 150.0, "unit": "ea"}
+        "Supa-Trac®": {"rate": 11.55, "lab_perc": 0.00, "kg_sqm": 4.5, "unit": "SQM"},
+        "I-Trac®": {"rate": 23.40, "lab_perc": 0.00, "kg_sqm": 15.0, "unit": "SQM"},
+        "Plastorip": {"rate": 14.00, "lab_perc": 0.00, "kg_sqm": 4.0, "unit": "SQM"},
+        "Dance Floor": {"rate": 200.00, "lab_perc": 0.00, "kg": 150.0, "unit": "ea"}
     },
     "Furniture": {
         "Stacking Chair": {"rate": 2.50, "lab_perc": 0.25, "kg": 5, "unit": "ea"},
@@ -100,7 +100,7 @@ def create_calculation_pdf(name, df, subtotal, final_labour, waiver, cartage, gr
     return bytes(pdf.output())
 
 # --- APP UI ---
-st.set_page_config(page_title="No Fuss Quote Pro v29.6", layout="wide")
+st.set_page_config(page_title="No Fuss Quote Pro v29.7", layout="wide")
 
 if 'df' not in st.session_state:
     st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Total", "Unit_Type", "Product_Meta", "Min_Lab_Floor", "Raw_Lab_Value", "Lab_Math_Str", "Weight_KG", "Is_Lab_Line", "Hire_Math_Str"])
@@ -155,12 +155,17 @@ qty_val = q_sel.number_input("Qty / SQM", min_value=0.0, step=1.0)
 if st.button("ADD TO QUOTE"):
     data = GENERAL_PRODUCTS[category][product_name]
     h_total = qty_val * data['rate']
+    # FIXED: Flooring now contributes $0.00 to labour pool if lab_perc is 0
     lab_total = h_total * data['lab_perc']
     kg_total = (qty_val * data['kg_sqm']) if 'kg_sqm' in data else (qty_val * data.get('kg', 0))
+    
+    # Logic to only show labour math if there IS labour
+    lab_str = f"{product_name}: ${h_total:,.2f} x {int(data['lab_perc']*100)}% = ${lab_total:,.2f}" if lab_total > 0 else ""
+
     st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame([{
         "Qty": qty_val, "Product": product_name, "Unit Rate": data['rate'], "Total": 0.0, "Unit_Type": data['unit'], 
         "Product_Meta": "", "Min_Lab_Floor": 0, "Raw_Lab_Value": lab_total, 
-        "Lab_Math_Str": f"{product_name}: ${h_total:,.2f} x {int(data['lab_perc']*100)}% = ${lab_total:,.2f}", 
+        "Lab_Math_Str": lab_str, 
         "Weight_KG": kg_total, "Is_Lab_Line": False, "Hire_Math_Str": f"{qty_val} - {product_name} x ${data['rate']:,.2f} = ${h_total:,.2f}"
     }])], ignore_index=True); st.rerun()
 
@@ -172,8 +177,8 @@ if not st.session_state.df.empty:
     h_tot, raw_lab_sum, max_min_lab, total_weight = 0.0, 0.0, 0.0, 0.0
     lab_math_lines = []
     for idx, row in st.session_state.df.iterrows():
-        is_structure = "Structure" in row["Product"] or "Marquee" in row["Product"]
-        line_hire = row["Qty"] * row["Unit Rate"] * (live_weeks if is_structure else 1)
+        is_marquee = "Structure" in row["Product"] or "Marquee" in row["Product"]
+        line_hire = row["Qty"] * row["Unit Rate"] * (live_weeks if is_marquee else 1)
         h_tot += line_hire; raw_lab_sum += row["Raw_Lab_Value"]; max_min_lab = max(max_min_lab, row["Min_Lab_Floor"])
         total_weight += row["Weight_KG"]; st.session_state.df.at[idx, "Total"] = line_hire
         if row["Lab_Math_Str"]: lab_math_lines.append(row["Lab_Math_Str"])
