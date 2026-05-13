@@ -23,7 +23,7 @@ def check_password():
 if not check_password():
     st.stop()
 
-# --- DATA: MASTER RATE CARD (v28.7) ---
+# --- DATA: MASTER RATE CARD (v28.8) ---
 STRUCT_LOGIC = {
     3:  {"bay": 3, "s_rate": 23.00, "m_rate": 18.20, "s_lab": 0.55, "m_lab": 0.40, "min_lab": 350.00},
     4:  {"bay": 3, "s_rate": 23.00, "m_rate": 18.20, "s_lab": 0.55, "m_lab": 0.40, "min_lab": 350.00},
@@ -42,8 +42,8 @@ MARQUEE_UNITS = {
     "4.5x4.5": {"rate": 446.51, "lab_perc": 0.55, "min_lab": 0.00, "legs": 4}
 }
 
-# --- PDF ENGINE (v28.7 - DETAILED LABOUR MATHS) ---
-def create_calculation_pdf(name, df, subtotal, final_labour, waiver, cartage, grand_total, km, weeks, lab_details, raw_sum, min_floor):
+# --- PDF ENGINE ---
+def create_calculation_pdf(name, df, subtotal, final_labour, waiver, cartage, grand_total, km, weeks, lab_details):
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Arial", "B", 16)
@@ -75,16 +75,11 @@ def create_calculation_pdf(name, df, subtotal, final_labour, waiver, cartage, gr
             meta = f" ({row['Product_Meta']})" if row['Product_Meta'] else ""
             pdf.cell(0, 6, f"{row['Qty']} - {row['Product']}{meta} x ${row['Unit Rate']:,.2f} = ${row['Total']:,.2f}", ln=True)
 
-    # LABOUR BREAKDOWN (SHOWING THE MATHS)
+    # LABOUR BREAKDOWN (Maths only)
     pdf.ln(4); pdf.set_font("Arial", "B", 11); pdf.cell(0, 8, f"Labour Total: ${final_labour:,.2f}", ln=True)
     pdf.set_font("Arial", "", 10)
     for line in lab_details:
         pdf.cell(0, 6, line, ln=True)
-    
-    pdf.ln(2); pdf.set_font("Arial", "I", 9)
-    pdf.cell(0, 5, f"Total Raw Labour Pool: ${raw_sum:,.2f}", ln=True)
-    pdf.cell(0, 5, f"Highest Minimum Charge Required: ${min_floor:,.2f}", ln=True)
-    pdf.cell(0, 5, f"Final applied: ${final_labour:,.2f}", ln=True)
 
     # Others
     pdf.ln(4); pdf.set_font("Arial", "B", 11); pdf.cell(0, 8, f"Damage Waiver (7%): ${waiver:,.2f}", ln=True)
@@ -97,7 +92,7 @@ def create_calculation_pdf(name, df, subtotal, final_labour, waiver, cartage, gr
     return bytes(pdf.output())
 
 # 4. APP UI
-st.set_page_config(page_title="No Fuss Quote Pro v28.7", layout="wide")
+st.set_page_config(page_title="No Fuss Quote Pro v28.8", layout="wide")
 st.markdown("<style>.main { background-color: #FFFFFF !important; } h3 { color: #FFFFFF !important; border-left: 5px solid #00E676; padding: 10px 15px; background-color: #1A1D2D; border-radius: 0 10px 10px 0; margin-top: 20px; } div.stMetric { background-color: #1A1D2D !important; padding: 20px !important; border-radius: 12px !important; border: 2px solid #3D5AFE !important; } div[data-testid='stMetricValue'] { color: #00E676 !important; font-size: 32px !important; font-weight: bold !important; } [data-testid='stMetricLabel'] p { color: #FFFFFF !important; font-weight: bold !important; font-size: 16px !important; } div.stButton > button:first-child { background-color: #3D5AFE; color: white; border-radius: 10px; height: 50px; font-weight: bold; width: 100%; }</style>", unsafe_allow_html=True)
 
 if 'df' not in st.session_state:
@@ -177,6 +172,6 @@ if not st.session_state.df.empty:
     col1.metric("HIRE", f"${h_tot:,.2f}"); col2.metric("LABOUR", f"${final_lab_charge:,.2f}"); col3.metric("WAIVER", f"${w_tot:,.2f}"); col4.metric("CARTAGE", f"${c_val:,.2f}")
     
     fn = st.text_input("Project Name:")
-    pdf_bytes = create_calculation_pdf(fn, st.session_state.df, h_tot, final_lab_charge, w_tot, c_val, grand, km_input, live_weeks, labour_details, raw_lab_sum, max_min_lab)
+    pdf_bytes = create_calculation_pdf(fn, st.session_state.df, h_tot, final_lab_charge, w_tot, c_val, grand, km_input, live_weeks, labour_details)
     st.download_button("📥 DOWNLOAD PDF", pdf_bytes, file_name=f"{fn}_Calculations.pdf")
     if st.button("⚠️ RESET"): st.session_state.df = pd.DataFrame(columns=st.session_state.df.columns); st.rerun()
