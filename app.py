@@ -22,38 +22,7 @@ def check_password():
 if not check_password():
     st.stop()
 
-# --- STYLING ---
-st.set_page_config(page_title="No Fuss Quote Pro v30.7", layout="wide")
-st.markdown("""
-    <style>
-    .main { background-color: #FFFFFF !important; }
-    h3 { 
-        color: #FFFFFF !important; 
-        border-left: 5px solid #00E676; 
-        padding: 10px 15px; 
-        background-color: #1A1D2D; 
-        border-radius: 0 10px 10px 0; 
-        margin-top: 20px; 
-    }
-    div.stMetric {
-        background-color: #1A1D2D !important;
-        padding: 20px !important;
-        border-radius: 12px !important;
-        border: 2px solid #3D5AFE !important;
-    }
-    div[data-testid="stMetricValue"] { color: #00E676 !important; font-size: 32px !important; }
-    [data-testid="stMetricLabel"] p { color: #FFFFFF !important; font-weight: bold !important; }
-    div.stButton > button:first-child {
-        background-color: #3D5AFE;
-        color: white;
-        border-radius: 10px;
-        font-weight: bold;
-        height: 50px;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
-# --- MASTER LOGIC DATA ---
+# --- MASTER LOGIC DATA (v30.8) ---
 STRUCT_LOGIC = {
     4:  {"bay": 3, "s_rate": 23.00, "m_rate": 18.20, "s_lab": 0.55, "m_lab": 0.40, "min_lab": 350.00},
     6:  {"bay": 3, "s_rate": 23.00, "m_rate": 18.20, "s_lab": 0.55, "m_lab": 0.40, "min_lab": 350.00},
@@ -63,16 +32,18 @@ STRUCT_LOGIC = {
     15: {"bay": 5, "s_rate": 23.00, "m_rate": 15.45, "s_lab": 0.55, "m_lab": 0.40, "min_lab": 1500.00},
     20: {"bay": 5, "s_rate": 19.95, "m_rate": 19.95, "s_lab": 0.40, "m_lab": 0.40, "min_lab": 0.00},
 }
+
 MARQUEE_UNITS = {
     "3x3 Hi Top": {"rate": 198.45, "lab_p": 0.55, "min": 0.00, "legs": 4, "kg": 50},
     "3x3 Shade": {"rate": 198.45, "lab_p": 0.55, "min": 0.00, "legs": 4, "kg": 50},
     "3x6 Shade": {"rate": 396.90, "lab_p": 0.55, "min": 0.00, "legs": 4, "kg": 80},
     "4.5x4.5 Marquee": {"rate": 446.51, "lab_p": 0.55, "min": 0.00, "legs": 4, "kg": 75}
 }
+
 GENERAL_PRODUCTS = {
     "Flooring": {
         "Supa-Trac®": {"rate": 11.55, "block": 25.00, "lab_fix": 4.65, "kg_sqm": 4.5, "unit": "SQM"},
-        "I-Trac®": {"rate": 23.40, "block": 46.80, "lab_fix": 4.65, "kg_sqm": 15.0, "unit": "SQM"},
+        "I-Trac®": {"rate": 23.40, "block": 46.80, "lab_fix": 4.65, "kg_sqm": 15.0, "unit": "SQM"}, # Updated Correct Rates
         "Plastorip": {"rate": 14.00, "block": 30.00, "lab_fix": 4.65, "kg_sqm": 4.0, "unit": "SQM"}
     },
     "Crowd Control": {
@@ -85,9 +56,9 @@ def create_unified_pdf(name, df, subtotal, labour, waiver, cartage, grand, km, w
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Arial", "B", 14); pdf.cell(0, 10, "No Fuss Event Hire - Internal Calculation Sheet", ln=True, align="C")
-    pdf.set_font("Arial", "", 9); pdf.cell(0, 10, f"Generated: {date.today()} | Payload: {total_kg:,.0f}kg ({trucks} Trucks Required)", ln=True); pdf.ln(5)
+    pdf.set_font("Arial", "B", 11); pdf.cell(0, 10, f"HIRE DURATION: {weeks} WEEK(S)", ln=True, align="C") # Restoration
+    pdf.set_font("Arial", "", 9); pdf.cell(0, 8, f"Generated: {date.today()} | Payload: {total_kg:,.0f}kg ({trucks} Trucks)", ln=True); pdf.ln(5)
     
-    # Summary Table
     pdf.set_fill_color(26, 29, 45); pdf.set_text_color(255, 255, 255)
     pdf.cell(80, 10, " Item", 1, 0, "L", True); pdf.cell(20, 10, " Qty", 1, 0, "C", True)
     pdf.cell(35, 10, " Unit Rate", 1, 0, "C", True); pdf.cell(45, 10, " Total", 1, 1, "R", True)
@@ -99,9 +70,7 @@ def create_unified_pdf(name, df, subtotal, labour, waiver, cartage, grand, km, w
         pdf.cell(35, 8, f" ${row['Unit Rate']:,.2f}", 1, 0, "C")
         pdf.cell(45, 8, f" ${row['Total']:,.2f}", 1, 1, "R")
     
-    # Math Proofs
     pdf.ln(10); pdf.set_font("Arial", "B", 11); pdf.cell(0, 8, "FINANCIAL MATH PROOF:", ln=True)
-    
     pdf.set_font("Arial", "B", 10); pdf.cell(0, 8, f"1. Hire Subtotal Maths:", ln=True); pdf.set_font("Arial", "", 9)
     for h_line in hire_maths: pdf.cell(0, 6, f"> {h_line}", ln=True)
 
@@ -116,11 +85,13 @@ def create_unified_pdf(name, df, subtotal, labour, waiver, cartage, grand, km, w
     pdf.cell(0, 12, f"GRAND TOTAL (EX GST): ${grand:,.2f}", 1, 1, "R", True)
     return bytes(pdf.output())
 
-# --- APP ---
+# --- APP UI (v30.8) ---
+st.set_page_config(page_title="No Fuss Quote Pro v30.8", layout="wide")
+
 if 'df' not in st.session_state:
     st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Total", "Min_Lab", "Raw_Lab", "Lab_Math", "KG", "Is_Marquee", "Hire_Math_Str"])
 
-st.title("📦 No Fuss Unified Engine (v30.7)")
+st.title("📦 No Fuss Unified Engine (v30.8)")
 
 c1, c2, c3 = st.columns(3)
 start_d = c1.date_input("Start Date", value=date.today())
@@ -145,7 +116,6 @@ with col_mq:
                 data = MARQUEE_UNITS[key]
                 h_val = data['rate'] * m_q; l_val = h_val * data['lab_p']
                 new_rows.append({"Qty": m_q, "Product": key, "Unit Rate": data['rate'], "Total": 0.0, "Min_Lab": data['min'], "Raw_Lab": l_val, "Lab_Math": f"{key} Lab: ${h_val:,.2f} x 55% = ${l_val:,.2f}", "KG": data['kg']*m_q, "Is_Marquee": True, "Hire_Math_Str": f"{m_q} - {key} x ${data['rate']:,.2f} = ${h_val:,.2f}"})
-                legs = 4
             else:
                 logic = STRUCT_LOGIC.get(span, STRUCT_LOGIC[4])
                 bays = math.ceil(length/logic['bay']); sqm = span*length
@@ -154,9 +124,9 @@ with col_mq:
                 h_val = sqm * rate * m_q; l_val = h_val * lab_p
                 new_rows.append({"Qty": m_q, "Product": f"Structure {span}x{length}", "Unit Rate": sqm*rate, "Total": 0.0, "Min_Lab": logic['min_lab'], "Raw_Lab": l_val, "Lab_Math": f"Structure {span}x{length} Lab: ${h_val:,.2f} x {int(lab_p*100)}% = ${l_val:,.2f}", "KG": (sqm*2.5)*m_q, "Is_Marquee": True, "Hire_Math_Str": f"{m_q} - Structure {span}x{length} ({sqm}sqm x ${rate:,.2f}) = ${h_val:,.2f}" })
                 legs = ((length/logic['bay'])+1)*2
-            if m_sec == "Weights":
-                w_tot = int(legs*6*m_q); w_h = w_tot*6.60; w_l = w_h*0.25
-                new_rows.append({"Qty": w_tot, "Product": "30kg Weights", "Unit Rate": 6.60, "Total": 0.0, "Min_Lab": 0, "Raw_Lab": w_l, "Lab_Math": f"Weights Lab: ${w_h:,.2f} x 25% = ${w_l:,.2f}", "KG": w_tot*30, "Is_Marquee": True, "Hire_Math_Str": f"{w_tot} - Weights x $6.60 = ${w_h:,.2f}"})
+                if m_sec == "Weights":
+                    w_tot = int(legs*6*m_q); w_h = w_tot*6.60; w_l = w_h*0.25
+                    new_rows.append({"Qty": w_tot, "Product": "30kg Weights", "Unit Rate": 6.60, "Total": 0.0, "Min_Lab": 0, "Raw_Lab": w_l, "Lab_Math": f"Weights Lab: ${w_h:,.2f} x 25% = ${w_l:,.2f}", "KG": w_tot*30, "Is_Marquee": True, "Hire_Math_Str": f"{w_tot} - Weights x $6.60 = ${w_h:,.2f}"})
             st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame(new_rows)], ignore_index=True); st.rerun()
 
 with col_cat:
@@ -179,8 +149,7 @@ if not st.session_state.df.empty:
     st.divider()
     st.data_editor(st.session_state.df[["Qty", "Product", "Unit Rate", "Total"]], use_container_width=True)
     h_tot, raw_lab_sum, max_min_lab, total_kg = 0.0, 0.0, 0.0, 0.0
-    details_lab = []
-    details_hire = []
+    details_lab = []; details_hire = []
     for idx, row in st.session_state.df.iterrows():
         is_mq = row["Is_Marquee"]
         line_h = row["Qty"] * row["Unit Rate"] * (weeks if is_mq and "Weights" not in row["Product"] else 1)
@@ -190,8 +159,7 @@ if not st.session_state.df.empty:
         if row["Hire_Math_Str"]: details_hire.append(row["Hire_Math_Str"])
 
     trucks = math.ceil(total_kg / 6000) if total_kg > 0 else 1
-    final_lab = max(max_min_lab, raw_lab_sum)
-    waiver = h_tot * 0.07; cartage = trucks * km_in * 4 * 3.50; grand = h_tot + final_lab + waiver + cartage
+    final_lab = max(max_min_lab, raw_lab_sum); waiver = h_tot * 0.07; cartage = trucks * km_in * 4 * 3.50; grand = h_tot + final_lab + waiver + cartage
     
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("HIRE", f"${h_tot:,.2f}"); m2.metric("LABOUR", f"${final_lab:,.2f}"); m3.metric("WAIVER", f"${waiver:,.2f}"); m4.metric("CARTAGE", f"${cartage:,.2f}")
