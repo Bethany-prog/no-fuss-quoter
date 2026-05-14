@@ -39,7 +39,17 @@ st.markdown("""
     [data-testid="stMetricLabel"] p { color: #FFFFFF !important; font-weight: bold !important; font-size: 14px !important; }
     div.stButton > button:first-child { background-color: #3D5AFE; color: white; border-radius: 10px; height: 50px; font-weight: bold; width: 100%; }
     .guardrail-box { background-color: #F8F9FA; padding: 20px; border-radius: 10px; border: 1px solid #D1D3D4; margin-top: 20px; }
-    .delete-btn { color: #FF1744 !important; border: 1px solid #FF1744 !important; }
+    
+    /* Trash button styling */
+    .stButton > button.delete-btn {
+        background-color: transparent !important;
+        color: #FF1744 !important;
+        border: 1px solid #FF1744 !important;
+        height: 35px !important;
+        width: 35px !important;
+        padding: 0px !important;
+        line-height: 1 !important;
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -194,30 +204,36 @@ with col_cat:
 
 if not st.session_state.df.empty:
     st.divider(); st.subheader("Quote Summary")
-    # Clean non-editable table
-    st.table(st.session_state.df[["Qty", "Product", "Unit Rate", "Total"]])
     
-    # --- NEW CLEAN DELETE DASHBOARD ---
-    st.markdown("#### 🗑️ Remove Items")
-    cols = st.columns(len(st.session_state.df))
-    for i, (idx, row) in enumerate(st.session_state.df.iterrows()):
-        if cols[i].button(f"X {row['Product']}", key=f"del_{idx}"):
+    # Header Row for Summary
+    h_col1, h_col2, h_col3, h_col4, h_col5 = st.columns([0.5, 1, 3, 1.5, 1.5])
+    h_col2.write("**Qty**"); h_col3.write("**Product**"); h_col4.write("**Rate**"); h_col5.write("**Total**")
+    
+    # --- ROW-BY-ROW SUMMARY WITH LEFT DELETE BUTTON ---
+    for idx, row in st.session_state.df.iterrows():
+        # Duration logic applied to total hire calculation
+        line_h = row["Qty"] * row["Unit Rate"] * (weeks if row["Is_Marquee"] and "Weight" not in row["Product"] else 1)
+        st.session_state.df.at[idx, "Total"] = line_h
+        
+        c1, c2, c3, c4, c5 = st.columns([0.5, 1, 3, 1.5, 1.5])
+        if c1.button("🗑️", key=f"del_{idx}", help="Remove Item"):
             st.session_state.df = st.session_state.df.drop(idx)
             st.rerun()
+        c2.write(f"{row['Qty']:,.2f}")
+        c3.write(row['Product'])
+        c4.write(f"${row['Unit Rate']:,.2f}")
+        c5.write(f"${line_h:,.2f}")
     
-    # Recalculate Totals
-    h_tot, raw_l_sum, max_min_l, total_kg = 0.0, 0.0, 0.0, 0.0
-    h_math, l_math = [], []
-    for idx, row in st.session_state.df.iterrows():
-        line_h = row["Qty"] * row["Unit Rate"] * (weeks if row["Is_Marquee"] and "Weight" not in row["Product"] else 1)
-        h_tot += line_h; raw_l_sum += row["Raw_Lab"]; max_min_l = max(max_min_l, row["Min_Lab"])
-        total_kg += row["KG"]; st.session_state.df.at[idx, "Total"] = line_h
-        if row["Lab_Math"]: l_math.append(row["Lab_Math"])
-        if row["Hire_Math_Str"]: h_math.append(row["Hire_Math_Str"])
+    # Recalculate Financials
+    h_tot = st.session_state.df["Total"].sum()
+    total_kg = st.session_state.df["KG"].sum()
+    raw_l_sum = st.session_state.df["Raw_Lab"].sum()
+    max_min_l = st.session_state.df["Min_Lab"].max() if not st.session_state.df.empty else 0
     
     trucks = math.ceil(total_kg / CONFIG["TRUCK_PAYLOAD"]) if total_kg > 0 else 1
     final_lab = max(max_min_l, raw_l_sum); waiver = h_tot * 0.07; cartage = trucks * km_in * 4 * CONFIG["CARTAGE_RATE"]; grand = h_tot + final_lab + waiver + cartage
     
+    st.markdown("---")
     m1, m2, m3, m4, m5, m6 = st.columns(6)
     m1.metric("HIRE", f"${h_tot:,.2f}"); m2.metric("LABOUR", f"${final_lab:,.2f}"); m3.metric("WAIVER", f"${waiver:,.2f}"); m4.metric("CARTAGE", f"${cartage:,.2f}"); m5.metric("LOAD", f"{total_kg:,.0f}kg"); m6.metric("TRUCKS", f"{trucks}")
     
@@ -228,6 +244,10 @@ if not st.session_state.df.empty:
     else: st.write("No specific office actions required.")
     st.markdown("</div>", unsafe_allow_html=True)
 
+    # Re-extract proofs for PDF
+    h_math = st.session_state.df["Hire_Math_Str"].tolist()
+    l_math = st.session_state.df["Lab_Math"].tolist()
+    
     pdf_b = create_calculation_pdf(st.session_state.active_project, st.session_state.df, h_tot, final_lab, waiver, cartage, grand, km_in, weeks, start_d, end_d, h_math, l_math, total_kg, trucks, st.session_state.status)
     st.download_button(f"📥 DOWNLOAD {st.session_state.status.upper()} PDF", pdf_b, file_name=f"{st.session_state.active_project}_Analysis.pdf")
     if st.button("RESET ENGINE"): st.session_state.df = pd.DataFrame(columns=st.session_state.df.columns); st.rerun()
