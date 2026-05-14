@@ -7,7 +7,7 @@ import re
 import json
 import os
 
-# --- v33.8 FULL STABLE BUILD ---
+# --- DIRECTORIES ---
 if not os.path.exists("quotes"):
     os.makedirs("quotes")
 
@@ -42,7 +42,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- LOCKED MASTER DATA (UPDATED FROM v33.8 CSVs) ---
+# --- LOCKED MASTER DATA ---
 CONFIG = {"WEIGHT_UNIT_KG": 30, "WEIGHT_HIRE": 6.60, "WEIGHT_LABOUR": 1.65, "TRUCK_PAYLOAD": 6000, "CARTAGE_RATE": 3.50}
 
 STRUCT_LOGIC = {
@@ -78,25 +78,28 @@ STAGES = ["Quoted", "Accepted", "Paid", "On Hire", "Returned"]
 STAGE_COLORS = {"Quoted": "#FF9100", "Accepted": "#00E676", "Paid": "#00B8D4", "On Hire": "#D500F9", "Returned": "#757575"}
 
 # --- PDF ENGINE ---
-def create_calculation_pdf(name, df, subtotal, labour, waiver, cartage, grand, km, weeks, start, end, h_maths, l_details, kg, trucks, status):
+def create_calculation_pdf(name, df, subtotal, labour, waiver, cartage, grand, km, weeks, start, end, h_maths, l_details, kg, trucks, log_maths, status):
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Arial", "B", 16); pdf.cell(0, 10, f"Louis Quoting Tool - Calculation Analysis", ln=True, align="C")
     pdf.set_font("Arial", "B", 10); pdf.cell(0, 7, f"PROJECT: {name} | STATUS: {status.upper()}", ln=True, align="C")
     pdf.cell(0, 7, f"HIRE PERIOD: {start.strftime('%d/%m/%Y')} to {end.strftime('%d/%m/%Y')} ({weeks} Week(s))", ln=True, align="C"); pdf.ln(5)
     
+    # Hire Section
     pdf.set_fill_color(240, 240, 240); pdf.set_font("Arial", "B", 12)
     pdf.cell(0, 10, " CALCULATIONS (Hire)", 0, 1, "L", True); pdf.set_font("Arial", "", 10)
     for h in h_maths: pdf.cell(0, 7, f" {h}", border="B", ln=True)
     pdf.set_font("Arial", "B", 10); pdf.cell(0, 10, f" TOTAL HIRE: ${subtotal:,.2f}", ln=True, align="R"); pdf.ln(5)
     
+    # Labour Section
     pdf.set_font("Arial", "B", 12); pdf.cell(0, 10, " LABOUR", 0, 1, "L", True); pdf.set_font("Arial", "", 10)
     for l in l_details: pdf.cell(0, 7, f" {l}", border="B", ln=True)
     pdf.set_font("Arial", "B", 10); pdf.cell(0, 10, f" TOTAL LABOUR POOL: ${labour:,.2f}", ln=True, align="R"); pdf.ln(5)
 
+    # NEW: Logistics & Waiver Proofs
     pdf.set_font("Arial", "B", 12); pdf.cell(0, 10, " LOGISTICS & WAIVER", 0, 1, "L", True); pdf.set_font("Arial", "", 10)
-    pdf.cell(0, 7, f" Damage Waiver (7%): ${waiver:,.2f}", ln=True)
-    pdf.cell(0, 7, f" Cartage: ${cartage:,.2f}", ln=True)
+    for m in log_maths: pdf.cell(0, 7, f" {m}", border="B", ln=True)
+    pdf.set_font("Arial", "B", 10); pdf.cell(0, 10, f" LOGISTICS SUBTOTAL: ${waiver + cartage:,.2f}", ln=True, align="R")
     
     pdf.ln(10); pdf.set_fill_color(26, 29, 45); pdf.set_text_color(255, 255, 255); pdf.set_font("Arial", "B", 14)
     pdf.cell(0, 15, f" GRAND TOTAL (EX GST): ${grand:,.2f} ", 0, 1, "R", True)
@@ -230,10 +233,15 @@ if not st.session_state.df.empty:
     raw_l_sum = st.session_state.df["Raw_Lab"].sum(); max_min_l = st.session_state.df["Min_Lab"].max() if not st.session_state.df.empty else 0
     trucks = math.ceil(total_kg / CONFIG["TRUCK_PAYLOAD"]) if total_kg > 0 else 1
     
-    final_lab = max(max_min_l, raw_l_sum); waiver = h_tot * 0.07
-    cartage = trucks * (km_in if km_in else 0) * 4 * CONFIG["CARTAGE_RATE"]
+    # Base Calcs
+    final_lab = max(max_min_l, raw_l_sum); waiver = h_tot * 0.07; dist = km_in if km_in else 0
+    cartage = trucks * dist * 4 * CONFIG["CARTAGE_RATE"]
     
-    if cartage_mode == "Free": cartage = 0
+    log_maths = []
+    log_maths.append(f"Damage Waiver: ${h_tot:,.2f} x 7% = ${waiver:,.2f}")
+    log_maths.append(f"Cartage: {trucks} Trucks x {dist}km x 4 trips x ${CONFIG['CARTAGE_RATE']} = ${cartage:,.2f}")
+
+    if cartage_mode == "Free": cartage = 0; log_maths[-1] = "Cartage: FREE"
     if labour_mode == "Free": final_lab = 0
     elif labour_mode == "Include in Hire cost": h_tot += final_lab; final_lab = 0
     
@@ -251,5 +259,5 @@ if not st.session_state.df.empty:
     st.markdown("</div>", unsafe_allow_html=True)
 
     h_math = st.session_state.df["Hire_Math_Str"].tolist(); l_math = st.session_state.df["Lab_Math"].tolist()
-    pdf_b = create_calculation_pdf(st.session_state.active_project, st.session_state.df, h_tot, final_lab, waiver, cartage, grand, km_in if km_in else 0, weeks, start_d, end_d, h_math, l_math, total_kg, trucks, st.session_state.status)
+    pdf_b = create_calculation_pdf(st.session_state.active_project, st.session_state.df, h_tot, final_lab, waiver, cartage, grand, km_in if km_in else 0, weeks, start_d, end_d, h_math, l_math, total_kg, trucks, log_maths, st.session_state.status)
     st.download_button(f"📥 DOWNLOAD {st.session_state.status.upper()} PDF", pdf_b, file_name=f"{st.session_state.active_project}_Analysis.pdf")
