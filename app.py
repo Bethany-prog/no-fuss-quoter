@@ -39,17 +39,6 @@ st.markdown("""
     [data-testid="stMetricLabel"] p { color: #FFFFFF !important; font-weight: bold !important; font-size: 14px !important; }
     div.stButton > button:first-child { background-color: #3D5AFE; color: white; border-radius: 10px; height: 50px; font-weight: bold; width: 100%; }
     .guardrail-box { background-color: #F8F9FA; padding: 20px; border-radius: 10px; border: 1px solid #D1D3D4; margin-top: 20px; }
-    
-    /* Trash button styling */
-    .stButton > button.delete-btn {
-        background-color: transparent !important;
-        color: #FF1744 !important;
-        border: 1px solid #FF1744 !important;
-        height: 35px !important;
-        width: 35px !important;
-        padding: 0px !important;
-        line-height: 1 !important;
-    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -120,8 +109,6 @@ if 'active_project' not in st.session_state:
 
 # --- SIDEBAR (ARCHIVE MANAGER) ---
 st.sidebar.title("📁 Archive Manager")
-
-# 1. Start New Project
 if st.sidebar.button("➕ START NEW PROJECT"):
     st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Total", "Min_Lab", "Raw_Lab", "Lab_Math", "KG", "Is_Marquee", "Hire_Math_Str"])
     st.session_state.status = "Quoted"
@@ -129,8 +116,6 @@ if st.sidebar.button("➕ START NEW PROJECT"):
     st.rerun()
 
 st.sidebar.divider()
-
-# 2. Save Current
 st.session_state.active_project = st.sidebar.text_input("Project Label", st.session_state.active_project)
 if st.sidebar.button("💾 SAVE / UPDATE PROJECT"):
     data = {"status": st.session_state.status, "items": st.session_state.df.to_dict(orient='records'), "proj": st.session_state.active_project}
@@ -138,22 +123,18 @@ if st.sidebar.button("💾 SAVE / UPDATE PROJECT"):
     st.sidebar.success(f"Archived: {st.session_state.active_project}")
 
 st.sidebar.divider()
-
-# 3. Retrieve & Delete Old
 saved_quotes = sorted([f.replace(".json", "") for f in os.listdir("quotes") if f.endswith(".json")])
 load_choice = st.sidebar.selectbox("Select Existing Project", ["-- Choose --"] + saved_quotes)
 
-col_load, col_del = st.sidebar.columns(2)
-if col_load.button("📂 LOAD") and load_choice != "-- Choose --":
+cl, cd = st.sidebar.columns(2)
+if cl.button("📂 LOAD") and load_choice != "-- Choose --":
     with open(f"quotes/{load_choice}.json", "r") as f:
         loaded = json.load(f); st.session_state.df = pd.DataFrame(loaded["items"])
-        loaded_status = loaded.get("status", "Quoted"); st.session_state.status = loaded_status if loaded_status in STAGES else "Quoted"
+        ls = loaded.get("status", "Quoted"); st.session_state.status = ls if ls in STAGES else "Quoted"
         st.session_state.active_project = loaded.get("proj", load_choice); st.rerun()
 
-if col_del.button("🗑️ DELETE") and load_choice != "-- Choose --":
-    os.remove(f"quotes/{load_choice}.json")
-    st.sidebar.warning(f"Deleted: {load_choice}")
-    st.rerun()
+if cd.button("🗑️ DELETE") and load_choice != "-- Choose --":
+    os.remove(f"quotes/{load_choice}.json"); st.rerun()
 
 # --- MAIN UI ---
 st.title("📦 Louis Quoting Tool")
@@ -169,10 +150,10 @@ st.markdown(f"<div style='height: 12px; background-color: {STAGE_COLORS[st.sessi
 c1, c2, c3 = st.columns(3)
 start_d = c1.date_input("Hire Start", value=date.today(), format="DD/MM/YYYY")
 end_d = c2.date_input("Hire End", value=date.today(), format="DD/MM/YYYY")
-km_in = c3.number_input("One-Way Distance (KM)", min_value=0.0)
+# VALUE=NONE triggers blank input
+km_in = c3.number_input("One-Way Distance (KM)", min_value=0.0, value=None, placeholder="Enter KM...")
 weeks = math.ceil(((end_d - start_d).days) / 7) if (end_d - start_d).days > 0 else 1
 
-# BILLING OPTIONS
 st.markdown("#### 💳 Billing Options")
 b_col1, b_col2 = st.columns(2)
 cartage_mode = b_col1.segmented_control("Cartage Billing", ["Charge", "Free"], default="Charge")
@@ -182,43 +163,50 @@ st.divider(); col_mq, col_cat = st.columns(2)
 
 with col_mq:
     st.markdown("### ⚡ Marquee & Structure")
-    m_in = st.text_input("Size (e.g. 10x15)")
-    m_q = st.number_input("Quantity", min_value=1, key="mq")
+    m_in = st.text_input("Size (e.g. 10x15)", placeholder="e.g. 10x15")
+    m_q = st.number_input("Quantity", min_value=1, value=None, placeholder="Qty...", key="mq")
     m_sec = st.radio("Securing", ["Weights", "Pegging"], horizontal=True)
     if st.button("Add Marquee"):
-        nums = re.findall(r'\d+', m_in)
-        if len(nums) >= 2:
-            span, length = int(nums[0]), int(nums[1])
-            new_rows = []
-            logic = STRUCT_LOGIC.get(span, STRUCT_LOGIC[4]); bays = math.ceil(length/logic['bay']); sqm = span*length
-            rate = logic['s_rate'] if bays == 1 else logic['m_rate']; lab_p = logic['s_lab'] if bays == 1 else logic['m_lab']
-            h_val = sqm * rate * m_q; l_val = h_val * lab_p
-            new_rows.append({"Qty": m_q, "Product": f"Structure {span}m x {length}m", "Unit Rate": sqm*rate, "Total": 0.0, "Min_Lab": logic['min_lab'], "Raw_Lab": l_val, "Lab_Math": f"Structure {span}x{length}: ${h_val:,.2f} x {int(lab_p*100)}% = ${l_val:,.2f}", "KG": (sqm*15)*m_q, "Is_Marquee": True, "Hire_Math_Str": f"{m_q} - Structure {span}m x {length}m ({sqm}sqm x ${rate:,.2f}) = ${h_val:,.2f}" })
-            legs = ((length/logic['bay'])+1)*2
-            if m_sec == "Weights":
-                w_tot = int(legs*6*m_q); w_h = w_tot * CONFIG["WEIGHT_HIRE"]; w_l = w_tot * CONFIG["WEIGHT_LABOUR"]
-                new_rows.append({"Qty": w_tot, "Product": "30kg Weights", "Unit Rate": CONFIG["WEIGHT_HIRE"], "Total": 0.0, "Min_Lab": 0, "Raw_Lab": w_l, "Lab_Math": f"Weights: {w_tot} units x $1.65 = ${w_l:,.2f}", "KG": w_tot*30, "Is_Marquee": True, "Hire_Math_Str": f"{w_tot} - Weights x $6.60 = ${w_h:,.2f}"})
-            st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame(new_rows)], ignore_index=True); st.rerun()
+        if m_in and m_q:
+            nums = re.findall(r'\d+', m_in)
+            if len(nums) >= 2:
+                span, length = int(nums[0]), int(nums[1])
+                new_rows = []
+                logic = STRUCT_LOGIC.get(span, STRUCT_LOGIC[4])
+                sqm = span*length; rate = logic['s_rate'] if (length/logic['bay']) <= 1 else logic['m_rate']
+                lab_p = logic['s_lab'] if (length/logic['bay']) <= 1 else logic['m_lab']
+                h_val = sqm * rate * m_q; l_val = h_val * lab_p
+                new_rows.append({"Qty": m_q, "Product": f"Structure {span}m x {length}m", "Unit Rate": sqm*rate, "Total": 0.0, "Min_Lab": logic['min_lab'], "Raw_Lab": l_val, "Lab_Math": f"Structure {span}x{length}: ${h_val:,.2f} x {int(lab_p*100)}% = ${l_val:,.2f}", "KG": (sqm*15)*m_q, "Is_Marquee": True, "Hire_Math_Str": f"{m_q} - Structure {span}m x {length}m ({sqm}sqm x ${rate:,.2f}) = ${h_val:,.2f}" })
+                legs = ((length/logic['bay'])+1)*2
+                if m_sec == "Weights":
+                    w_tot = int(legs*6*m_q); w_h = w_tot * CONFIG["WEIGHT_HIRE"]; w_l = w_tot * CONFIG["WEIGHT_LABOUR"]
+                    new_rows.append({"Qty": w_tot, "Product": "30kg Weights", "Unit Rate": CONFIG["WEIGHT_HIRE"], "Total": 0.0, "Min_Lab": 0, "Raw_Lab": w_l, "Lab_Math": f"Weights: {w_tot} units x $1.65 = ${w_l:,.2f}", "KG": w_tot*30, "Is_Marquee": True, "Hire_Math_Str": f"{w_tot} - Weights x $6.60 = ${w_h:,.2f}"})
+                st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame(new_rows)], ignore_index=True); st.rerun()
 
 with col_cat:
     st.markdown("### 🪵 Flooring & Catalog")
     cat_type = st.radio("Category", ["Flooring", "Accessories"], horizontal=True)
     p_sel = st.selectbox("Product", list(GENERAL_PRODUCTS[cat_type].keys()))
+    f_qty = None
     if cat_type == "Flooring":
         data = GENERAL_PRODUCTS["Flooring"][p_sel]
         input_mode = st.radio("Mode", ["SQM", "Sheets"], horizontal=True) if data['w'] > 0 else "SQM"
         if input_mode == "Sheets":
-            num_sheets = st.number_input("Sheets", min_value=0, step=1)
-            sqm_per = data['w'] * data['l']; f_qty = num_sheets * sqm_per; label = f"{p_sel} ({num_sheets} sheets)"
+            num_sheets = st.number_input("Number of Sheets", min_value=0, value=None, placeholder="Sheets...")
+            if num_sheets:
+                sqm_per = data['w'] * data['l']; f_qty = num_sheets * sqm_per; label = f"{p_sel} ({num_sheets} sheets)"
         else:
-            req_sqm = st.number_input("Area (SQM)", min_value=0.0)
-            if data['w'] > 0:
-                sqm_per = data['w'] * data['l']; sheets_needed = math.ceil(req_sqm / sqm_per)
-                f_qty = sheets_needed * sqm_per; label = f"{p_sel} ({sheets_needed} sheets)"
-            else: f_qty = req_sqm; label = p_sel
-    else: f_qty = st.number_input("Quantity", min_value=0.0); label = p_sel
+            req_sqm = st.number_input("Area (SQM)", min_value=0.0, value=None, placeholder="SQM...")
+            if req_sqm:
+                if data['w'] > 0:
+                    sqm_per = data['w'] * data['l']; sheets_needed = math.ceil(req_sqm / sqm_per)
+                    f_qty = sheets_needed * sqm_per; label = f"{p_sel} ({sheets_needed} sheets)"
+                else: f_qty = req_sqm; label = p_sel
+    else:
+        f_qty = st.number_input("Quantity", min_value=0.0, value=None, placeholder="Qty...")
+        label = p_sel
 
-    if st.button("Add to Quote"):
+    if st.button("Add to Quote") and f_qty:
         data = GENERAL_PRODUCTS[cat_type][p_sel]
         f_rate = (data['block']/4) if (weeks >= 4 and 'block' in data) else data['rate']
         h_val = f_qty * f_rate; l_val = f_qty * data.get('lab_fix', (h_val * data.get('lab_p', 0)))
@@ -226,8 +214,8 @@ with col_cat:
 
 if not st.session_state.df.empty:
     st.divider(); st.subheader("Quote Summary")
-    h_col1, h_col2, h_col3, h_col4, h_col5 = st.columns([0.5, 1, 3, 1.5, 1.5])
-    h_col2.write("**Qty**"); h_col3.write("**Product**"); h_col4.write("**Rate**"); h_col5.write("**Total**")
+    h_c1, h_c2, h_c3, h_c4, h_c5 = st.columns([0.5, 1, 3, 1.5, 1.5])
+    h_c2.write("**Qty**"); h_c3.write("**Product**"); h_c4.write("**Rate**"); h_c5.write("**Total**")
     
     for idx, row in st.session_state.df.iterrows():
         line_h = row["Qty"] * row["Unit Rate"] * (weeks if row["Is_Marquee"] and "Weight" not in row["Product"] else 1)
@@ -236,22 +224,16 @@ if not st.session_state.df.empty:
         if c1.button("🗑️", key=f"del_{idx}"): st.session_state.df = st.session_state.df.drop(idx); st.rerun()
         c2.write(f"{row['Qty']:,.2f}"); c3.write(row['Product']); c4.write(f"${row['Unit Rate']:,.2f}"); c5.write(f"${line_h:,.2f}")
     
-    # Recalculate Financials
-    h_tot = st.session_state.df["Total"].sum()
-    total_kg = st.session_state.df["KG"].sum()
-    raw_l_sum = st.session_state.df["Raw_Lab"].sum()
-    max_min_l = st.session_state.df["Min_Lab"].max() if not st.session_state.df.empty else 0
+    h_tot = st.session_state.df["Total"].sum(); total_kg = st.session_state.df["KG"].sum()
+    raw_l_sum = st.session_state.df["Raw_Lab"].sum(); max_min_l = st.session_state.df["Min_Lab"].max() if not st.session_state.df.empty else 0
     trucks = math.ceil(total_kg / CONFIG["TRUCK_PAYLOAD"]) if total_kg > 0 else 1
     
-    final_lab = max(max_min_l, raw_l_sum)
-    waiver = h_tot * 0.07
-    cartage = trucks * km_in * 4 * CONFIG["CARTAGE_RATE"]
+    final_lab = max(max_min_l, raw_l_sum); waiver = h_tot * 0.07
+    cartage = trucks * (km_in if km_in else 0) * 4 * CONFIG["CARTAGE_RATE"]
     
     if cartage_mode == "Free": cartage = 0
     if labour_mode == "Free": final_lab = 0
-    elif labour_mode == "Include in Hire cost":
-        h_tot += final_lab
-        final_lab = 0
+    elif labour_mode == "Include in Hire cost": h_tot += final_lab; final_lab = 0
     
     grand = h_tot + final_lab + waiver + cartage
     
@@ -267,5 +249,5 @@ if not st.session_state.df.empty:
     st.markdown("</div>", unsafe_allow_html=True)
 
     h_math = st.session_state.df["Hire_Math_Str"].tolist(); l_math = st.session_state.df["Lab_Math"].tolist()
-    pdf_b = create_calculation_pdf(st.session_state.active_project, st.session_state.df, h_tot, final_lab, waiver, cartage, grand, km_in, weeks, start_d, end_d, h_math, l_math, total_kg, trucks, st.session_state.status)
+    pdf_b = create_calculation_pdf(st.session_state.active_project, st.session_state.df, h_tot, final_lab, waiver, cartage, grand, km_in if km_in else 0, weeks, start_d, end_d, h_math, l_math, total_kg, trucks, st.session_state.status)
     st.download_button(f"📥 DOWNLOAD {st.session_state.status.upper()} PDF", pdf_b, file_name=f"{st.session_state.active_project}_Analysis.pdf")
