@@ -85,18 +85,15 @@ def create_calculation_pdf(name, df, subtotal, labour, waiver, cartage, grand, k
     pdf.set_font("Arial", "B", 10); pdf.cell(0, 7, f"PROJECT: {name} | STATUS: {status.upper()}", ln=True, align="C")
     pdf.cell(0, 7, f"HIRE PERIOD: {start.strftime('%d/%m/%Y')} to {end.strftime('%d/%m/%Y')} ({weeks} Week(s))", ln=True, align="C"); pdf.ln(5)
     
-    # Hire Section
     pdf.set_fill_color(240, 240, 240); pdf.set_font("Arial", "B", 12)
     pdf.cell(0, 10, " CALCULATIONS (Hire)", 0, 1, "L", True); pdf.set_font("Arial", "", 10)
     for h in h_maths: pdf.cell(0, 7, f" {h}", border="B", ln=True)
     pdf.set_font("Arial", "B", 10); pdf.cell(0, 10, f" TOTAL HIRE CONTRACT: ${subtotal:,.2f}", ln=True, align="R"); pdf.ln(5)
     
-    # Labour Section
     pdf.set_font("Arial", "B", 12); pdf.cell(0, 10, " LABOUR (Week 1 Only)", 0, 1, "L", True); pdf.set_font("Arial", "", 10)
     for l in l_details: pdf.cell(0, 7, f" {l}", border="B", ln=True)
     pdf.set_font("Arial", "B", 10); pdf.cell(0, 10, f" TOTAL LABOUR POOL: ${labour:,.2f}", ln=True, align="R"); pdf.ln(5)
 
-    # Logistics & Waiver Section
     pdf.set_font("Arial", "B", 12); pdf.cell(0, 10, " LOGISTICS & WAIVER", 0, 1, "L", True); pdf.set_font("Arial", "", 10)
     for m in log_maths: pdf.cell(0, 7, f" {m}", border="B", ln=True)
     pdf.set_font("Arial", "B", 10); pdf.cell(0, 10, f" LOGISTICS SUBTOTAL: ${waiver + cartage:,.2f}", ln=True, align="R")
@@ -218,10 +215,10 @@ with col_cat:
     if st.button("Add to Quote") and f_qty:
         data = GENERAL_PRODUCTS[cat_type][p_sel]
         f_rate = (data['block']/4) if (weeks >= 4 and 'block' in data) else data['rate']
-        h_val = f_qty * f_rate; l_val = f_qty * data.get('lab_fix', (h_val * data.get('lab_p', 0)))
+        h_val_1wk = f_qty * f_rate; l_val = f_qty * data.get('lab_fix', (h_val_1wk * data.get('lab_p', 0)))
         st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame([{ 
             "Qty": f_qty, "Product": label, "Unit Rate": f_rate, "Total": 0.0, "Min_Lab": 0, "Raw_Lab": l_val, 
-            "Lab_Math": f"{p_sel}: {f_qty:,.2f} x ${data.get('lab_fix', 0)} = ${l_val:,.2f}" if 'lab_fix' in data else f"{p_sel}: ${h_val:,.2f} x {int(data.get('lab_p',0)*100)}% = ${l_val:,.2f}", 
+            "Lab_Math": f"{p_sel}: {f_qty:,.2f} x ${data.get('lab_fix', 0)} = ${l_val:,.2f}" if 'lab_fix' in data else f"{p_sel}: ${h_val_1wk:,.2f} x {int(data.get('lab_p',0)*100)}% = ${l_val:,.2f}", 
             "KG": f_qty * data.get('kg_sqm', data.get('kg', 0)), "Is_Marquee": False, "Hire_Math_Str": "" 
         }])], ignore_index=True); st.rerun()
 
@@ -237,16 +234,22 @@ if not st.session_state.df.empty:
     total_kg = 0.0
     
     for idx, row in st.session_state.df.iterrows():
-        base_hire = row["Qty"] * row["Unit Rate"]
-        h_tot_week1 += base_hire
+        base_hire_wk1 = row["Qty"] * row["Unit Rate"]
+        h_tot_week1 += base_hire_wk1
         
-        # Extended Explanation Logic
+        # Scaling Multiplier Logic
         if row["Is_Marquee"] and "Weight" not in row["Product"]:
+            # Marquee Rule: 100% Wk 1, 50% Subsequent
             extra_weeks = max(0, weeks - 1)
-            line_h = base_hire + (extra_weeks * base_hire * 0.5)
-            math_str = f"{row['Product']} (x{row['Qty']}): Week 1 @ 100% (${base_hire:,.2f}) + {extra_weeks} Weeks @ 50% (${base_hire*0.5:,.2f}/wk) = Total ${line_h:,.2f}"
+            line_h = base_hire_wk1 + (extra_weeks * base_hire_wk1 * 0.5)
+            math_str = f"{row['Product']} (x{row['Qty']}): Wk 1 @ 100% (${base_hire_wk1:,.2f}) + {extra_weeks} Wks @ 50% (${base_hire_wk1*0.5:,.2f}/wk) = ${line_h:,.2f}"
+        elif any(f in row["Product"] for f in ["I-Trac", "Supa-Trac", "Plastorip", "Rollout", "MOJO"]):
+            # Flooring/Barrier Rule: Weeks * Rate
+            line_h = base_hire_wk1 * weeks
+            math_str = f"{row['Product']} (x{row['Qty']:,.2f}): ${row['Unit Rate']:,.2f}/wk x {weeks} weeks = ${line_h:,.2f}"
         else:
-            line_h = base_hire
+            # Accessories are usually flat
+            line_h = base_hire_wk1
             math_str = f"{row['Product']} (x{row['Qty']:,.2f}): ${row['Unit Rate']:,.2f} flat rate = ${line_h:,.2f}"
         
         st.session_state.df.at[idx, "Total"] = line_h
