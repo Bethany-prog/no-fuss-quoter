@@ -7,7 +7,7 @@ import re
 import json
 import os
 
-# --- v32.4 CONFIG & DIRECTORIES ---
+# --- v32.5 CONFIG & DIRECTORIES ---
 if not os.path.exists("quotes"):
     os.makedirs("quotes")
 
@@ -86,14 +86,16 @@ if 'df' not in st.session_state:
     st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Total", "Min_Lab", "Raw_Lab", "Lab_Math", "KG", "Is_Marquee", "Hire_Math_Str"])
 if 'status' not in st.session_state:
     st.session_state.status = "Email"
+if 'active_project' not in st.session_state:
+    st.session_state.active_project = "New Project"
 
 # --- PDF ENGINE ---
 def create_calculation_pdf(name, df, subtotal, labour, waiver, cartage, grand, km, weeks, start, end, h_maths, l_details, kg, trucks, status):
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Arial", "B", 15); pdf.cell(0, 10, f"No Fuss Event Hire - Internal Calculation Sheet", ln=True, align="C")
-    pdf.set_font("Arial", "B", 10); pdf.cell(0, 7, f"STATUS: {status.upper()} | HIRE PERIOD: {start} to {end} ({weeks} Weeks)", ln=True, align="C")
-    pdf.set_font("Arial", "", 9); pdf.cell(0, 7, f"Payload: {kg:,.0f}kg | Logistics: {trucks} x 6,000kg Trucks", ln=True, align="C"); pdf.ln(5)
+    pdf.set_font("Arial", "B", 10); pdf.cell(0, 7, f"STATUS: {status.upper()} | PROJECT: {name}", ln=True, align="C")
+    pdf.set_font("Arial", "", 9); pdf.cell(0, 7, f"Hire: {start} to {end} | Payload: {kg:,.0f}kg | Logistics: {trucks} Trucks", ln=True, align="C"); pdf.ln(5)
 
     pdf.set_fill_color(26, 29, 45); pdf.set_text_color(255, 255, 255)
     pdf.cell(85, 10, " Product Description", 1, 0, "L", True); pdf.cell(20, 10, " Qty", 1, 0, "C", True)
@@ -120,12 +122,14 @@ def create_calculation_pdf(name, df, subtotal, labour, waiver, cartage, grand, k
 
 # --- SIDEBAR & ARCHIVE ---
 st.sidebar.title("📁 Archive Manager")
-proj_name = st.sidebar.text_input("Project Label", "New Project")
-if st.sidebar.button("💾 SAVE PROJECT"):
-    data = {"status": st.session_state.status, "items": st.session_state.df.to_dict(orient='records'), "proj": proj_name}
-    with open(f"quotes/{proj_name}.json", "w") as f: json.dump(data, f)
-    st.sidebar.success(f"Archived: {proj_name}")
+st.session_state.active_project = st.sidebar.text_input("Project Label", st.session_state.active_project)
 
+if st.sidebar.button("💾 SAVE PROJECT"):
+    data = {"status": st.session_state.status, "items": st.session_state.df.to_dict(orient='records'), "proj": st.session_state.active_project}
+    with open(f"quotes/{st.session_state.active_project}.json", "w") as f: json.dump(data, f)
+    st.sidebar.success(f"Archived: {st.session_state.active_project}")
+
+st.sidebar.markdown("---")
 saved_quotes = [f.replace(".json", "") for f in os.listdir("quotes") if f.endswith(".json")]
 load_choice = st.sidebar.selectbox("Retrieve Project", ["None"] + saved_quotes)
 if st.sidebar.button("📂 LOAD") and load_choice != "None":
@@ -133,10 +137,11 @@ if st.sidebar.button("📂 LOAD") and load_choice != "None":
         loaded = json.load(f)
         st.session_state.df = pd.DataFrame(loaded["items"])
         st.session_state.status = loaded.get("status", "Email") if loaded.get("status") in STAGES else "Email"
+        st.session_state.active_project = loaded.get("proj", load_choice)
         st.rerun()
 
 # --- TOP WORKFLOW INDICATOR ---
-st.markdown("### 📍 Workflow Selection")
+st.markdown(f"### 📍 Workflow Selection: {st.session_state.active_project}")
 st.session_state.status = st.selectbox("Current Stage", options=STAGES, index=STAGES.index(st.session_state.status))
 st.markdown(f"<div style='height: 12px; background-color: {STAGE_COLORS[st.session_state.status]}; border-radius: 6px; margin-bottom: 25px;'></div>", unsafe_allow_html=True)
 
@@ -163,7 +168,7 @@ with col_mq:
                 data = MARQUEE_UNITS[key]
                 h_val = data['rate'] * m_q; l_val = h_val * data['lab']
                 new_rows.append({"Qty": m_q, "Product": key, "Unit Rate": data['rate'], "Total": 0.0, "Min_Lab": data['min'], "Raw_Lab": l_val, "Lab_Math": f"{key} Lab: ${h_val:,.2f} x 55% = ${l_val:,.2f}", "KG": data['kg']*m_q, "Is_Marquee": True, "Hire_Math_Str": f"{m_q} - {key} x ${data['rate']:,.2f} = ${h_val:,.2f}"})
-                legs = data['legs']
+                legs = 4
             else:
                 logic = STRUCT_LOGIC.get(span, STRUCT_LOGIC[4])
                 bays = math.ceil(length/logic['bay']); sqm = span*length
@@ -196,6 +201,6 @@ if not st.session_state.df.empty:
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("HIRE", f"${h_tot:,.2f}"); m2.metric("LABOUR", f"${final_lab:,.2f}"); m3.metric("LOAD", f"{total_kg:,.0f}kg"); m4.metric("TRUCKS", f"{trucks}")
     
-    pdf_b = create_calculation_pdf(proj_name, st.session_state.df, h_tot, final_lab, waiver, cartage, grand, km_in, weeks, start_d, end_d, h_math, l_math, total_kg, trucks, st.session_state.status)
-    st.download_button(f"📥 DOWNLOAD {st.session_state.status.upper()} PDF", pdf_b, file_name=f"{proj_name}_Analysis.pdf")
-    if st.button("RESET ENGINE"): st.session_state.df = pd.DataFrame(columns=st.session_state.df.columns); st.session_state.status = "Email"; st.rerun()
+    pdf_b = create_calculation_pdf(st.session_state.active_project, st.session_state.df, h_tot, final_lab, waiver, cartage, grand, km_in, weeks, start_d, end_d, h_math, l_math, total_kg, trucks, st.session_state.status)
+    st.download_button(f"📥 DOWNLOAD {st.session_state.status.upper()} PDF", pdf_b, file_name=f"{st.session_state.active_project}_Analysis.pdf")
+    if st.button("RESET ENGINE"): st.session_state.df = pd.DataFrame(columns=st.session_state.df.columns); st.session_state.status = "Email"; st.session_state.active_project = "New Project"; st.rerun()
