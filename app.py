@@ -104,7 +104,7 @@ def create_calculation_pdf(name, df, subtotal, labour, waiver, cartage, grand, k
 
     pdf.set_font("Arial", "B", 12); pdf.cell(0, 10, " LOGISTICS & WAIVER", 0, 1, "L", True); pdf.set_font("Arial", "", 10)
     pdf.cell(0, 7, f" Damage Waiver (7%): ${waiver:,.2f}", ln=True)
-    pdf.cell(0, 7, f" Cartage ({trucks} Trucks @ ${CONFIG['CARTAGE_RATE']}/km): ${cartage:,.2f}", ln=True)
+    pdf.cell(0, 7, f" Cartage: ${cartage:,.2f}", ln=True)
     
     pdf.ln(10); pdf.set_fill_color(26, 29, 45); pdf.set_text_color(255, 255, 255); pdf.set_font("Arial", "B", 14)
     pdf.cell(0, 15, f" GRAND TOTAL (EX GST): ${grand:,.2f} ", 0, 1, "R", True)
@@ -130,13 +130,9 @@ saved_quotes = [f.replace(".json", "") for f in os.listdir("quotes") if f.endswi
 load_choice = st.sidebar.selectbox("Retrieve Project", ["None"] + saved_quotes)
 if st.sidebar.button("📂 LOAD") and load_choice != "None":
     with open(f"quotes/{load_choice}.json", "r") as f:
-        loaded = json.load(f)
-        st.session_state.df = pd.DataFrame(loaded["items"])
-        loaded_status = loaded.get("status", "Quoted")
-        if loaded_status not in STAGES: st.session_state.status = "Quoted"
-        else: st.session_state.status = loaded_status
-        st.session_state.active_project = loaded.get("proj", load_choice)
-        st.rerun()
+        loaded = json.load(f); st.session_state.df = pd.DataFrame(loaded["items"])
+        loaded_status = loaded.get("status", "Quoted"); st.session_state.status = loaded_status if loaded_status in STAGES else "Quoted"
+        st.session_state.active_project = loaded.get("proj", load_choice); st.rerun()
 
 # --- MAIN UI ---
 st.title("📦 Louis Quoting Tool")
@@ -148,11 +144,18 @@ except ValueError: status_index = 0
 st.session_state.status = st.selectbox("Current Workflow Stage", options=STAGES, index=status_index)
 st.markdown(f"<div style='height: 12px; background-color: {STAGE_COLORS[st.session_state.status]}; border-radius: 6px; margin-bottom: 25px;'></div>", unsafe_allow_html=True)
 
+# TOP INPUTS
 c1, c2, c3 = st.columns(3)
 start_d = c1.date_input("Hire Start", value=date.today(), format="DD/MM/YYYY")
 end_d = c2.date_input("Hire End", value=date.today(), format="DD/MM/YYYY")
 km_in = c3.number_input("One-Way Distance (KM)", min_value=0.0)
 weeks = math.ceil(((end_d - start_d).days) / 7) if (end_d - start_d).days > 0 else 1
+
+# BILLING OPTIONS
+st.markdown("#### 💳 Billing Options")
+b_col1, b_col2 = st.columns(2)
+cartage_mode = b_col1.segmented_control("Cartage Billing", ["Charge", "Free"], default="Charge")
+labour_mode = b_col2.segmented_control("Labour Billing", ["Separate Line Item", "Include in Hire cost", "Free"], default="Separate Line Item")
 
 st.divider(); col_mq, col_cat = st.columns(2)
 
@@ -166,10 +169,8 @@ with col_mq:
         if len(nums) >= 2:
             span, length = int(nums[0]), int(nums[1])
             new_rows = []
-            logic = STRUCT_LOGIC.get(span, STRUCT_LOGIC[4])
-            bays = math.ceil(length/logic['bay']); sqm = span*length
-            rate = logic['s_rate'] if bays == 1 else logic['m_rate']
-            lab_p = logic['s_lab'] if bays == 1 else logic['m_lab']
+            logic = STRUCT_LOGIC.get(span, STRUCT_LOGIC[4]); bays = math.ceil(length/logic['bay']); sqm = span*length
+            rate = logic['s_rate'] if bays == 1 else logic['m_rate']; lab_p = logic['s_lab'] if bays == 1 else logic['m_lab']
             h_val = sqm * rate * m_q; l_val = h_val * lab_p
             new_rows.append({"Qty": m_q, "Product": f"Structure {span}m x {length}m", "Unit Rate": sqm*rate, "Total": 0.0, "Min_Lab": logic['min_lab'], "Raw_Lab": l_val, "Lab_Math": f"Structure {span}x{length}: ${h_val:,.2f} x {int(lab_p*100)}% = ${l_val:,.2f}", "KG": (sqm*15)*m_q, "Is_Marquee": True, "Hire_Math_Str": f"{m_q} - Structure {span}m x {length}m ({sqm}sqm x ${rate:,.2f}) = ${h_val:,.2f}" })
             legs = ((length/logic['bay'])+1)*2
@@ -204,34 +205,36 @@ with col_cat:
 
 if not st.session_state.df.empty:
     st.divider(); st.subheader("Quote Summary")
-    
-    # Header Row for Summary
     h_col1, h_col2, h_col3, h_col4, h_col5 = st.columns([0.5, 1, 3, 1.5, 1.5])
     h_col2.write("**Qty**"); h_col3.write("**Product**"); h_col4.write("**Rate**"); h_col5.write("**Total**")
     
-    # --- ROW-BY-ROW SUMMARY WITH LEFT DELETE BUTTON ---
     for idx, row in st.session_state.df.iterrows():
-        # Duration logic applied to total hire calculation
         line_h = row["Qty"] * row["Unit Rate"] * (weeks if row["Is_Marquee"] and "Weight" not in row["Product"] else 1)
         st.session_state.df.at[idx, "Total"] = line_h
-        
         c1, c2, c3, c4, c5 = st.columns([0.5, 1, 3, 1.5, 1.5])
-        if c1.button("🗑️", key=f"del_{idx}", help="Remove Item"):
-            st.session_state.df = st.session_state.df.drop(idx)
-            st.rerun()
-        c2.write(f"{row['Qty']:,.2f}")
-        c3.write(row['Product'])
-        c4.write(f"${row['Unit Rate']:,.2f}")
-        c5.write(f"${line_h:,.2f}")
+        if c1.button("🗑️", key=f"del_{idx}"): st.session_state.df = st.session_state.df.drop(idx); st.rerun()
+        c2.write(f"{row['Qty']:,.2f}"); c3.write(row['Product']); c4.write(f"${row['Unit Rate']:,.2f}"); c5.write(f"${line_h:,.2f}")
     
-    # Recalculate Financials
+    # Recalculate Financials with Billing Logic
     h_tot = st.session_state.df["Total"].sum()
     total_kg = st.session_state.df["KG"].sum()
     raw_l_sum = st.session_state.df["Raw_Lab"].sum()
     max_min_l = st.session_state.df["Min_Lab"].max() if not st.session_state.df.empty else 0
-    
     trucks = math.ceil(total_kg / CONFIG["TRUCK_PAYLOAD"]) if total_kg > 0 else 1
-    final_lab = max(max_min_l, raw_l_sum); waiver = h_tot * 0.07; cartage = trucks * km_in * 4 * CONFIG["CARTAGE_RATE"]; grand = h_tot + final_lab + waiver + cartage
+    
+    # Calculate Base Values
+    final_lab = max(max_min_l, raw_l_sum)
+    waiver = h_tot * 0.07
+    cartage = trucks * km_in * 4 * CONFIG["CARTAGE_RATE"]
+    
+    # Apply Billing Overrides
+    if cartage_mode == "Free": cartage = 0
+    if labour_mode == "Free": final_lab = 0
+    elif labour_mode == "Include in Hire cost":
+        h_tot += final_lab
+        final_lab = 0
+    
+    grand = h_tot + final_lab + waiver + cartage
     
     st.markdown("---")
     m1, m2, m3, m4, m5, m6 = st.columns(6)
@@ -244,10 +247,7 @@ if not st.session_state.df.empty:
     else: st.write("No specific office actions required.")
     st.markdown("</div>", unsafe_allow_html=True)
 
-    # Re-extract proofs for PDF
-    h_math = st.session_state.df["Hire_Math_Str"].tolist()
-    l_math = st.session_state.df["Lab_Math"].tolist()
-    
+    h_math = st.session_state.df["Hire_Math_Str"].tolist(); l_math = st.session_state.df["Lab_Math"].tolist()
     pdf_b = create_calculation_pdf(st.session_state.active_project, st.session_state.df, h_tot, final_lab, waiver, cartage, grand, km_in, weeks, start_d, end_d, h_math, l_math, total_kg, trucks, st.session_state.status)
     st.download_button(f"📥 DOWNLOAD {st.session_state.status.upper()} PDF", pdf_b, file_name=f"{st.session_state.active_project}_Analysis.pdf")
     if st.button("RESET ENGINE"): st.session_state.df = pd.DataFrame(columns=st.session_state.df.columns); st.rerun()
