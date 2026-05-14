@@ -36,9 +36,20 @@ st.markdown("""
     h3 { color: #FFFFFF !important; border-left: 5px solid #00E676; padding: 10px 15px; background-color: #1A1D2D; border-radius: 0 10px 10px 0; margin-top: 20px; }
     div.stMetric { background-color: #1A1D2D !important; padding: 20px !important; border-radius: 12px !important; border: 2px solid #3D5AFE !important; }
     div[data-testid="stMetricValue"] { color: #00E676 !important; font-size: 28px !important; font-weight: bold !important; }
-    [data-testid="stMetricLabel"] p { color: #FFFFFF !important; font-weight: bold !important; font-size: 14px !important; }
+    [data-testid="stMetricLabel"] p { color: #FFFFFF !important; font-weight: bold !important; font-size: 16px !important; }
     div.stButton > button:first-child { background-color: #3D5AFE; color: white; border-radius: 10px; height: 50px; font-weight: bold; width: 100%; }
     .guardrail-box { background-color: #F8F9FA; padding: 20px; border-radius: 10px; border: 1px solid #D1D3D4; margin-top: 20px; }
+    
+    /* Trash button styling */
+    .stButton > button.delete-btn {
+        background-color: transparent !important;
+        color: #FF1744 !important;
+        border: 1px solid #FF1744 !important;
+        height: 35px !important;
+        width: 35px !important;
+        padding: 0px !important;
+        line-height: 1 !important;
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -78,7 +89,7 @@ STAGES = ["Quoted", "Accepted", "Paid", "On Hire", "Returned"]
 STAGE_COLORS = {"Quoted": "#FF9100", "Accepted": "#00E676", "Paid": "#00B8D4", "On Hire": "#D500F9", "Returned": "#757575"}
 
 # --- PDF ENGINE ---
-def create_calculation_pdf(name, df, subtotal, labour, waiver, cartage, grand, km, weeks, start, end, h_maths, l_details, kg, trucks, log_maths, status):
+def create_calculation_pdf(name, subtotal, labour, waiver, cartage, grand, weeks, start, end, h_maths, l_details, log_maths, status):
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Arial", "B", 16); pdf.cell(0, 10, f"Louis Quoting Tool - Calculation Analysis", ln=True, align="C")
@@ -90,9 +101,10 @@ def create_calculation_pdf(name, df, subtotal, labour, waiver, cartage, grand, k
     for h in h_maths: pdf.cell(0, 7, f" {h}", border="B", ln=True)
     pdf.set_font("Arial", "B", 10); pdf.cell(0, 10, f" TOTAL HIRE CONTRACT: ${subtotal:,.2f}", ln=True, align="R"); pdf.ln(5)
     
-    pdf.set_font("Arial", "B", 12); pdf.cell(0, 10, " LABOUR (Week 1 Only)", 0, 1, "L", True); pdf.set_font("Arial", "", 10)
-    for l in l_details: pdf.cell(0, 7, f" {l}", border="B", ln=True)
-    pdf.set_font("Arial", "B", 10); pdf.cell(0, 10, f" TOTAL LABOUR POOL: ${labour:,.2f}", ln=True, align="R"); pdf.ln(5)
+    if labour > 0:
+        pdf.set_font("Arial", "B", 12); pdf.cell(0, 10, " LABOUR (Week 1 Only)", 0, 1, "L", True); pdf.set_font("Arial", "", 10)
+        for l in l_details: pdf.cell(0, 7, f" {l}", border="B", ln=True)
+        pdf.set_font("Arial", "B", 10); pdf.cell(0, 10, f" TOTAL LABOUR POOL: ${labour:,.2f}", ln=True, align="R"); pdf.ln(5)
 
     pdf.set_font("Arial", "B", 12); pdf.cell(0, 10, " LOGISTICS & WAIVER", 0, 1, "L", True); pdf.set_font("Arial", "", 10)
     for m in log_maths: pdf.cell(0, 7, f" {m}", border="B", ln=True)
@@ -224,64 +236,97 @@ with col_cat:
 
 if not st.session_state.df.empty:
     st.divider(); st.subheader("Quote Summary")
-    h_c1, h_c2, h_c3, h_c4, h_c5 = st.columns([0.5, 1, 3, 1.5, 1.5])
-    h_c2.write("**Qty**"); h_c3.write("**Product**"); h_c4.write("**Rate**"); h_c5.write("**Total**")
+    h_c1, h_c2, h_c3, h_c4, h_c5 = st.columns([0.5, 2.5, 1, 1, 1])
+    h_c2.write("**Item Description**"); h_c3.write("**Qty**"); h_c4.write("**Rate**"); h_c5.write("**Total**")
     
     h_tot_contract = 0.0
-    h_tot_week1 = 0.0
+    h_tot_week1_base_gear = 0.0
+    h_tot_week1_with_labour = 0.0
     raw_l_sum = 0.0
     max_min_l = 0.0
     total_kg = 0.0
-    
+    pdf_hire_maths = []
+    pdf_labour_maths = []
+
     for idx, row in st.session_state.df.iterrows():
-        base_hire_wk1 = row["Qty"] * row["Unit Rate"]
-        h_tot_week1 += base_hire_wk1
-        
-        # Scaling Multiplier Logic
-        if row["Is_Marquee"] and "Weight" not in row["Product"]:
-            # Marquee Rule: 100% Wk 1, 50% Subsequent
-            extra_weeks = max(0, weeks - 1)
-            line_h = base_hire_wk1 + (extra_weeks * base_hire_wk1 * 0.5)
-            math_str = f"{row['Product']} (x{row['Qty']}): Wk 1 @ 100% (${base_hire_wk1:,.2f}) + {extra_weeks} Wks @ 50% (${base_hire_wk1*0.5:,.2f}/wk) = ${line_h:,.2f}"
-        elif any(f in row["Product"] for f in ["I-Trac", "Supa-Trac", "Plastorip", "Rollout", "MOJO"]):
-            # Flooring/Barrier Rule: Weeks * Rate
-            line_h = base_hire_wk1 * weeks
-            math_str = f"{row['Product']} (x{row['Qty']:,.2f}): ${row['Unit Rate']:,.2f}/wk x {weeks} weeks = ${line_h:,.2f}"
-        else:
-            # Accessories are usually flat
-            line_h = base_hire_wk1
-            math_str = f"{row['Product']} (x{row['Qty']:,.2f}): ${row['Unit Rate']:,.2f} flat rate = ${line_h:,.2f}"
-        
-        st.session_state.df.at[idx, "Total"] = line_h
-        st.session_state.df.at[idx, "Hire_Math_Str"] = math_str
-        h_tot_contract += line_h
-        raw_l_sum += row["Raw_Lab"]
+        qty = row["Qty"]
+        base_rate = row["Unit Rate"]
+        gear_wk1 = qty * base_rate
+        item_lab = row["Raw_Lab"]
+        h_tot_week1_base_gear += gear_wk1
+        raw_l_sum += item_lab
         max_min_l = max(max_min_l, row["Min_Lab"])
         total_kg += row["KG"]
         
-        c1, c2, c3, c4, c5 = st.columns([0.5, 1, 3, 1.5, 1.5])
+        # --- SPLIT LINE LOGIC ---
+        # Line 1: Week 1
+        wk1_label = f"{row['Product']} - Week 1"
+        if labour_mode == "Include in Hire cost":
+            wk1_total = gear_wk1 + item_lab
+            wk1_rate = wk1_total / qty
+            wk1_proof = f"{row['Product']} Wk 1: Gear (${gear_wk1:,.2f}) + Labour (${item_lab:,.2f}) = ${wk1_total:,.2f}"
+        else:
+            wk1_total = gear_wk1
+            wk1_rate = base_rate
+            wk1_proof = f"{row['Product']} Wk 1: ${base_rate:,.2f}/ea = ${wk1_total:,.2f}"
+        
+        h_tot_week1_with_labour += wk1_total
+        h_tot_contract += wk1_total
+        pdf_hire_maths.append(wk1_proof)
+        if row["Lab_Math"]: pdf_labour_maths.append(row["Lab_Math"])
+
+        # Display Line 1
+        c1, c2, c3, c4, c5 = st.columns([0.5, 2.5, 1, 1, 1])
         if c1.button("🗑️", key=f"del_{idx}"): st.session_state.df = st.session_state.df.drop(idx); st.rerun()
-        c2.write(f"{row['Qty']:,.2f}"); c3.write(row['Product']); c4.write(f"${row['Unit Rate']:,.2f}"); c5.write(f"${line_h:,.2f}")
-    
+        c2.write(wk1_label); c3.write(f"{qty:,.2f}"); c4.write(f"${wk1_rate:,.2f}"); c5.write(f"${wk1_total:,.2f}")
+
+        # Line 2: Weeks 2+ (Recurring)
+        if weeks > 1:
+            extra_wks = weeks - 1
+            if row["Is_Marquee"] and "Weight" not in row["Product"]:
+                rec_rate = base_rate * 0.5
+                rec_total = gear_wk1 * 0.5 * extra_wks
+                rec_label = f"{row['Product']} - Weeks 2 to {weeks} (@ 50%)"
+            else:
+                rec_rate = base_rate
+                rec_total = gear_wk1 * extra_wks
+                rec_label = f"{row['Product']} - Weeks 2 to {weeks}"
+            
+            h_tot_contract += rec_total
+            rec_proof = f"{row['Product']} Recurring: {extra_wks} wks @ ${rec_rate:,.2f}/ea = ${rec_total:,.2f}"
+            pdf_hire_maths.append(rec_proof)
+
+            c1b, c2b, c3b, c4b, c5b = st.columns([0.5, 2.5, 1, 1, 1])
+            c2b.write(rec_label); c3b.write(f"{qty:,.2f}"); c4b.write(f"${rec_rate:,.2f}"); c5b.write(f"${rec_total:,.2f}")
+
+    # --- FINANCIAL CALCS ---
     trucks = math.ceil(total_kg / CONFIG["TRUCK_PAYLOAD"]) if total_kg > 0 else 1
-    final_lab = max(max_min_l, raw_l_sum)
-    waiver = h_tot_week1 * 0.07 
+    final_lab_pool = max(max_min_l, raw_l_sum)
+    waiver = h_tot_week1_base_gear * 0.07 # Waiver is strictly gear hire Wk 1
     dist = km_in if km_in else 0
     cartage = trucks * dist * 4 * CONFIG["CARTAGE_RATE"]
     
     log_maths = []
-    log_maths.append(f"Damage Waiver (Week 1 Hire Only): ${h_tot_week1:,.2f} x 7% = ${waiver:,.2f}")
+    log_maths.append(f"Damage Waiver (7% of Wk 1 Gear Hire): ${h_tot_week1_base_gear:,.2f} x 7% = ${waiver:,.2f}")
     log_maths.append(f"Cartage: {trucks} Trucks x {dist}km x 4 trips x ${CONFIG['CARTAGE_RATE']} = ${cartage:,.2f}")
 
     if cartage_mode == "Free": cartage = 0; log_maths[-1] = "Cartage: FREE"
-    if labour_mode == "Free": final_lab = 0
-    elif labour_mode == "Include in Hire cost": h_tot_contract += final_lab; final_lab = 0
     
-    grand = h_tot_contract + final_lab + waiver + cartage
+    # Correct Final Labour pool display if "Include" was picked
+    display_labour = 0 if labour_mode != "Separate Line Item" else final_lab_pool
+    if labour_mode == "Free": display_labour = 0
+    
+    # If "Include in Hire" was picked, final_lab_pool is already distributed in the h_tot_contract loop.
+    # If "Separate Line Item", we must add the total pool here.
+    if labour_mode == "Separate Line Item":
+        h_tot_contract = h_tot_contract # base hire from items
+        grand = h_tot_contract + display_labour + waiver + cartage
+    else:
+        grand = h_tot_contract + waiver + cartage
     
     st.markdown("---")
     m1, m2, m3, m4, m5, m6 = st.columns(6)
-    m1.metric("HIRE", f"${h_tot_contract:,.2f}"); m2.metric("LABOUR", f"${final_lab:,.2f}"); m3.metric("WAIVER", f"${waiver:,.2f}"); m4.metric("CARTAGE", f"${cartage:,.2f}"); m5.metric("LOAD", f"{total_kg:,.0f}kg"); m6.metric("TRUCKS", f"{trucks}")
+    m1.metric("HIRE", f"${h_tot_contract:,.2f}"); m2.metric("LABOUR", f"${display_labour:,.2f}"); m3.metric("WAIVER", f"${waiver:,.2f}"); m4.metric("CARTAGE", f"${cartage:,.2f}"); m5.metric("LOAD", f"{total_kg:,.0f}kg"); m6.metric("TRUCKS", f"{trucks}")
     
     st.markdown("### 🛠️ Checklist")
     st.markdown("<div class='guardrail-box'>", unsafe_allow_html=True)
@@ -290,8 +335,5 @@ if not st.session_state.df.empty:
     else: st.write("No specific office actions required.")
     st.markdown("</div>", unsafe_allow_html=True)
 
-    h_math_final = st.session_state.df["Hire_Math_Str"].tolist()
-    l_math_final = st.session_state.df["Lab_Math"].tolist()
-    
-    pdf_b = create_calculation_pdf(st.session_state.active_project, st.session_state.df, h_tot_contract, final_lab, waiver, cartage, grand, km_in if km_in else 0, weeks, start_d, end_d, h_math_final, l_math_final, total_kg, trucks, log_maths, st.session_state.status)
+    pdf_b = create_calculation_pdf(st.session_state.active_project, h_tot_contract, display_labour, waiver, cartage, grand, weeks, start_d, end_d, pdf_hire_maths, pdf_labour_maths, log_maths, st.session_state.status)
     st.download_button(f"📥 DOWNLOAD {st.session_state.status.upper()} PDF", pdf_b, file_name=f"{st.session_state.active_project}_Analysis.pdf")
