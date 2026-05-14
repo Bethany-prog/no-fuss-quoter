@@ -36,7 +36,7 @@ st.markdown("""
     h3 { color: #FFFFFF !important; border-left: 5px solid #00E676; padding: 10px 15px; background-color: #1A1D2D; border-radius: 0 10px 10px 0; margin-top: 20px; }
     div.stMetric { background-color: #1A1D2D !important; padding: 20px !important; border-radius: 12px !important; border: 2px solid #3D5AFE !important; }
     div[data-testid="stMetricValue"] { color: #00E676 !important; font-size: 28px !important; font-weight: bold !important; }
-    [data-testid="stMetricLabel"] p { color: #FFFFFF !important; font-weight: bold !important; font-size: 16px !important; }
+    [data-testid="stMetricLabel"] p { color: #FFFFFF !important; font-weight: bold !important; font-size: 14px !important; }
     div.stButton > button:first-child { background-color: #3D5AFE; color: white; border-radius: 10px; height: 50px; font-weight: bold; width: 100%; }
     .guardrail-box { background-color: #F8F9FA; padding: 20px; border-radius: 10px; border: 1px solid #D1D3D4; margin-top: 20px; }
     
@@ -116,7 +116,7 @@ def create_calculation_pdf(name, subtotal, labour, waiver, cartage, grand, weeks
 
 # --- SESSION STATE ---
 if 'df' not in st.session_state:
-    st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Total", "Min_Lab", "Raw_Lab", "Lab_Math", "KG", "Is_Marquee", "Hire_Math_Str"])
+    st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Total", "Min_Lab", "Raw_Lab", "Lab_Math", "KG", "Is_Marquee", "Hire_Math_Str", "Discount"])
 if 'status' not in st.session_state:
     st.session_state.status = "Quoted"
 if 'active_project' not in st.session_state:
@@ -125,7 +125,7 @@ if 'active_project' not in st.session_state:
 # --- SIDEBAR (ARCHIVE MANAGER) ---
 st.sidebar.title("📁 Archive Manager")
 if st.sidebar.button("➕ START NEW PROJECT"):
-    st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Total", "Min_Lab", "Raw_Lab", "Lab_Math", "KG", "Is_Marquee", "Hire_Math_Str"])
+    st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Total", "Min_Lab", "Raw_Lab", "Lab_Math", "KG", "Is_Marquee", "Hire_Math_Str", "Discount"])
     st.session_state.status = "Quoted"
     st.session_state.active_project = "New Project"
     st.rerun()
@@ -145,6 +145,7 @@ cl, cd = st.sidebar.columns(2)
 if cl.button("📂 LOAD") and load_choice != "-- Choose --":
     with open(f"quotes/{load_choice}.json", "r") as f:
         loaded = json.load(f); st.session_state.df = pd.DataFrame(loaded["items"])
+        if "Discount" not in st.session_state.df.columns: st.session_state.df["Discount"] = 0.0
         ls = loaded.get("status", "Quoted"); st.session_state.status = ls if ls in STAGES else "Quoted"
         st.session_state.active_project = loaded.get("proj", load_choice); st.rerun()
 
@@ -166,7 +167,12 @@ c1, c2, c3 = st.columns(3)
 start_d = c1.date_input("Hire Start", value=date.today(), format="DD/MM/YYYY")
 end_d = c2.date_input("Hire End", value=date.today(), format="DD/MM/YYYY")
 km_in = c3.number_input("One-Way Distance (KM)", min_value=0.0, value=None, placeholder="Enter KM...")
-weeks = math.ceil(((end_d - start_d).days) / 7) if (end_d - start_d).days > 0 else 1
+
+# DURATION METADATA
+total_days = (end_d - start_d).days
+weeks = math.ceil(total_days / 7) if total_days > 0 else 1
+if total_days >= 0:
+    st.markdown(f"**⏱️ Total Duration:** {total_days // 7} Week(s), {total_days % 7} Day(s)")
 
 st.markdown("#### 💳 Billing Options")
 b_col1, b_col2 = st.columns(2)
@@ -193,12 +199,12 @@ with col_mq:
                 new_rows.append({
                     "Qty": m_q, "Product": f"Structure {span}m x {length}m", "Unit Rate": sqm*rate, "Total": 0.0, 
                     "Min_Lab": logic['min_lab'], "Raw_Lab": l_val, "Lab_Math": f"Structure {span}x{length} (Week 1): ${h_val_1wk:,.2f} x {int(lab_p*100)}% = ${l_val:,.2f}", 
-                    "KG": (sqm*15)*m_q, "Is_Marquee": True, "Hire_Math_Str": "" 
+                    "KG": (sqm*15)*m_q, "Is_Marquee": True, "Hire_Math_Str": "", "Discount": 0.0
                 })
                 legs = ((length/logic['bay'])+1)*2
                 if m_sec == "Weights":
                     w_tot = int(legs*6*m_q); w_h = w_tot * CONFIG["WEIGHT_HIRE"]; w_l = w_tot * CONFIG["WEIGHT_LABOUR"]
-                    new_rows.append({"Qty": w_tot, "Product": "30kg Weights", "Unit Rate": CONFIG["WEIGHT_HIRE"], "Total": 0.0, "Min_Lab": 0, "Raw_Lab": w_l, "Lab_Math": f"Weights: {w_tot} units x $1.65 = ${w_l:,.2f}", "KG": w_tot*30, "Is_Marquee": True, "Hire_Math_Str": ""})
+                    new_rows.append({"Qty": w_tot, "Product": "30kg Weights", "Unit Rate": CONFIG["WEIGHT_HIRE"], "Total": 0.0, "Min_Lab": 0, "Raw_Lab": w_l, "Lab_Math": f"Weights: {w_tot} units x $1.65 = ${w_l:,.2f}", "KG": w_tot*30, "Is_Marquee": True, "Hire_Math_Str": "", "Discount": 0.0})
                 st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame(new_rows)], ignore_index=True); st.rerun()
 
 with col_cat:
@@ -231,17 +237,16 @@ with col_cat:
         st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame([{ 
             "Qty": f_qty, "Product": label, "Unit Rate": f_rate, "Total": 0.0, "Min_Lab": 0, "Raw_Lab": l_val, 
             "Lab_Math": f"{p_sel}: {f_qty:,.2f} x ${data.get('lab_fix', 0)} = ${l_val:,.2f}" if 'lab_fix' in data else f"{p_sel}: ${h_val_1wk:,.2f} x {int(data.get('lab_p',0)*100)}% = ${l_val:,.2f}", 
-            "KG": f_qty * data.get('kg_sqm', data.get('kg', 0)), "Is_Marquee": False, "Hire_Math_Str": "" 
+            "KG": f_qty * data.get('kg_sqm', data.get('kg', 0)), "Is_Marquee": False, "Hire_Math_Str": "", "Discount": 0.0 
         }])], ignore_index=True); st.rerun()
 
 if not st.session_state.df.empty:
     st.divider(); st.subheader("Quote Summary")
-    h_c1, h_c2, h_c3, h_c4, h_c5 = st.columns([0.5, 2.5, 1, 1, 1])
-    h_c2.write("**Item Description**"); h_c3.write("**Qty**"); h_c4.write("**Rate**"); h_c5.write("**Total**")
+    h_c1, h_c2, h_c3, h_c4, h_c5, h_c6 = st.columns([0.5, 2.5, 0.8, 1, 1, 1])
+    h_c2.write("**Item Description**"); h_c3.write("**Qty**"); h_c4.write("**Rate**"); h_c5.write("**Disc %**"); h_c6.write("**Total**")
     
     h_tot_contract = 0.0
     h_tot_week1_base_gear = 0.0
-    h_tot_week1_with_labour = 0.0
     raw_l_sum = 0.0
     max_min_l = 0.0
     total_kg = 0.0
@@ -249,80 +254,65 @@ if not st.session_state.df.empty:
     pdf_labour_maths = []
 
     for idx, row in st.session_state.df.iterrows():
-        qty = row["Qty"]
-        base_rate = row["Unit Rate"]
-        gear_wk1 = qty * base_rate
-        item_lab = row["Raw_Lab"]
+        qty = row["Qty"]; base_rate = row["Unit Rate"]; gear_wk1 = qty * base_rate
+        item_lab = row["Raw_Lab"]; raw_l_sum += item_lab
+        max_min_l = max(max_min_l, row["Min_Lab"]); total_kg += row["KG"]
+
+        # User-input Discount
+        c1, c2, c3, c4, c5, c6 = st.columns([0.5, 2.5, 0.8, 1, 1, 1])
+        if c1.button("🗑️", key=f"del_{idx}"): st.session_state.df = st.session_state.df.drop(idx); st.rerun()
+        
+        disc_val = c5.number_input("", min_value=0.0, max_value=100.0, value=float(row.get("Discount", 0)), step=1.0, key=f"disc_{idx}")
+        st.session_state.df.at[idx, "Discount"] = disc_val
+        disc_mult = (1 - (disc_val / 100))
+
+        # TRACK BASE GEAR FOR WAIVER (Undiscounted)
         h_tot_week1_base_gear += gear_wk1
-        raw_l_sum += item_lab
-        max_min_l = max(max_min_l, row["Min_Lab"])
-        total_kg += row["KG"]
-        
-        # --- SPLIT LINE LOGIC ---
-        # Line 1: Week 1
-        wk1_label = f"{row['Product']} - Week 1"
+
+        # LINE 1: WEEK 1 (Including Injection if toggled)
         if labour_mode == "Include in Hire cost":
-            wk1_total = gear_wk1 + item_lab
+            wk1_total = (gear_wk1 + item_lab) * disc_mult
             wk1_rate = wk1_total / qty
-            wk1_proof = f"{row['Product']} Wk 1: Gear (${gear_wk1:,.2f}) + Labour (${item_lab:,.2f}) = ${wk1_total:,.2f}"
+            wk1_proof = f"{row['Product']} Wk 1: (Gear ${gear_wk1:,.2f} + Lab ${item_lab:,.2f})" + (f" less {disc_val}%" if disc_val > 0 else "") + f" = ${wk1_total:,.2f}"
         else:
-            wk1_total = gear_wk1
-            wk1_rate = base_rate
-            wk1_proof = f"{row['Product']} Wk 1: ${base_rate:,.2f}/ea = ${wk1_total:,.2f}"
+            wk1_total = gear_wk1 * disc_mult
+            wk1_rate = wk1_total / qty
+            wk1_proof = f"{row['Product']} Wk 1: (${base_rate:,.2f}/ea)" + (f" less {disc_val}%" if disc_val > 0 else "") + f" = ${wk1_total:,.2f}"
         
-        h_tot_week1_with_labour += wk1_total
         h_tot_contract += wk1_total
         pdf_hire_maths.append(wk1_proof)
         if row["Lab_Math"]: pdf_labour_maths.append(row["Lab_Math"])
 
-        # Display Line 1
-        c1, c2, c3, c4, c5 = st.columns([0.5, 2.5, 1, 1, 1])
-        if c1.button("🗑️", key=f"del_{idx}"): st.session_state.df = st.session_state.df.drop(idx); st.rerun()
-        c2.write(wk1_label); c3.write(f"{qty:,.2f}"); c4.write(f"${wk1_rate:,.2f}"); c5.write(f"${wk1_total:,.2f}")
+        c2.write(f"{row['Product']} - Week 1"); c3.write(f"{qty:,.2f}"); c4.write(f"${wk1_rate:,.2f}"); c6.write(f"${wk1_total:,.2f}")
 
-        # Line 2: Weeks 2+ (Recurring)
+        # LINE 2: RECURRING WEEKS
         if weeks > 1:
             extra_wks = weeks - 1
             if row["Is_Marquee"] and "Weight" not in row["Product"]:
-                rec_rate = base_rate * 0.5
-                rec_total = gear_wk1 * 0.5 * extra_wks
-                rec_label = f"{row['Product']} - Weeks 2 to {weeks} (@ 50%)"
+                rec_rate = base_rate * 0.5; rec_total = gear_wk1 * 0.5 * extra_wks * disc_mult
+                rec_label = f"{row['Product']} - Wks 2-{weeks} (@ 50%)"
             else:
-                rec_rate = base_rate
-                rec_total = gear_wk1 * extra_wks
-                rec_label = f"{row['Product']} - Weeks 2 to {weeks}"
+                rec_rate = base_rate; rec_total = gear_wk1 * extra_wks * disc_mult
+                rec_label = f"{row['Product']} - Wks 2-{weeks}"
             
             h_tot_contract += rec_total
-            rec_proof = f"{row['Product']} Recurring: {extra_wks} wks @ ${rec_rate:,.2f}/ea = ${rec_total:,.2f}"
+            rec_proof = f"{row['Product']} Recurring: ({extra_wks} wks @ ${rec_rate:,.2f}/ea)" + (f" less {disc_val}%" if disc_val > 0 else "") + f" = ${rec_total:,.2f}"
             pdf_hire_maths.append(rec_proof)
 
-            c1b, c2b, c3b, c4b, c5b = st.columns([0.5, 2.5, 1, 1, 1])
-            c2b.write(rec_label); c3b.write(f"{qty:,.2f}"); c4b.write(f"${rec_rate:,.2f}"); c5b.write(f"${rec_total:,.2f}")
+            c1b, c2b, c3b, c4b, c5b, c6b = st.columns([0.5, 2.5, 0.8, 1, 1, 1])
+            c2b.write(rec_label); c3b.write(f"{qty:,.2f}"); c4b.write(f"${rec_rate * disc_mult:,.2f}"); c6b.write(f"${rec_total:,.2f}")
 
-    # --- FINANCIAL CALCS ---
+    # --- TOTALS ---
     trucks = math.ceil(total_kg / CONFIG["TRUCK_PAYLOAD"]) if total_kg > 0 else 1
-    final_lab_pool = max(max_min_l, raw_l_sum)
-    waiver = h_tot_week1_base_gear * 0.07 # Waiver is strictly gear hire Wk 1
-    dist = km_in if km_in else 0
+    final_lab_pool = max(max_min_l, raw_l_sum); waiver = h_tot_week1_base_gear * 0.07; dist = km_in if km_in else 0
     cartage = trucks * dist * 4 * CONFIG["CARTAGE_RATE"]
     
-    log_maths = []
-    log_maths.append(f"Damage Waiver (7% of Wk 1 Gear Hire): ${h_tot_week1_base_gear:,.2f} x 7% = ${waiver:,.2f}")
+    log_maths = [f"Damage Waiver (7% of Wk 1 Base Hire): ${h_tot_week1_base_gear:,.2f} x 7% = ${waiver:,.2f}"]
     log_maths.append(f"Cartage: {trucks} Trucks x {dist}km x 4 trips x ${CONFIG['CARTAGE_RATE']} = ${cartage:,.2f}")
 
     if cartage_mode == "Free": cartage = 0; log_maths[-1] = "Cartage: FREE"
-    
-    # Correct Final Labour pool display if "Include" was picked
-    display_labour = 0 if labour_mode != "Separate Line Item" else final_lab_pool
-    if labour_mode == "Free": display_labour = 0
-    
-    # If "Include in Hire" was picked, final_lab_pool is already distributed in the h_tot_contract loop.
-    # If "Separate Line Item", we must add the total pool here.
-    if labour_mode == "Separate Line Item":
-        h_tot_contract = h_tot_contract # base hire from items
-        grand = h_tot_contract + display_labour + waiver + cartage
-    else:
-        grand = h_tot_contract + waiver + cartage
+    display_labour = final_lab_pool if labour_mode == "Separate Line Item" else 0
+    grand = h_tot_contract + display_labour + waiver + cartage
     
     st.markdown("---")
     m1, m2, m3, m4, m5, m6 = st.columns(6)
