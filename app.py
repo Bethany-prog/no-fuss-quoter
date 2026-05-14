@@ -43,26 +43,24 @@ st.markdown("""
     /* Global Button */
     div.stButton > button:first-child { background-color: #3D5AFE; color: white; border-radius: 10px; height: 50px; font-weight: bold; width: 100%; }
     
-    /* Quote Summary Styling */
-    .summary-header {
-        font-size: 20px !important;
-        font-weight: bold !important;
-        color: #1A1D2D;
-        padding-bottom: 5px;
-        border-bottom: 3px solid #3D5AFE;
-        margin-bottom: 15px;
-    }
-    .summary-row-text {
+    /* Strict Table Alignment Fix */
+    .summary-text {
         font-size: 18px !important;
         font-weight: 600 !important;
         color: #2c3e50;
-        padding-top: 10px; /* Aligns text vertically with buttons/inputs */
+        display: flex;
+        align-items: center;
+        height: 100%;
     }
     
     .guardrail-box { background-color: #F8F9FA; padding: 20px; border-radius: 10px; border: 1px solid #D1D3D4; margin-top: 20px; }
     
-    /* Trash button specific alignment */
-    .trash-btn-cont { padding-top: 5px; }
+    /* Fix for vertical alignment in columns */
+    [data-testid="column"] {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -256,13 +254,13 @@ with col_cat:
 if not st.session_state.df.empty:
     st.divider(); st.subheader("Quote Summary")
     
-    # Header Styling
-    h_c1, h_c2, h_c3, h_c4, h_c5, h_c6 = st.columns([0.5, 3.0, 0.8, 1.2, 1, 1.2])
-    h_c2.markdown("<div class='summary-header'>Item Description</div>", unsafe_allow_html=True)
-    h_c3.markdown("<div class='summary-header'>Qty</div>", unsafe_allow_html=True)
-    h_c4.markdown("<div class='summary-header'>Rate</div>", unsafe_allow_html=True)
-    h_c5.markdown("<div class='summary-header'>Disc %</div>", unsafe_allow_html=True)
-    h_c6.markdown("<div class='summary-header'>Total</div>", unsafe_allow_html=True)
+    # Headers
+    hc1, hc2, hc3, hc4, hc5, hc6 = st.columns([0.4, 3.2, 0.8, 1.2, 1, 1.2])
+    hc2.write("**Item Description**")
+    hc3.write("**Qty**")
+    hc4.write("**Rate**")
+    hc5.write("**Disc %**")
+    hc6.write("**Total**")
     
     h_tot_contract = 0.0
     h_tot_week1_base_gear = 0.0
@@ -277,21 +275,22 @@ if not st.session_state.df.empty:
         item_lab = row["Raw_Lab"]; raw_l_sum += item_lab
         max_min_l = max(max_min_l, row["Min_Lab"]); total_kg += row["KG"]
 
-        # Row Columns
-        c1, c2, c3, c4, c5, c6 = st.columns([0.5, 3.0, 0.8, 1.2, 1, 1.2])
+        # Row Vertical Alignment Columns
+        c1, c2, c3, c4, c5, c6 = st.columns([0.4, 3.2, 0.8, 1.2, 1, 1.2])
         
-        # Trash Bin
-        if c1.button("🗑️", key=f"del_{idx}"): st.session_state.df = st.session_state.df.drop(idx); st.rerun()
-        
+        # Trash
+        if c1.button("🗑️", key=f"del_{idx}"): 
+            st.session_state.df = st.session_state.df.drop(idx)
+            st.rerun()
+            
         # Discount Input
-        disc_val = c5.number_input("", min_value=0.0, max_value=100.0, value=float(row.get("Discount", 0)), step=1.0, key=f"disc_{idx}")
+        disc_val = c5.number_input("", min_value=0.0, max_value=100.0, value=float(row.get("Discount", 0)), step=1.0, key=f"disc_{idx}", label_visibility="collapsed")
         st.session_state.df.at[idx, "Discount"] = disc_val
         disc_mult = (1 - (disc_val / 100))
 
-        # TRACK BASE GEAR FOR WAIVER (Undiscounted)
         h_tot_week1_base_gear += gear_wk1
 
-        # LINE 1: WEEK 1
+        # Week 1 Logic
         if labour_mode == "Include in Hire cost":
             wk1_total = (gear_wk1 + item_lab) * disc_mult
             wk1_rate = wk1_total / qty
@@ -305,33 +304,31 @@ if not st.session_state.df.empty:
         pdf_hire_maths.append(wk1_proof)
         if row["Lab_Math"]: pdf_labour_maths.append(row["Lab_Math"])
 
-        # Display Line 1 with increased font and alignment
-        c2.markdown(f"<div class='summary-row-text'>{row['Product']} - Week 1</div>", unsafe_allow_html=True)
-        c3.markdown(f"<div class='summary-row-text'>{qty:,.2f}</div>", unsafe_allow_html=True)
-        c4.markdown(f"<div class='summary-row-text'>${wk1_rate:,.2f}</div>", unsafe_allow_html=True)
-        c6.markdown(f"<div class='summary-row-text'>${wk1_total:,.2f}</div>", unsafe_allow_html=True)
+        # Display Wk 1
+        c2.markdown(f"<div class='summary-text'>{row['Product']} - Week 1</div>", unsafe_allow_html=True)
+        c3.markdown(f"<div class='summary-text'>{qty:,.2f}</div>", unsafe_allow_html=True)
+        c4.markdown(f"<div class='summary-text'>${wk1_rate:,.2f}</div>", unsafe_allow_html=True)
+        c6.markdown(f"<div class='summary-text'>${wk1_total:,.2f}</div>", unsafe_allow_html=True)
 
-        # LINE 2: RECURRING WEEKS
+        # Recurring Logic
         if weeks > 1:
             extra_wks = weeks - 1
             if row["Is_Marquee"] and "Weight" not in row["Product"]:
-                rec_rate_unit = base_rate * 0.5
-                rec_total = gear_wk1 * 0.5 * extra_wks * disc_mult
+                rec_rate_unit = base_rate * 0.5; rec_total = gear_wk1 * 0.5 * extra_wks * disc_mult
                 rec_label = f"{row['Product']} - Wks 2-{weeks} (@ 50%)"
             else:
-                rec_rate_unit = base_rate
-                rec_total = gear_wk1 * extra_wks * disc_mult
+                rec_rate_unit = base_rate; rec_total = gear_wk1 * extra_wks * disc_mult
                 rec_label = f"{row['Product']} - Wks 2-{weeks}"
             
             h_tot_contract += rec_total
             rec_proof = f"{row['Product']} Recurring: ({extra_wks} wks @ ${rec_rate_unit:,.2f}/ea)" + (f" less {disc_val}%" if disc_val > 0 else "") + f" = ${rec_total:,.2f}"
             pdf_hire_maths.append(rec_proof)
 
-            c1b, c2b, c3b, c4b, c5b, c6b = st.columns([0.5, 3.0, 0.8, 1.2, 1, 1.2])
-            c2b.markdown(f"<div class='summary-row-text'>{rec_label}</div>", unsafe_allow_html=True)
-            c3b.markdown(f"<div class='summary-row-text'>{qty:,.2f}</div>", unsafe_allow_html=True)
-            c4b.markdown(f"<div class='summary-row-text'>${rec_rate_unit * disc_mult:,.2f}</div>", unsafe_allow_html=True)
-            c6b.markdown(f"<div class='summary-row-text'>${rec_total:,.2f}</div>", unsafe_allow_html=True)
+            c1b, c2b, c3b, c4b, c5b, c6b = st.columns([0.4, 3.2, 0.8, 1.2, 1, 1.2])
+            c2b.markdown(f"<div class='summary-text' style='color:#7f8c8d; font-size:16px !important;'>└ {rec_label}</div>", unsafe_allow_html=True)
+            c3b.markdown(f"<div class='summary-text' style='color:#7f8c8d; font-size:16px !important;'>{qty:,.2f}</div>", unsafe_allow_html=True)
+            c4b.markdown(f"<div class='summary-text' style='color:#7f8c8d; font-size:16px !important;'>${rec_rate_unit * disc_mult:,.2f}</div>", unsafe_allow_html=True)
+            c6b.markdown(f"<div class='summary-text' style='color:#7f8c8d; font-size:16px !important;'>${rec_total:,.2f}</div>", unsafe_allow_html=True)
 
     # --- TOTALS ---
     trucks = math.ceil(total_kg / CONFIG["TRUCK_PAYLOAD"]) if total_kg > 0 else 1
