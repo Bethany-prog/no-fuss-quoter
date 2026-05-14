@@ -35,8 +35,8 @@ st.markdown("""
     .main { background-color: #FFFFFF !important; }
     h3 { color: #FFFFFF !important; border-left: 5px solid #00E676; padding: 10px 15px; background-color: #1A1D2D; border-radius: 0 10px 10px 0; margin-top: 20px; }
     div.stMetric { background-color: #1A1D2D !important; padding: 20px !important; border-radius: 12px !important; border: 2px solid #3D5AFE !important; }
-    div[data-testid="stMetricValue"] { color: #00E676 !important; font-size: 32px !important; font-weight: bold !important; }
-    [data-testid="stMetricLabel"] p { color: #FFFFFF !important; font-weight: bold !important; font-size: 16px !important; }
+    div[data-testid="stMetricValue"] { color: #00E676 !important; font-size: 28px !important; font-weight: bold !important; }
+    [data-testid="stMetricLabel"] p { color: #FFFFFF !important; font-weight: bold !important; font-size: 14px !important; }
     div.stButton > button:first-child { background-color: #3D5AFE; color: white; border-radius: 10px; height: 50px; font-weight: bold; width: 100%; }
     .guardrail-box { background-color: #F8F9FA; padding: 20px; border-radius: 10px; border: 1px solid #D1D3D4; margin-top: 20px; }
     </style>
@@ -121,7 +121,6 @@ if st.sidebar.button("📂 LOAD") and load_choice != "None":
     with open(f"quotes/{load_choice}.json", "r") as f:
         loaded = json.load(f)
         st.session_state.df = pd.DataFrame(loaded["items"])
-        # CRASH FIX: If loaded status is not in current list (e.g. "Email"), default to "Quoted"
         loaded_status = loaded.get("status", "Quoted")
         if loaded_status not in STAGES:
             st.session_state.status = "Quoted"
@@ -134,7 +133,6 @@ if st.sidebar.button("📂 LOAD") and load_choice != "None":
 st.title("📦 Louis Quoting Tool")
 st.markdown(f"### 📍 Project: {st.session_state.active_project}")
 
-# Safety check for index
 try:
     status_index = STAGES.index(st.session_state.status)
 except ValueError:
@@ -143,7 +141,6 @@ except ValueError:
 st.session_state.status = st.selectbox("Current Workflow Stage", options=STAGES, index=status_index)
 st.markdown(f"<div style='height: 12px; background-color: {STAGE_COLORS[st.session_state.status]}; border-radius: 6px; margin-bottom: 25px;'></div>", unsafe_allow_html=True)
 
-# DATE SELECTORS (AUS Format)
 c1, c2, c3 = st.columns(3)
 start_d = c1.date_input("Hire Start", value=date.today(), format="DD/MM/YYYY")
 end_d = c2.date_input("Hire End", value=date.today(), format="DD/MM/YYYY")
@@ -211,10 +208,19 @@ if not st.session_state.df.empty:
         if row["Hire_Math_Str"]: h_math.append(row["Hire_Math_Str"])
     
     trucks = math.ceil(total_kg / CONFIG["TRUCK_PAYLOAD"]) if total_kg > 0 else 1
-    final_lab = max(max_min_l, raw_l_sum); waiver = h_tot * 0.07; cartage = trucks * km_in * 4 * CONFIG["CARTAGE_RATE"]; grand = h_tot + final_lab + waiver + cartage
+    final_lab = max(max_min_l, raw_l_sum)
+    waiver = h_tot * 0.07
+    cartage = trucks * km_in * 4 * CONFIG["CARTAGE_RATE"]
+    grand = h_tot + final_lab + waiver + cartage
     
-    m1, m2, m3, m4 = st.columns(4)
-    m1.metric("HIRE", f"${h_tot:,.2f}"); m2.metric("LABOUR", f"${final_lab:,.2f}"); m3.metric("LOAD", f"{total_kg:,.0f}kg"); m4.metric("TRUCKS", f"{trucks}")
+    # Financial Pillars top metrics
+    m1, m2, m3, m4, m5, m6 = st.columns(6)
+    m1.metric("HIRE", f"${h_tot:,.2f}")
+    m2.metric("LABOUR", f"${final_lab:,.2f}")
+    m3.metric("WAIVER", f"${waiver:,.2f}")
+    m4.metric("CARTAGE", f"${cartage:,.2f}")
+    m5.metric("LOAD", f"{total_kg:,.0f}kg")
+    m6.metric("TRUCKS", f"{trucks}")
     
     # --- CHECKLIST ---
     st.markdown("### 🛠️ Checklist")
