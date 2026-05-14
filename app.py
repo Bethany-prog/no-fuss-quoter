@@ -85,15 +85,18 @@ def create_calculation_pdf(name, df, subtotal, labour, waiver, cartage, grand, k
     pdf.set_font("Arial", "B", 10); pdf.cell(0, 7, f"PROJECT: {name} | STATUS: {status.upper()}", ln=True, align="C")
     pdf.cell(0, 7, f"HIRE PERIOD: {start.strftime('%d/%m/%Y')} to {end.strftime('%d/%m/%Y')} ({weeks} Week(s))", ln=True, align="C"); pdf.ln(5)
     
+    # Hire Section
     pdf.set_fill_color(240, 240, 240); pdf.set_font("Arial", "B", 12)
     pdf.cell(0, 10, " CALCULATIONS (Hire)", 0, 1, "L", True); pdf.set_font("Arial", "", 10)
     for h in h_maths: pdf.cell(0, 7, f" {h}", border="B", ln=True)
     pdf.set_font("Arial", "B", 10); pdf.cell(0, 10, f" TOTAL HIRE CONTRACT: ${subtotal:,.2f}", ln=True, align="R"); pdf.ln(5)
     
+    # Labour Section
     pdf.set_font("Arial", "B", 12); pdf.cell(0, 10, " LABOUR (Week 1 Only)", 0, 1, "L", True); pdf.set_font("Arial", "", 10)
     for l in l_details: pdf.cell(0, 7, f" {l}", border="B", ln=True)
     pdf.set_font("Arial", "B", 10); pdf.cell(0, 10, f" TOTAL LABOUR POOL: ${labour:,.2f}", ln=True, align="R"); pdf.ln(5)
 
+    # Logistics & Waiver Section
     pdf.set_font("Arial", "B", 12); pdf.cell(0, 10, " LOGISTICS & WAIVER", 0, 1, "L", True); pdf.set_font("Arial", "", 10)
     for m in log_maths: pdf.cell(0, 7, f" {m}", border="B", ln=True)
     pdf.set_font("Arial", "B", 10); pdf.cell(0, 10, f" LOGISTICS SUBTOTAL: ${waiver + cartage:,.2f}", ln=True, align="R")
@@ -177,11 +180,11 @@ with col_mq:
                 logic = STRUCT_LOGIC.get(span, STRUCT_LOGIC[4])
                 sqm = span*length; rate = logic['s_rate'] if (length/logic['bay']) <= 1 else logic['m_rate']
                 lab_p = logic['s_lab'] if (length/logic['bay']) <= 1 else logic['m_lab']
-                h_val_1wk = sqm * rate * m_q; l_val = h_val_1wk * lab_p # Labour is 1-week only
+                h_val_1wk = sqm * rate * m_q; l_val = h_val_1wk * lab_p 
                 new_rows.append({
                     "Qty": m_q, "Product": f"Structure {span}m x {length}m", "Unit Rate": sqm*rate, "Total": 0.0, 
                     "Min_Lab": logic['min_lab'], "Raw_Lab": l_val, "Lab_Math": f"Structure {span}x{length} (Week 1): ${h_val_1wk:,.2f} x {int(lab_p*100)}% = ${l_val:,.2f}", 
-                    "KG": (sqm*15)*m_q, "Is_Marquee": True, "Hire_Math_Str": "" # Populated in loop
+                    "KG": (sqm*15)*m_q, "Is_Marquee": True, "Hire_Math_Str": "" 
                 })
                 legs = ((length/logic['bay'])+1)*2
                 if m_sec == "Weights":
@@ -227,26 +230,24 @@ if not st.session_state.df.empty:
     h_c1, h_c2, h_c3, h_c4, h_c5 = st.columns([0.5, 1, 3, 1.5, 1.5])
     h_c2.write("**Qty**"); h_c3.write("**Product**"); h_c4.write("**Rate**"); h_c5.write("**Total**")
     
-    # Recalculate everything in real-time
     h_tot_contract = 0.0
     h_tot_week1 = 0.0
     raw_l_sum = 0.0
     max_min_l = 0.0
     total_kg = 0.0
-    h_math_list = []
     
     for idx, row in st.session_state.df.iterrows():
         base_hire = row["Qty"] * row["Unit Rate"]
         h_tot_week1 += base_hire
         
-        # New Week-Based Multiplier Logic
+        # Extended Explanation Logic
         if row["Is_Marquee"] and "Weight" not in row["Product"]:
-            multiplier = 1 + (max(0, weeks - 1) * 0.5)
-            line_h = base_hire * multiplier
-            math_str = f"{row['Product']} (x{row['Qty']}): ${base_hire:,.2f} [Wk 1] + ${base_hire*0.5*max(0,weeks-1):,.2f} [Wks 2+] = ${line_h:,.2f}"
+            extra_weeks = max(0, weeks - 1)
+            line_h = base_hire + (extra_weeks * base_hire * 0.5)
+            math_str = f"{row['Product']} (x{row['Qty']}): Week 1 @ 100% (${base_hire:,.2f}) + {extra_weeks} Weeks @ 50% (${base_hire*0.5:,.2f}/wk) = Total ${line_h:,.2f}"
         else:
             line_h = base_hire
-            math_str = f"{row['Product']} (x{row['Qty']:,.2f}): ${row['Unit Rate']:,.2f}/ea = ${line_h:,.2f}"
+            math_str = f"{row['Product']} (x{row['Qty']:,.2f}): ${row['Unit Rate']:,.2f} flat rate = ${line_h:,.2f}"
         
         st.session_state.df.at[idx, "Total"] = line_h
         st.session_state.df.at[idx, "Hire_Math_Str"] = math_str
@@ -261,12 +262,12 @@ if not st.session_state.df.empty:
     
     trucks = math.ceil(total_kg / CONFIG["TRUCK_PAYLOAD"]) if total_kg > 0 else 1
     final_lab = max(max_min_l, raw_l_sum)
-    waiver = h_tot_week1 * 0.07 # Waiver is strictly Week 1 rental
+    waiver = h_tot_week1 * 0.07 
     dist = km_in if km_in else 0
     cartage = trucks * dist * 4 * CONFIG["CARTAGE_RATE"]
     
     log_maths = []
-    log_maths.append(f"Damage Waiver: ${h_tot_week1:,.2f} [Week 1 Hire] x 7% = ${waiver:,.2f}")
+    log_maths.append(f"Damage Waiver (Week 1 Hire Only): ${h_tot_week1:,.2f} x 7% = ${waiver:,.2f}")
     log_maths.append(f"Cartage: {trucks} Trucks x {dist}km x 4 trips x ${CONFIG['CARTAGE_RATE']} = ${cartage:,.2f}")
 
     if cartage_mode == "Free": cartage = 0; log_maths[-1] = "Cartage: FREE"
