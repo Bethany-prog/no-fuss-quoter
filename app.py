@@ -118,21 +118,42 @@ if 'status' not in st.session_state:
 if 'active_project' not in st.session_state:
     st.session_state.active_project = "New Project"
 
-# --- SIDEBAR ---
+# --- SIDEBAR (ARCHIVE MANAGER) ---
 st.sidebar.title("📁 Archive Manager")
+
+# 1. Start New Project
+if st.sidebar.button("➕ START NEW PROJECT"):
+    st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Total", "Min_Lab", "Raw_Lab", "Lab_Math", "KG", "Is_Marquee", "Hire_Math_Str"])
+    st.session_state.status = "Quoted"
+    st.session_state.active_project = "New Project"
+    st.rerun()
+
+st.sidebar.divider()
+
+# 2. Save Current
 st.session_state.active_project = st.sidebar.text_input("Project Label", st.session_state.active_project)
-if st.sidebar.button("💾 SAVE PROJECT"):
+if st.sidebar.button("💾 SAVE / UPDATE PROJECT"):
     data = {"status": st.session_state.status, "items": st.session_state.df.to_dict(orient='records'), "proj": st.session_state.active_project}
     with open(f"quotes/{st.session_state.active_project}.json", "w") as f: json.dump(data, f)
     st.sidebar.success(f"Archived: {st.session_state.active_project}")
 
-saved_quotes = [f.replace(".json", "") for f in os.listdir("quotes") if f.endswith(".json")]
-load_choice = st.sidebar.selectbox("Retrieve Project", ["None"] + saved_quotes)
-if st.sidebar.button("📂 LOAD") and load_choice != "None":
+st.sidebar.divider()
+
+# 3. Retrieve & Delete Old
+saved_quotes = sorted([f.replace(".json", "") for f in os.listdir("quotes") if f.endswith(".json")])
+load_choice = st.sidebar.selectbox("Select Existing Project", ["-- Choose --"] + saved_quotes)
+
+col_load, col_del = st.sidebar.columns(2)
+if col_load.button("📂 LOAD") and load_choice != "-- Choose --":
     with open(f"quotes/{load_choice}.json", "r") as f:
         loaded = json.load(f); st.session_state.df = pd.DataFrame(loaded["items"])
         loaded_status = loaded.get("status", "Quoted"); st.session_state.status = loaded_status if loaded_status in STAGES else "Quoted"
         st.session_state.active_project = loaded.get("proj", load_choice); st.rerun()
+
+if col_del.button("🗑️ DELETE") and load_choice != "-- Choose --":
+    os.remove(f"quotes/{load_choice}.json")
+    st.sidebar.warning(f"Deleted: {load_choice}")
+    st.rerun()
 
 # --- MAIN UI ---
 st.title("📦 Louis Quoting Tool")
@@ -215,19 +236,17 @@ if not st.session_state.df.empty:
         if c1.button("🗑️", key=f"del_{idx}"): st.session_state.df = st.session_state.df.drop(idx); st.rerun()
         c2.write(f"{row['Qty']:,.2f}"); c3.write(row['Product']); c4.write(f"${row['Unit Rate']:,.2f}"); c5.write(f"${line_h:,.2f}")
     
-    # Recalculate Financials with Billing Logic
+    # Recalculate Financials
     h_tot = st.session_state.df["Total"].sum()
     total_kg = st.session_state.df["KG"].sum()
     raw_l_sum = st.session_state.df["Raw_Lab"].sum()
     max_min_l = st.session_state.df["Min_Lab"].max() if not st.session_state.df.empty else 0
     trucks = math.ceil(total_kg / CONFIG["TRUCK_PAYLOAD"]) if total_kg > 0 else 1
     
-    # Calculate Base Values
     final_lab = max(max_min_l, raw_l_sum)
     waiver = h_tot * 0.07
     cartage = trucks * km_in * 4 * CONFIG["CARTAGE_RATE"]
     
-    # Apply Billing Overrides
     if cartage_mode == "Free": cartage = 0
     if labour_mode == "Free": final_lab = 0
     elif labour_mode == "Include in Hire cost":
@@ -250,4 +269,3 @@ if not st.session_state.df.empty:
     h_math = st.session_state.df["Hire_Math_Str"].tolist(); l_math = st.session_state.df["Lab_Math"].tolist()
     pdf_b = create_calculation_pdf(st.session_state.active_project, st.session_state.df, h_tot, final_lab, waiver, cartage, grand, km_in, weeks, start_d, end_d, h_math, l_math, total_kg, trucks, st.session_state.status)
     st.download_button(f"📥 DOWNLOAD {st.session_state.status.upper()} PDF", pdf_b, file_name=f"{st.session_state.active_project}_Analysis.pdf")
-    if st.button("RESET ENGINE"): st.session_state.df = pd.DataFrame(columns=st.session_state.df.columns); st.rerun()
