@@ -119,21 +119,35 @@ saved_quotes = [f.replace(".json", "") for f in os.listdir("quotes") if f.endswi
 load_choice = st.sidebar.selectbox("Retrieve Project", ["None"] + saved_quotes)
 if st.sidebar.button("📂 LOAD") and load_choice != "None":
     with open(f"quotes/{load_choice}.json", "r") as f:
-        loaded = json.load(f); st.session_state.df = pd.DataFrame(loaded["items"])
-        st.session_state.status = loaded.get("status", "Quoted")
-        st.session_state.active_project = loaded.get("proj", load_choice); st.rerun()
+        loaded = json.load(f)
+        st.session_state.df = pd.DataFrame(loaded["items"])
+        # CRASH FIX: If loaded status is not in current list (e.g. "Email"), default to "Quoted"
+        loaded_status = loaded.get("status", "Quoted")
+        if loaded_status not in STAGES:
+            st.session_state.status = "Quoted"
+        else:
+            st.session_state.status = loaded_status
+        st.session_state.active_project = loaded.get("proj", load_choice)
+        st.rerun()
 
 # --- MAIN UI ---
 st.title("📦 Louis Quoting Tool")
 st.markdown(f"### 📍 Project: {st.session_state.active_project}")
-st.session_state.status = st.selectbox("Current Workflow Stage", options=STAGES, index=STAGES.index(st.session_state.status))
+
+# Safety check for index
+try:
+    status_index = STAGES.index(st.session_state.status)
+except ValueError:
+    status_index = 0
+
+st.session_state.status = st.selectbox("Current Workflow Stage", options=STAGES, index=status_index)
 st.markdown(f"<div style='height: 12px; background-color: {STAGE_COLORS[st.session_state.status]}; border-radius: 6px; margin-bottom: 25px;'></div>", unsafe_allow_html=True)
 
 # DATE SELECTORS (AUS Format)
 c1, c2, c3 = st.columns(3)
 start_d = c1.date_input("Hire Start", value=date.today(), format="DD/MM/YYYY")
 end_d = c2.date_input("Hire End", value=date.today(), format="DD/MM/YYYY")
-km_in = c3.number_input("One-Way KM", min_value=0.0)
+km_in = c3.number_input("One-Way Distance (KM)", min_value=0.0)
 weeks = math.ceil(((end_d - start_d).days) / 7) if (end_d - start_d).days > 0 else 1
 
 st.divider(); col_mq, col_cat = st.columns(2)
