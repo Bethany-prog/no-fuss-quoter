@@ -85,18 +85,15 @@ def create_calculation_pdf(name, df, subtotal, labour, waiver, cartage, grand, k
     pdf.set_font("Arial", "B", 10); pdf.cell(0, 7, f"PROJECT: {name} | STATUS: {status.upper()}", ln=True, align="C")
     pdf.cell(0, 7, f"HIRE PERIOD: {start.strftime('%d/%m/%Y')} to {end.strftime('%d/%m/%Y')} ({weeks} Week(s))", ln=True, align="C"); pdf.ln(5)
     
-    # Hire Section
     pdf.set_fill_color(240, 240, 240); pdf.set_font("Arial", "B", 12)
     pdf.cell(0, 10, " CALCULATIONS (Hire)", 0, 1, "L", True); pdf.set_font("Arial", "", 10)
     for h in h_maths: pdf.cell(0, 7, f" {h}", border="B", ln=True)
-    pdf.set_font("Arial", "B", 10); pdf.cell(0, 10, f" TOTAL HIRE: ${subtotal:,.2f}", ln=True, align="R"); pdf.ln(5)
+    pdf.set_font("Arial", "B", 10); pdf.cell(0, 10, f" TOTAL HIRE CONTRACT: ${subtotal:,.2f}", ln=True, align="R"); pdf.ln(5)
     
-    # Labour Section
-    pdf.set_font("Arial", "B", 12); pdf.cell(0, 10, " LABOUR", 0, 1, "L", True); pdf.set_font("Arial", "", 10)
+    pdf.set_font("Arial", "B", 12); pdf.cell(0, 10, " LABOUR (Week 1 Only)", 0, 1, "L", True); pdf.set_font("Arial", "", 10)
     for l in l_details: pdf.cell(0, 7, f" {l}", border="B", ln=True)
     pdf.set_font("Arial", "B", 10); pdf.cell(0, 10, f" TOTAL LABOUR POOL: ${labour:,.2f}", ln=True, align="R"); pdf.ln(5)
 
-    # NEW: Logistics & Waiver Proofs
     pdf.set_font("Arial", "B", 12); pdf.cell(0, 10, " LOGISTICS & WAIVER", 0, 1, "L", True); pdf.set_font("Arial", "", 10)
     for m in log_maths: pdf.cell(0, 7, f" {m}", border="B", ln=True)
     pdf.set_font("Arial", "B", 10); pdf.cell(0, 10, f" LOGISTICS SUBTOTAL: ${waiver + cartage:,.2f}", ln=True, align="R")
@@ -180,12 +177,16 @@ with col_mq:
                 logic = STRUCT_LOGIC.get(span, STRUCT_LOGIC[4])
                 sqm = span*length; rate = logic['s_rate'] if (length/logic['bay']) <= 1 else logic['m_rate']
                 lab_p = logic['s_lab'] if (length/logic['bay']) <= 1 else logic['m_lab']
-                h_val = sqm * rate * m_q; l_val = h_val * lab_p
-                new_rows.append({"Qty": m_q, "Product": f"Structure {span}m x {length}m", "Unit Rate": sqm*rate, "Total": 0.0, "Min_Lab": logic['min_lab'], "Raw_Lab": l_val, "Lab_Math": f"Structure {span}x{length}: ${h_val:,.2f} x {int(lab_p*100)}% = ${l_val:,.2f}", "KG": (sqm*15)*m_q, "Is_Marquee": True, "Hire_Math_Str": f"{m_q} - Structure {span}m x {length}m ({sqm}sqm x ${rate:,.2f}) = ${h_val:,.2f}" })
+                h_val_1wk = sqm * rate * m_q; l_val = h_val_1wk * lab_p # Labour is 1-week only
+                new_rows.append({
+                    "Qty": m_q, "Product": f"Structure {span}m x {length}m", "Unit Rate": sqm*rate, "Total": 0.0, 
+                    "Min_Lab": logic['min_lab'], "Raw_Lab": l_val, "Lab_Math": f"Structure {span}x{length} (Week 1): ${h_val_1wk:,.2f} x {int(lab_p*100)}% = ${l_val:,.2f}", 
+                    "KG": (sqm*15)*m_q, "Is_Marquee": True, "Hire_Math_Str": "" # Populated in loop
+                })
                 legs = ((length/logic['bay'])+1)*2
                 if m_sec == "Weights":
                     w_tot = int(legs*6*m_q); w_h = w_tot * CONFIG["WEIGHT_HIRE"]; w_l = w_tot * CONFIG["WEIGHT_LABOUR"]
-                    new_rows.append({"Qty": w_tot, "Product": "30kg Weights", "Unit Rate": CONFIG["WEIGHT_HIRE"], "Total": 0.0, "Min_Lab": 0, "Raw_Lab": w_l, "Lab_Math": f"Weights: {w_tot} units x $1.65 = ${w_l:,.2f}", "KG": w_tot*30, "Is_Marquee": True, "Hire_Math_Str": f"{w_tot} - Weights x $6.60 = ${w_h:,.2f}"})
+                    new_rows.append({"Qty": w_tot, "Product": "30kg Weights", "Unit Rate": CONFIG["WEIGHT_HIRE"], "Total": 0.0, "Min_Lab": 0, "Raw_Lab": w_l, "Lab_Math": f"Weights: {w_tot} units x $1.65 = ${w_l:,.2f}", "KG": w_tot*30, "Is_Marquee": True, "Hire_Math_Str": ""})
                 st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame(new_rows)], ignore_index=True); st.rerun()
 
 with col_cat:
@@ -215,41 +216,68 @@ with col_cat:
         data = GENERAL_PRODUCTS[cat_type][p_sel]
         f_rate = (data['block']/4) if (weeks >= 4 and 'block' in data) else data['rate']
         h_val = f_qty * f_rate; l_val = f_qty * data.get('lab_fix', (h_val * data.get('lab_p', 0)))
-        st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame([{ "Qty": f_qty, "Product": label, "Unit Rate": f_rate, "Total": 0.0, "Min_Lab": 0, "Raw_Lab": l_val, "Lab_Math": f"{p_sel}: {f_qty:,.2f} x ${data.get('lab_fix', 0)} = ${l_val:,.2f}" if 'lab_fix' in data else f"{p_sel}: ${h_val:,.2f} x {int(data.get('lab_p',0)*100)}% = ${l_val:,.2f}", "KG": f_qty * data.get('kg_sqm', data.get('kg', 0)), "Is_Marquee": False, "Hire_Math_Str": f"{f_qty:,.2f} - {p_sel} x ${f_rate:,.2f} = ${h_val:,.2f}" }])], ignore_index=True); st.rerun()
+        st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame([{ 
+            "Qty": f_qty, "Product": label, "Unit Rate": f_rate, "Total": 0.0, "Min_Lab": 0, "Raw_Lab": l_val, 
+            "Lab_Math": f"{p_sel}: {f_qty:,.2f} x ${data.get('lab_fix', 0)} = ${l_val:,.2f}" if 'lab_fix' in data else f"{p_sel}: ${h_val:,.2f} x {int(data.get('lab_p',0)*100)}% = ${l_val:,.2f}", 
+            "KG": f_qty * data.get('kg_sqm', data.get('kg', 0)), "Is_Marquee": False, "Hire_Math_Str": "" 
+        }])], ignore_index=True); st.rerun()
 
 if not st.session_state.df.empty:
     st.divider(); st.subheader("Quote Summary")
     h_c1, h_c2, h_c3, h_c4, h_c5 = st.columns([0.5, 1, 3, 1.5, 1.5])
     h_c2.write("**Qty**"); h_c3.write("**Product**"); h_c4.write("**Rate**"); h_c5.write("**Total**")
     
+    # Recalculate everything in real-time
+    h_tot_contract = 0.0
+    h_tot_week1 = 0.0
+    raw_l_sum = 0.0
+    max_min_l = 0.0
+    total_kg = 0.0
+    h_math_list = []
+    
     for idx, row in st.session_state.df.iterrows():
-        line_h = row["Qty"] * row["Unit Rate"] * (weeks if row["Is_Marquee"] and "Weight" not in row["Product"] else 1)
+        base_hire = row["Qty"] * row["Unit Rate"]
+        h_tot_week1 += base_hire
+        
+        # New Week-Based Multiplier Logic
+        if row["Is_Marquee"] and "Weight" not in row["Product"]:
+            multiplier = 1 + (max(0, weeks - 1) * 0.5)
+            line_h = base_hire * multiplier
+            math_str = f"{row['Product']} (x{row['Qty']}): ${base_hire:,.2f} [Wk 1] + ${base_hire*0.5*max(0,weeks-1):,.2f} [Wks 2+] = ${line_h:,.2f}"
+        else:
+            line_h = base_hire
+            math_str = f"{row['Product']} (x{row['Qty']:,.2f}): ${row['Unit Rate']:,.2f}/ea = ${line_h:,.2f}"
+        
         st.session_state.df.at[idx, "Total"] = line_h
+        st.session_state.df.at[idx, "Hire_Math_Str"] = math_str
+        h_tot_contract += line_h
+        raw_l_sum += row["Raw_Lab"]
+        max_min_l = max(max_min_l, row["Min_Lab"])
+        total_kg += row["KG"]
+        
         c1, c2, c3, c4, c5 = st.columns([0.5, 1, 3, 1.5, 1.5])
         if c1.button("🗑️", key=f"del_{idx}"): st.session_state.df = st.session_state.df.drop(idx); st.rerun()
         c2.write(f"{row['Qty']:,.2f}"); c3.write(row['Product']); c4.write(f"${row['Unit Rate']:,.2f}"); c5.write(f"${line_h:,.2f}")
     
-    h_tot = st.session_state.df["Total"].sum(); total_kg = st.session_state.df["KG"].sum()
-    raw_l_sum = st.session_state.df["Raw_Lab"].sum(); max_min_l = st.session_state.df["Min_Lab"].max() if not st.session_state.df.empty else 0
     trucks = math.ceil(total_kg / CONFIG["TRUCK_PAYLOAD"]) if total_kg > 0 else 1
-    
-    # Base Calcs
-    final_lab = max(max_min_l, raw_l_sum); waiver = h_tot * 0.07; dist = km_in if km_in else 0
+    final_lab = max(max_min_l, raw_l_sum)
+    waiver = h_tot_week1 * 0.07 # Waiver is strictly Week 1 rental
+    dist = km_in if km_in else 0
     cartage = trucks * dist * 4 * CONFIG["CARTAGE_RATE"]
     
     log_maths = []
-    log_maths.append(f"Damage Waiver: ${h_tot:,.2f} x 7% = ${waiver:,.2f}")
+    log_maths.append(f"Damage Waiver: ${h_tot_week1:,.2f} [Week 1 Hire] x 7% = ${waiver:,.2f}")
     log_maths.append(f"Cartage: {trucks} Trucks x {dist}km x 4 trips x ${CONFIG['CARTAGE_RATE']} = ${cartage:,.2f}")
 
     if cartage_mode == "Free": cartage = 0; log_maths[-1] = "Cartage: FREE"
     if labour_mode == "Free": final_lab = 0
-    elif labour_mode == "Include in Hire cost": h_tot += final_lab; final_lab = 0
+    elif labour_mode == "Include in Hire cost": h_tot_contract += final_lab; final_lab = 0
     
-    grand = h_tot + final_lab + waiver + cartage
+    grand = h_tot_contract + final_lab + waiver + cartage
     
     st.markdown("---")
     m1, m2, m3, m4, m5, m6 = st.columns(6)
-    m1.metric("HIRE", f"${h_tot:,.2f}"); m2.metric("LABOUR", f"${final_lab:,.2f}"); m3.metric("WAIVER", f"${waiver:,.2f}"); m4.metric("CARTAGE", f"${cartage:,.2f}"); m5.metric("LOAD", f"{total_kg:,.0f}kg"); m6.metric("TRUCKS", f"{trucks}")
+    m1.metric("HIRE", f"${h_tot_contract:,.2f}"); m2.metric("LABOUR", f"${final_lab:,.2f}"); m3.metric("WAIVER", f"${waiver:,.2f}"); m4.metric("CARTAGE", f"${cartage:,.2f}"); m5.metric("LOAD", f"{total_kg:,.0f}kg"); m6.metric("TRUCKS", f"{trucks}")
     
     st.markdown("### 🛠️ Checklist")
     st.markdown("<div class='guardrail-box'>", unsafe_allow_html=True)
@@ -258,6 +286,8 @@ if not st.session_state.df.empty:
     else: st.write("No specific office actions required.")
     st.markdown("</div>", unsafe_allow_html=True)
 
-    h_math = st.session_state.df["Hire_Math_Str"].tolist(); l_math = st.session_state.df["Lab_Math"].tolist()
-    pdf_b = create_calculation_pdf(st.session_state.active_project, st.session_state.df, h_tot, final_lab, waiver, cartage, grand, km_in if km_in else 0, weeks, start_d, end_d, h_math, l_math, total_kg, trucks, log_maths, st.session_state.status)
+    h_math_final = st.session_state.df["Hire_Math_Str"].tolist()
+    l_math_final = st.session_state.df["Lab_Math"].tolist()
+    
+    pdf_b = create_calculation_pdf(st.session_state.active_project, st.session_state.df, h_tot_contract, final_lab, waiver, cartage, grand, km_in if km_in else 0, weeks, start_d, end_d, h_math_final, l_math_final, total_kg, trucks, log_maths, st.session_state.status)
     st.download_button(f"📥 DOWNLOAD {st.session_state.status.upper()} PDF", pdf_b, file_name=f"{st.session_state.active_project}_Analysis.pdf")
