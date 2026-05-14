@@ -7,7 +7,7 @@ import re
 import json
 import os
 
-# --- DIRECTORIES ---
+# --- v33.8 FULL STABLE BUILD ---
 if not os.path.exists("quotes"):
     os.makedirs("quotes")
 
@@ -42,17 +42,17 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- LOCKED MASTER DATA ---
+# --- LOCKED MASTER DATA (UPDATED FROM v33.8 CSVs) ---
 CONFIG = {"WEIGHT_UNIT_KG": 30, "WEIGHT_HIRE": 6.60, "WEIGHT_LABOUR": 1.65, "TRUCK_PAYLOAD": 6000, "CARTAGE_RATE": 3.50}
 
 STRUCT_LOGIC = {
     3:  {"bay": 3, "s_rate": 22.05, "m_rate": 22.05, "s_lab": 0.55, "m_lab": 0.55, "min_lab": 350.00},
-    4:  {"bay": 3, "s_rate": 23.00, "m_rate": 18.20, "s_lab": 0.55, "m_lab": 0.55, "min_lab": 350.00},
-    6:  {"bay": 3, "s_rate": 23.00, "m_rate": 18.20, "s_lab": 0.55, "m_lab": 0.55, "min_lab": 350.00},
-    9:  {"bay": 3, "s_rate": 23.00, "m_rate": 18.20, "s_lab": 0.55, "m_lab": 0.55, "min_lab": 350.00},
-    10: {"bay": 5, "s_rate": 23.00, "m_rate": 16.55, "s_lab": 0.55, "m_lab": 0.55, "min_lab": 350.00},
-    12: {"bay": 5, "s_rate": 23.00, "m_rate": 15.45, "s_lab": 0.55, "m_lab": 0.55, "min_lab": 1500.00},
-    15: {"bay": 5, "s_rate": 23.00, "m_rate": 15.45, "s_lab": 0.55, "m_lab": 0.55, "min_lab": 1500.00},
+    4:  {"bay": 3, "s_rate": 23.00, "m_rate": 18.20, "s_lab": 0.40, "m_lab": 0.40, "min_lab": 350.00},
+    6:  {"bay": 3, "s_rate": 23.00, "m_rate": 18.20, "s_lab": 0.40, "m_lab": 0.40, "min_lab": 350.00},
+    9:  {"bay": 3, "s_rate": 23.00, "m_rate": 18.20, "s_lab": 0.40, "m_lab": 0.40, "min_lab": 350.00},
+    10: {"bay": 5, "s_rate": 23.00, "m_rate": 16.55, "s_lab": 0.40, "m_lab": 0.40, "min_lab": 650.00},
+    12: {"bay": 5, "s_rate": 23.00, "m_rate": 15.45, "s_lab": 0.40, "m_lab": 0.40, "min_lab": 1500.00},
+    15: {"bay": 5, "s_rate": 23.00, "m_rate": 15.45, "s_lab": 0.40, "m_lab": 0.40, "min_lab": 1500.00},
     20: {"bay": 5, "s_rate": 19.95, "m_rate": 19.95, "s_lab": 0.40, "m_lab": 0.40, "min_lab": 0.00},
 }
 
@@ -64,10 +64,13 @@ GENERAL_PRODUCTS = {
         "Rollout Flooring": {"rate": 7.10, "block": 15.00, "lab_fix": 3.05, "kg_sqm": 3.5, "w": 0, "l": 0}
     },
     "Accessories": {
+        "30kg Weights": {"rate": 6.60, "lab_fix": 1.65, "kg": 30.0, "unit": "ea"},
         "I-Trac® Ramps": {"rate": 42.00, "lab_fix": 0, "kg": 10.0, "unit": "ea"},
         "Supa-Trac® Edging": {"rate": 6.70, "lab_fix": 0, "kg": 1.0, "unit": "m"},
         "Plastorip Edging": {"rate": 1.65, "lab_fix": 0, "kg": 0.5, "unit": "ea"},
-        "MOJO Barriers": {"rate": 70.00, "lab_p": 0.40, "kg": 60.0, "unit": "ea"}
+        "MOJO Barriers": {"rate": 70.00, "lab_p": 0.40, "kg": 60.0, "unit": "ea"},
+        "Rollout Flooring - Ramps": {"rate": 6.60, "lab_fix": 0, "kg": 2.0, "unit": "ea"},
+        "Rollout Flooring - joiners": {"rate": 6.60, "lab_fix": 0, "kg": 0.1, "unit": "ea"}
     }
 }
 
@@ -150,7 +153,6 @@ st.markdown(f"<div style='height: 12px; background-color: {STAGE_COLORS[st.sessi
 c1, c2, c3 = st.columns(3)
 start_d = c1.date_input("Hire Start", value=date.today(), format="DD/MM/YYYY")
 end_d = c2.date_input("Hire End", value=date.today(), format="DD/MM/YYYY")
-# VALUE=NONE triggers blank input
 km_in = c3.number_input("One-Way Distance (KM)", min_value=0.0, value=None, placeholder="Enter KM...")
 weeks = math.ceil(((end_d - start_d).days) / 7) if (end_d - start_d).days > 0 else 1
 
