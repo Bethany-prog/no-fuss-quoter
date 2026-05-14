@@ -7,7 +7,7 @@ import re
 import json
 import os
 
-# --- v31.2 CONFIG & DIRECTORIES ---
+# --- v32.6 MASTER RATE INTEGRATION ---
 if not os.path.exists("quotes"):
     os.makedirs("quotes")
 
@@ -59,98 +59,71 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- MASTER DATA ---
+# --- MASTER DATA (HARD-LOCKED FROM CSV) ---
 CONFIG = {"WEIGHT_UNIT_KG": 30, "WEIGHT_HIRE": 6.60, "WEIGHT_LABOUR": 1.65, "TRUCK_PAYLOAD": 6000, "CARTAGE_RATE": 3.50}
 
 STRUCT_LOGIC = {
-    4:  {"bay": 3, "s_rate": 23.00, "m_rate": 18.20, "s_lab": 0.55, "m_lab": 0.40, "min_lab": 350.00},
-    6:  {"bay": 3, "s_rate": 23.00, "m_rate": 18.20, "s_lab": 0.55, "m_lab": 0.40, "min_lab": 350.00},
-    9:  {"bay": 3, "s_rate": 23.00, "m_rate": 18.20, "s_lab": 0.55, "m_lab": 0.40, "min_lab": 350.00},
-    10: {"bay": 5, "s_rate": 23.00, "m_rate": 16.55, "s_lab": 0.55, "m_lab": 0.40, "min_lab": 350.00},
-    12: {"bay": 5, "s_rate": 23.00, "m_rate": 15.45, "s_lab": 0.55, "m_lab": 0.40, "min_lab": 1500.00},
-    15: {"bay": 5, "s_rate": 23.00, "m_rate": 15.45, "s_lab": 0.55, "m_lab": 0.40, "min_lab": 1500.00},
+    3:  {"bay": 3, "s_rate": 22.05, "m_rate": 22.05, "s_lab": 0.55, "m_lab": 0.55, "min_lab": 350.00},
+    4:  {"bay": 3, "s_rate": 23.00, "m_rate": 18.20, "s_lab": 0.55, "m_lab": 0.55, "min_lab": 350.00},
+    6:  {"bay": 3, "s_rate": 23.00, "m_rate": 18.20, "s_lab": 0.55, "m_lab": 0.55, "min_lab": 350.00},
+    9:  {"bay": 3, "s_rate": 23.00, "m_rate": 18.20, "s_lab": 0.55, "m_lab": 0.55, "min_lab": 350.00},
+    10: {"bay": 5, "s_rate": 23.00, "m_rate": 16.55, "s_lab": 0.55, "m_lab": 0.55, "min_lab": 350.00},
+    12: {"bay": 5, "s_rate": 23.00, "m_rate": 15.45, "s_lab": 0.55, "m_lab": 0.55, "min_lab": 1500.00},
+    15: {"bay": 5, "s_rate": 23.00, "m_rate": 15.45, "s_lab": 0.55, "m_lab": 0.55, "min_lab": 1500.00},
     20: {"bay": 5, "s_rate": 19.95, "m_rate": 19.95, "s_lab": 0.40, "m_lab": 0.40, "min_lab": 0.00},
-}
-
-MARQUEE_UNITS = {
-    "3m x 3m Hi Top": {"rate": 198.45, "lab": 0.55, "min": 350.0, "legs": 4, "kg": 50},
-    "3m x 3m Shade": {"rate": 198.45, "lab": 0.55, "min": 350.0, "legs": 4, "kg": 50},
-    "3m x 6m Shade": {"rate": 396.90, "lab": 0.55, "min": 350.0, "legs": 6, "kg": 80}
 }
 
 GENERAL_PRODUCTS = {
     "Flooring": {
-        "Supa-Trac®": {"rate": 11.55, "block": 25.00, "lab_fix": 4.65, "kg_sqm": 4.5, "unit": "SQM"},
-        "I-Trac®": {"rate": 23.40, "block": 46.80, "lab_fix": 4.65, "kg_sqm": 15.0, "unit": "SQM"},
-        "Plastorip": {"rate": 14.00, "block": 30.00, "lab_fix": 4.65, "kg_sqm": 4.0, "unit": "SQM"}
+        "I-Trac®": {"rate": 23.40, "block": 46.80, "lab_fix": 4.65, "kg_sqm": 15.0, "w": 0, "l": 0},
+        "Supa-Trac®": {"rate": 11.55, "block": 25.00, "lab_fix": 4.65, "kg_sqm": 4.5, "w": 1.14, "l": 2.75},
+        "Plastorip": {"rate": 10.15, "block": 20.30, "lab_fix": 3.05, "kg_sqm": 4.0, "w": 0, "l": 0},
+        "Rollout Flooring": {"rate": 7.10, "block": 15.00, "lab_fix": 3.05, "kg_sqm": 3.5, "w": 0, "l": 0}
+    },
+    "Accessories": {
+        "I-Trac® Ramps": {"rate": 42.00, "lab_fix": 0, "kg": 10.0, "unit": "ea"},
+        "Supa-Trac® Edging": {"rate": 6.70, "lab_fix": 0, "kg": 1.0, "unit": "m"},
+        "Plastorip Edging": {"rate": 1.65, "lab_fix": 0, "kg": 0.5, "unit": "ea"},
+        "MOJO Barriers": {"rate": 70.00, "lab_p": 0.40, "kg": 60.0, "unit": "ea"}
     }
 }
 
 STAGES = ["Email", "Quoted", "Accepted", "Paid", "On Hire", "Returned"]
 STAGE_COLORS = {"Email": "#3D5AFE", "Quoted": "#FF9100", "Accepted": "#00E676", "Paid": "#00B8D4", "On Hire": "#D500F9", "Returned": "#757575"}
 
-# --- PDF ENGINE (REBUILT FOR REQUESTED FORMAT) ---
+# --- PDF ENGINE ---
 def create_calculation_pdf(name, df, subtotal, labour, waiver, cartage, grand, km, weeks, start, end, h_maths, l_details, kg, trucks, status):
     pdf = FPDF()
     pdf.add_page()
-    
-    # Header
-    pdf.set_font("Arial", "B", 16)
-    pdf.cell(0, 10, f"No Fuss Event Hire - Calculation Analysis", ln=True, align="C")
-    pdf.set_font("Arial", "B", 10)
-    pdf.cell(0, 7, f"PROJECT: {name} | STATUS: {status.upper()}", ln=True, align="C")
-    pdf.cell(0, 7, f"HIRE PERIOD: {start} to {end} ({weeks} Week(s))", ln=True, align="C")
-    pdf.ln(5)
+    pdf.set_font("Arial", "B", 16); pdf.cell(0, 10, "No Fuss Event Hire - Calculation Analysis", ln=True, align="C")
+    pdf.set_font("Arial", "B", 10); pdf.cell(0, 7, f"PROJECT: {name} | STATUS: {status.upper()}", ln=True, align="C")
+    pdf.cell(0, 7, f"HIRE PERIOD: {start} to {end} ({weeks} Week(s))", ln=True, align="C"); pdf.ln(5)
 
-    # 1. HIRE CALCULATIONS
-    pdf.set_fill_color(240, 240, 240)
-    pdf.set_font("Arial", "B", 12)
+    # Hire Section
+    pdf.set_fill_color(240, 240, 240); pdf.set_font("Arial", "B", 12)
     pdf.cell(0, 10, " CALCULATIONS (Hire)", 0, 1, "L", True)
     pdf.set_font("Arial", "", 10)
-    for h in h_maths:
-        pdf.cell(0, 7, f" {h}", border="B", ln=True)
-    pdf.set_font("Arial", "B", 10)
-    pdf.cell(0, 10, f" TOTAL HIRE: ${subtotal:,.2f}", ln=True, align="R")
-    pdf.ln(5)
+    for h in h_maths: pdf.cell(0, 7, f" {h}", border="B", ln=True)
+    pdf.set_font("Arial", "B", 10); pdf.cell(0, 10, f" TOTAL HIRE: ${subtotal:,.2f}", ln=True, align="R"); pdf.ln(5)
 
-    # 2. LABOUR CALCULATIONS
-    pdf.set_font("Arial", "B", 12)
-    pdf.cell(0, 10, " LABOUR", 0, 1, "L", True)
+    # Labour Section
+    pdf.set_font("Arial", "B", 12); pdf.cell(0, 10, " LABOUR", 0, 1, "L", True)
     pdf.set_font("Arial", "", 10)
-    for l in l_details:
-        pdf.cell(0, 7, f" {l}", border="B", ln=True)
-    pdf.set_font("Arial", "B", 10)
-    pdf.cell(0, 10, f" TOTAL LABOUR: ${labour:,.2f}", ln=True, align="R")
-    pdf.ln(5)
+    for l in l_details: pdf.cell(0, 7, f" {l}", border="B", ln=True)
+    pdf.set_font("Arial", "B", 10); pdf.cell(0, 10, f" TOTAL LABOUR POOL: ${labour:,.2f}", ln=True, align="R"); pdf.ln(5)
 
-    # 3. DAMAGE WAIVER
-    pdf.set_font("Arial", "B", 12)
-    pdf.cell(0, 10, " DAMAGE WAIVER", 0, 1, "L", True)
+    # Logistics
+    pdf.set_font("Arial", "B", 12); pdf.cell(0, 10, " LOGISTICS & OVERHEADS", 0, 1, "L", True)
     pdf.set_font("Arial", "", 10)
-    pdf.cell(0, 8, f" Calculation: ${subtotal:,.2f} (Hire Total) x 7% Damage Waiver", ln=True)
-    pdf.set_font("Arial", "B", 10)
-    pdf.cell(0, 8, f" WAIVER TOTAL: ${waiver:,.2f}", ln=True, align="R")
-    pdf.ln(5)
-
-    # 4. CARTAGE
-    pdf.set_font("Arial", "B", 12)
-    pdf.cell(0, 10, " CARTAGE", 0, 1, "L", True)
-    pdf.set_font("Arial", "", 10)
-    pdf.cell(0, 8, f" Calculation: {trucks} Truck(s) x {km}km x 4 trips x ${CONFIG['CARTAGE_RATE']}/km", ln=True)
-    pdf.cell(0, 8, f" Total Payload Weight: {kg:,.0f}kg", ln=True)
-    pdf.set_font("Arial", "B", 10)
-    pdf.cell(0, 8, f" CARTAGE TOTAL: ${cartage:,.2f}", ln=True, align="R")
+    pdf.cell(0, 8, f" Damage Waiver (7% of Hire): ${waiver:,.2f}", ln=True)
+    pdf.cell(0, 8, f" Cartage ({trucks} x 6,000kg Trucks): ${cartage:,.2f}", ln=True)
     
     # Grand Total
-    pdf.ln(10)
-    pdf.set_fill_color(26, 29, 45)
-    pdf.set_text_color(255, 255, 255)
-    pdf.set_font("Arial", "B", 14)
-    pdf.cell(0, 15, f" GRAND TOTAL (EX GST): ${grand:,.2f} ", 0, 1, "R", True)
-    
+    pdf.ln(10); pdf.set_fill_color(26, 29, 45); pdf.set_text_color(255, 255, 255)
+    pdf.set_font("Arial", "B", 14); pdf.cell(0, 15, f" GRAND TOTAL (EX GST): ${grand:,.2f} ", 0, 1, "R", True)
     return bytes(pdf.output())
 
-# --- APP LOGIC (Rest of script stays same for Save/Load/Calculator) ---
+# --- SESSION STATE & STORAGE ---
 if 'df' not in st.session_state:
     st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Total", "Min_Lab", "Raw_Lab", "Lab_Math", "KG", "Is_Marquee", "Hire_Math_Str"])
 if 'status' not in st.session_state:
@@ -164,7 +137,7 @@ st.session_state.active_project = st.sidebar.text_input("Project Label", st.sess
 if st.sidebar.button("💾 SAVE PROJECT"):
     data = {"status": st.session_state.status, "items": st.session_state.df.to_dict(orient='records'), "proj": st.session_state.active_project}
     with open(f"quotes/{st.session_state.active_project}.json", "w") as f: json.dump(data, f)
-    st.sidebar.success(f"Archived: {st.session_state.active_project}")
+    st.sidebar.success(f"Saved: {st.session_state.active_project}")
 
 saved_quotes = [f.replace(".json", "") for f in os.listdir("quotes") if f.endswith(".json")]
 load_choice = st.sidebar.selectbox("Retrieve Project", ["None"] + saved_quotes)
@@ -176,59 +149,75 @@ if st.sidebar.button("📂 LOAD") and load_choice != "None":
         st.session_state.active_project = loaded.get("proj", load_choice)
         st.rerun()
 
-st.title("📦 No Fuss Unified Engine (v31.2)")
+# --- UI WORKFLOW ---
+st.title("📦 No Fuss Unified Engine (v32.6)")
 st.markdown(f"### 📍 Workflow Selection: {st.session_state.active_project}")
 st.session_state.status = st.selectbox("Current Stage", options=STAGES, index=STAGES.index(st.session_state.status))
 st.markdown(f"<div style='height: 12px; background-color: {STAGE_COLORS[st.session_state.status]}; border-radius: 6px; margin-bottom: 25px;'></div>", unsafe_allow_html=True)
 
 c1, c2, c3 = st.columns(3)
-start_d = c1.date_input("Hire Start", value=date.today())
-end_d = c2.date_input("Hire End", value=date.today())
+start_d = c1.date_input("Hire Start", value=date.today()); end_d = c2.date_input("Hire End", value=date.today())
 km_in = c3.number_input("One-Way Distance (KM)", min_value=0.0)
 weeks = math.ceil(((end_d - start_d).days) / 7) if (end_d - start_d).days > 0 else 1
 
 st.divider(); col_mq, col_cat = st.columns(2)
+
 with col_mq:
     st.markdown("### ⚡ Marquee & Structure")
     m_in = st.text_input("Size (e.g. 10x15)")
     m_q = st.number_input("Quantity", min_value=1, key="mq")
     m_sec = st.radio("Securing", ["Weights", "Pegging"], horizontal=True)
-    if st.button("Add Marquee Item"):
+    if st.button("Add Marquee"):
         nums = re.findall(r'\d+', m_in)
         if len(nums) >= 2:
             span, length = int(nums[0]), int(nums[1])
             new_rows = []
-            if span == 3 and (length == 3 or length == 6):
-                key = "3m x 3m Hi Top" if length == 3 else "3m x 6m Shade"
-                data = MARQUEE_UNITS[key]
-                h_val = data['rate'] * m_q; l_val = h_val * data['lab']
-                new_rows.append({"Qty": m_q, "Product": key, "Unit Rate": data['rate'], "Total": 0.0, "Min_Lab": data['min'], "Raw_Lab": l_val, "Lab_Math": f"{key}: ${h_val:,.2f} x 55% = ${l_val:,.2f}", "KG": data['kg']*m_q, "Is_Marquee": True, "Hire_Math_Str": f"{m_q} - {key} x ${data['rate']:,.2f} = ${h_val:,.2f}"})
-                legs = 4
-            else:
-                logic = STRUCT_LOGIC.get(span, STRUCT_LOGIC[4])
-                bays = math.ceil(length/logic['bay']); sqm = span*length
-                rate = logic['s_rate'] if bays == 1 else logic['m_rate']
-                lab_p = logic['s_lab'] if bays == 1 else logic['m_lab']
-                h_val = sqm * rate * m_q; l_val = h_val * lab_p
-                new_rows.append({"Qty": m_q, "Product": f"Structure {span}m x {length}m", "Unit Rate": sqm*rate, "Total": 0.0, "Min_Lab": logic['min_lab'], "Raw_Lab": l_val, "Lab_Math": f"Structure {span}x{length}: ${h_val:,.2f} x {int(lab_p*100)}% = ${l_val:,.2f}", "KG": (sqm*15)*m_q, "Is_Marquee": True, "Hire_Math_Str": f"{m_q} - Structure {span}m x {length}m ({sqm}sqm x ${rate:,.2f}) = ${h_val:,.2f}" })
-                legs = ((length/logic['bay'])+1)*2
+            logic = STRUCT_LOGIC.get(span, STRUCT_LOGIC[4])
+            bays = math.ceil(length/logic['bay']); sqm = span*length
+            rate = logic['s_rate'] if bays == 1 else logic['m_rate']
+            lab_p = logic['s_lab'] if bays == 1 else logic['m_lab']
+            h_val = sqm * rate * m_q; l_val = h_val * lab_p
+            new_rows.append({"Qty": m_q, "Product": f"Structure {span}m x {length}m", "Unit Rate": sqm*rate, "Total": 0.0, "Min_Lab": logic['min_lab'], "Raw_Lab": l_val, "Lab_Math": f"Structure {span}x{length}: ${h_val:,.2f} x {int(lab_p*100)}% = ${l_val:,.2f}", "KG": (sqm*15)*m_q, "Is_Marquee": True, "Hire_Math_Str": f"{m_q} - Structure {span}m x {length}m ({sqm}sqm x ${rate:,.2f}) = ${h_val:,.2f}" })
+            legs = ((length/logic['bay'])+1)*2
             if m_sec == "Weights":
-                w_tot = int(legs*6*m_q)
-                w_h = w_tot * CONFIG["WEIGHT_HIRE"]
-                w_l = w_tot * CONFIG["WEIGHT_LABOUR"]
+                w_tot = int(legs*6*m_q); w_h = w_tot * CONFIG["WEIGHT_HIRE"]; w_l = w_tot * CONFIG["WEIGHT_LABOUR"]
                 new_rows.append({"Qty": w_tot, "Product": "30kg Weights", "Unit Rate": CONFIG["WEIGHT_HIRE"], "Total": 0.0, "Min_Lab": 0, "Raw_Lab": w_l, "Lab_Math": f"Weights: {w_tot} units x $1.65 = ${w_l:,.2f}", "KG": w_tot*30, "Is_Marquee": True, "Hire_Math_Str": f"{w_tot} - Weights x $6.60 = ${w_h:,.2f}"})
             st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame(new_rows)], ignore_index=True); st.rerun()
 
 with col_cat:
-    st.markdown("### 🪵 Product Catalog")
-    p_sel = st.selectbox("Product", list(GENERAL_PRODUCTS["Flooring"].keys()))
-    f_qty = st.number_input("Amount (Qty/SQM)", min_value=0.0)
-    if st.button("Add Product"):
+    st.markdown("### 🪵 Flooring & Catalog")
+    cat_type = st.radio("Category", ["Flooring", "Accessories"], horizontal=True)
+    p_sel = st.selectbox("Product", list(GENERAL_PRODUCTS[cat_type].keys()))
+    
+    if cat_type == "Flooring":
         data = GENERAL_PRODUCTS["Flooring"][p_sel]
+        input_mode = st.radio("Mode", ["SQM", "Sheets"], horizontal=True) if data['w'] > 0 else "SQM"
+        if input_mode == "Sheets":
+            num_sheets = st.number_input("Sheets", min_value=0, step=1)
+            sqm_per = data['w'] * data['l']; f_qty = num_sheets * sqm_per
+            label = f"{p_sel} ({num_sheets} sheets)"
+        else:
+            req_sqm = st.number_input("Area (SQM)", min_value=0.0)
+            if data['w'] > 0:
+                sqm_per = data['w'] * data['l']
+                sheets_needed = math.ceil(req_sqm / sqm_per)
+                f_qty = sheets_needed * sqm_per
+                st.info(f"💡 Covering {req_sqm}sqm requires {sheets_needed} sheets ({f_qty:,.2f}sqm total).")
+                label = f"{p_sel} ({sheets_needed} sheets)"
+            else:
+                f_qty = req_sqm; label = p_sel
+    else:
+        f_qty = st.number_input("Quantity", min_value=0.0); label = p_sel
+
+    if st.button("Add to Quote"):
+        data = GENERAL_PRODUCTS[cat_type][p_sel]
         f_rate = (data['block']/4) if (weeks >= 4 and 'block' in data) else data['rate']
-        h_val = f_qty * f_rate; l_val = f_qty * data['lab_fix']
+        h_val = f_qty * f_rate
+        l_val = f_qty * data['lab_fix'] if 'lab_fix' in data else (h_val * data.get('lab_p', 0))
         st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame([{
-            "Qty": f_qty, "Product": p_sel, "Unit Rate": f_rate, "Total": 0.0, "Min_Lab": 0, "Raw_Lab": l_val, "Lab_Math": f"{p_sel}: {f_qty}sqm x ${data['lab_fix']} = ${l_val:,.2f}", "KG": f_qty * data.get('kg', data.get('kg_sqm', 0)), "Is_Marquee": False, "Hire_Math_Str": f"{f_qty} - {p_sel} x ${f_rate:,.2f} = ${h_val:,.2f}"
+            "Qty": f_qty, "Product": label, "Unit Rate": f_rate, "Total": 0.0, "Min_Lab": 0, "Raw_Lab": l_val, 
+            "Lab_Math": f"{p_sel}: {f_qty:,.2f} x ${data.get('lab_fix', 0)} = ${l_val:,.2f}" if 'lab_fix' in data else f"{p_sel}: ${h_val:,.2f} x {int(data.get('lab_p',0)*100)}% = ${l_val:,.2f}",
+            "KG": f_qty * data.get('kg_sqm', data.get('kg', 0)), "Is_Marquee": False, "Hire_Math_Str": f"{f_qty:,.2f} - {p_sel} x ${f_rate:,.2f} = ${h_val:,.2f}"
         }])], ignore_index=True); st.rerun()
 
 if not st.session_state.df.empty:
