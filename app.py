@@ -7,7 +7,7 @@ import re
 import json
 import os
 
-# --- v32.2 CONFIG & DIRECTORIES ---
+# --- v32.3 CONFIG & DIRECTORIES ---
 if not os.path.exists("quotes"):
     os.makedirs("quotes")
 
@@ -29,7 +29,7 @@ if not check_password():
     st.stop()
 
 # --- STYLING & PROGRESS BAR ---
-st.set_page_config(page_title="No Fuss Quote Pro v32.2", layout="wide")
+st.set_page_config(page_title="No Fuss Quote Pro v32.3", layout="wide")
 st.markdown("""
     <style>
     .main { background-color: #FFFFFF !important; }
@@ -47,7 +47,7 @@ st.markdown("""
         border-radius: 12px !important;
         border: 2px solid #3D5AFE !important;
     }
-    div[data-testid="stMetricValue"] { color: #00E676 !important; font-size: 32px !important; font-weight: bold !important; }
+    div[data-testid="stMetricValue"] { color: #00E676 !important; font-size: 32px !important; }
     [data-testid="stMetricLabel"] p { color: #FFFFFF !important; font-weight: bold !important; font-size: 16px !important; }
     </style>
     """, unsafe_allow_html=True)
@@ -87,9 +87,10 @@ if 'df' not in st.session_state:
 if 'status' not in st.session_state:
     st.session_state.status = "Email"
 
-# --- SIDEBAR ---
+# --- SIDEBAR & ARCHIVE ---
 st.sidebar.title("📁 Archive Manager")
 proj_name = st.sidebar.text_input("Project Label", "New Project")
+
 if st.sidebar.button("💾 SAVE PROJECT"):
     data = {"status": st.session_state.status, "items": st.session_state.df.to_dict(orient='records'), "proj": proj_name}
     with open(f"quotes/{proj_name}.json", "w") as f:
@@ -97,21 +98,34 @@ if st.sidebar.button("💾 SAVE PROJECT"):
     st.sidebar.success(f"Archived: {proj_name}")
 
 saved_quotes = [f.replace(".json", "") for f in os.listdir("quotes") if f.endswith(".json")]
-load_choice = st.sidebar.selectbox("Retreive Project", ["None"] + saved_quotes)
+load_choice = st.sidebar.selectbox("Retrieve Project", ["None"] + saved_quotes)
+
 if st.sidebar.button("📂 LOAD") and load_choice != "None":
     with open(f"quotes/{load_choice}.json", "r") as f:
         loaded = json.load(f)
         st.session_state.df = pd.DataFrame(loaded["items"])
-        st.session_state.status = loaded.get("status", "Email")
+        
+        # FIX: Check if status exists in our current STAGES list to prevent ValueError
+        incoming_status = loaded.get("status", "Email")
+        if incoming_status in STAGES:
+            st.session_state.status = incoming_status
+        else:
+            # Fallback for old "Draft/Invoiced/Dispatched" statuses
+            st.session_state.status = "Email"
         st.rerun()
 
 # --- TOP WORKFLOW INDICATOR ---
-current_idx = STAGES.index(st.session_state.status)
+try:
+    current_idx = STAGES.index(st.session_state.status)
+except ValueError:
+    current_idx = 0
+    st.session_state.status = "Email"
+
 progress = (current_idx + 1) / len(STAGES)
 st.markdown(f"### 📍 Job Status: {st.session_state.status}")
 st.progress(progress)
 st.session_state.status = st.select_slider("Change Workflow Stage", options=STAGES, value=st.session_state.status)
-st.markdown(f"<div style='height: 5px; background-color: {STAGE_COLORS[st.session_state.status]}; border-radius: 5px;'></div>", unsafe_allow_html=True)
+st.markdown(f"<div style='height: 10px; background-color: {STAGE_COLORS[st.session_state.status]}; border-radius: 5px; margin-bottom: 20px;'></div>", unsafe_allow_html=True)
 
 # --- CALCULATOR ---
 c1, c2, c3 = st.columns(3)
@@ -155,15 +169,14 @@ with col_mq:
             st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame(new_rows)], ignore_index=True); st.rerun()
 
 if not st.session_state.df.empty:
-    st.divider(); st.data_editor(st.session_state.df[["Qty", "Product", "Unit Rate", "Total"]], use_container_width=True)
+    st.divider(); st.markdown("### 🏗️ Current Project Gear")
+    st.data_editor(st.session_state.df[["Qty", "Product", "Unit Rate", "Total"]], use_container_width=True)
+    
     h_tot, raw_l_sum, max_min_l, total_kg = 0.0, 0.0, 0.0, 0.0
-    h_math, l_math = [], []
     for idx, row in st.session_state.df.iterrows():
         line_h = row["Qty"] * row["Unit Rate"] * (weeks if row["Is_Marquee"] and "Weight" not in row["Product"] else 1)
         h_tot += line_h; raw_l_sum += row["Raw_Lab"]; max_min_l = max(max_min_l, row["Min_Lab"])
         total_kg += row["KG"]; st.session_state.df.at[idx, "Total"] = line_h
-        if row["Lab_Math"]: l_math.append(row["Lab_Math"])
-        if row["Hire_Math_Str"]: h_math.append(row["Hire_Math_Str"])
     
     trucks = math.ceil(total_kg / CONFIG["TRUCK_PAYLOAD"]) if total_kg > 0 else 1
     final_lab = max(max_min_l, raw_l_sum); waiver = h_tot * 0.07; cartage = trucks * km_in * 4 * CONFIG["CARTAGE_RATE"]; grand = h_tot + final_lab + waiver + cartage
@@ -171,4 +184,7 @@ if not st.session_state.df.empty:
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("HIRE", f"${h_tot:,.2f}"); m2.metric("LABOUR", f"${final_lab:,.2f}"); m3.metric("LOAD", f"{total_kg:,.0f}kg"); m4.metric("TRUCKS", f"{trucks}")
     
-    if st.button("RESET ENGINE"): st.session_state.df = pd.DataFrame(columns=st.session_state.df.columns); st.rerun()
+    if st.button("RESET ENGINE"): 
+        st.session_state.df = pd.DataFrame(columns=st.session_state.df.columns)
+        st.session_state.status = "Email"
+        st.rerun()
