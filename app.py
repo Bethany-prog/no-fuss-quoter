@@ -39,6 +39,7 @@ st.markdown("""
     [data-testid="stMetricLabel"] p { color: #FFFFFF !important; font-weight: bold !important; font-size: 14px !important; }
     div.stButton > button:first-child { background-color: #3D5AFE; color: white; border-radius: 10px; height: 50px; font-weight: bold; width: 100%; }
     .guardrail-box { background-color: #F8F9FA; padding: 20px; border-radius: 10px; border: 1px solid #D1D3D4; margin-top: 20px; }
+    .delete-btn { color: #FF1744 !important; border: 1px solid #FF1744 !important; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -193,14 +194,21 @@ with col_cat:
 
 if not st.session_state.df.empty:
     st.divider(); st.subheader("Quote Summary")
-    # Using data_editor with num_rows="dynamic" to allow line deletion
-    st.session_state.df = st.data_editor(st.session_state.df, column_order=("Qty", "Product", "Unit Rate", "Total"), num_rows="dynamic", use_container_width=True)
+    # Clean non-editable table
+    st.table(st.session_state.df[["Qty", "Product", "Unit Rate", "Total"]])
     
-    # Recalculate Totals after manual edits or deletions
+    # --- NEW CLEAN DELETE DASHBOARD ---
+    st.markdown("#### 🗑️ Remove Items")
+    cols = st.columns(len(st.session_state.df))
+    for i, (idx, row) in enumerate(st.session_state.df.iterrows()):
+        if cols[i].button(f"X {row['Product']}", key=f"del_{idx}"):
+            st.session_state.df = st.session_state.df.drop(idx)
+            st.rerun()
+    
+    # Recalculate Totals
     h_tot, raw_l_sum, max_min_l, total_kg = 0.0, 0.0, 0.0, 0.0
     h_math, l_math = [], []
     for idx, row in st.session_state.df.iterrows():
-        # Duration logic applied to total hire calculation
         line_h = row["Qty"] * row["Unit Rate"] * (weeks if row["Is_Marquee"] and "Weight" not in row["Product"] else 1)
         h_tot += line_h; raw_l_sum += row["Raw_Lab"]; max_min_l = max(max_min_l, row["Min_Lab"])
         total_kg += row["KG"]; st.session_state.df.at[idx, "Total"] = line_h
