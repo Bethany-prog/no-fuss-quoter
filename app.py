@@ -122,10 +122,8 @@ if st.sidebar.button("📂 LOAD") and load_choice != "None":
         loaded = json.load(f)
         st.session_state.df = pd.DataFrame(loaded["items"])
         loaded_status = loaded.get("status", "Quoted")
-        if loaded_status not in STAGES:
-            st.session_state.status = "Quoted"
-        else:
-            st.session_state.status = loaded_status
+        if loaded_status not in STAGES: st.session_state.status = "Quoted"
+        else: st.session_state.status = loaded_status
         st.session_state.active_project = loaded.get("proj", load_choice)
         st.rerun()
 
@@ -133,10 +131,8 @@ if st.sidebar.button("📂 LOAD") and load_choice != "None":
 st.title("📦 Louis Quoting Tool")
 st.markdown(f"### 📍 Project: {st.session_state.active_project}")
 
-try:
-    status_index = STAGES.index(st.session_state.status)
-except ValueError:
-    status_index = 0
+try: status_index = STAGES.index(st.session_state.status)
+except ValueError: status_index = 0
 
 st.session_state.status = st.selectbox("Current Workflow Stage", options=STAGES, index=status_index)
 st.markdown(f"<div style='height: 12px; background-color: {STAGE_COLORS[st.session_state.status]}; border-radius: 6px; margin-bottom: 25px;'></div>", unsafe_allow_html=True)
@@ -196,11 +192,15 @@ with col_cat:
         st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame([{ "Qty": f_qty, "Product": label, "Unit Rate": f_rate, "Total": 0.0, "Min_Lab": 0, "Raw_Lab": l_val, "Lab_Math": f"{p_sel}: {f_qty:,.2f} x ${data.get('lab_fix', 0)} = ${l_val:,.2f}" if 'lab_fix' in data else f"{p_sel}: ${h_val:,.2f} x {int(data.get('lab_p',0)*100)}% = ${l_val:,.2f}", "KG": f_qty * data.get('kg_sqm', data.get('kg', 0)), "Is_Marquee": False, "Hire_Math_Str": f"{f_qty:,.2f} - {p_sel} x ${f_rate:,.2f} = ${h_val:,.2f}" }])], ignore_index=True); st.rerun()
 
 if not st.session_state.df.empty:
-    st.divider(); st.data_editor(st.session_state.df[["Qty", "Product", "Unit Rate", "Total"]], use_container_width=True)
+    st.divider(); st.subheader("Quote Summary")
+    # Using data_editor with num_rows="dynamic" to allow line deletion
+    st.session_state.df = st.data_editor(st.session_state.df, column_order=("Qty", "Product", "Unit Rate", "Total"), num_rows="dynamic", use_container_width=True)
     
+    # Recalculate Totals after manual edits or deletions
     h_tot, raw_l_sum, max_min_l, total_kg = 0.0, 0.0, 0.0, 0.0
     h_math, l_math = [], []
     for idx, row in st.session_state.df.iterrows():
+        # Duration logic applied to total hire calculation
         line_h = row["Qty"] * row["Unit Rate"] * (weeks if row["Is_Marquee"] and "Weight" not in row["Product"] else 1)
         h_tot += line_h; raw_l_sum += row["Raw_Lab"]; max_min_l = max(max_min_l, row["Min_Lab"])
         total_kg += row["KG"]; st.session_state.df.at[idx, "Total"] = line_h
@@ -208,28 +208,16 @@ if not st.session_state.df.empty:
         if row["Hire_Math_Str"]: h_math.append(row["Hire_Math_Str"])
     
     trucks = math.ceil(total_kg / CONFIG["TRUCK_PAYLOAD"]) if total_kg > 0 else 1
-    final_lab = max(max_min_l, raw_l_sum)
-    waiver = h_tot * 0.07
-    cartage = trucks * km_in * 4 * CONFIG["CARTAGE_RATE"]
-    grand = h_tot + final_lab + waiver + cartage
+    final_lab = max(max_min_l, raw_l_sum); waiver = h_tot * 0.07; cartage = trucks * km_in * 4 * CONFIG["CARTAGE_RATE"]; grand = h_tot + final_lab + waiver + cartage
     
-    # Financial Pillars top metrics
     m1, m2, m3, m4, m5, m6 = st.columns(6)
-    m1.metric("HIRE", f"${h_tot:,.2f}")
-    m2.metric("LABOUR", f"${final_lab:,.2f}")
-    m3.metric("WAIVER", f"${waiver:,.2f}")
-    m4.metric("CARTAGE", f"${cartage:,.2f}")
-    m5.metric("LOAD", f"{total_kg:,.0f}kg")
-    m6.metric("TRUCKS", f"{trucks}")
+    m1.metric("HIRE", f"${h_tot:,.2f}"); m2.metric("LABOUR", f"${final_lab:,.2f}"); m3.metric("WAIVER", f"${waiver:,.2f}"); m4.metric("CARTAGE", f"${cartage:,.2f}"); m5.metric("LOAD", f"{total_kg:,.0f}kg"); m6.metric("TRUCKS", f"{trucks}")
     
-    # --- CHECKLIST ---
     st.markdown("### 🛠️ Checklist")
     st.markdown("<div class='guardrail-box'>", unsafe_allow_html=True)
     if st.session_state.status == "Quoted":
-        st.checkbox("Email / enquiry printed")
-        st.checkbox("Quote printed and paperclipped to the front")
-    else:
-        st.write("No specific office actions required.")
+        st.checkbox("Email / enquiry printed"); st.checkbox("Quote printed and paperclipped to the front")
+    else: st.write("No specific office actions required.")
     st.markdown("</div>", unsafe_allow_html=True)
 
     pdf_b = create_calculation_pdf(st.session_state.active_project, st.session_state.df, h_tot, final_lab, waiver, cartage, grand, km_in, weeks, start_d, end_d, h_math, l_math, total_kg, trucks, st.session_state.status)
