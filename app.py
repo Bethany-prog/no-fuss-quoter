@@ -42,8 +42,6 @@ st.markdown("""
     
     /* Control Tower Styling */
     .dashboard-card { background-color: #F1F3F4; padding: 20px; border-radius: 12px; border-top: 5px solid #3D5AFE; margin-bottom: 25px; }
-    .urgent-text { color: #D32F2F; font-weight: bold; }
-    .warning-text { color: #F57C00; font-weight: bold; }
     
     .summary-text { font-size: 18px !important; font-weight: 600 !important; color: #2c3e50; display: flex; align-items: center; height: 100%; }
     [data-testid="column"] { display: flex; flex-direction: column; justify-content: center; }
@@ -130,7 +128,7 @@ for f_name in quoted_files:
                     followup_list.append({"Project": p_data.get("proj", "Unknown"), "Start Date": sd.strftime('%d/%m/%Y'), "Days Left": diff, "Priority": "🚨 URGENT" if diff <= 14 else "⚠️ WARNING"})
     except: continue
 
-# --- SIDEBAR (ARCHIVE ONLY) ---
+# --- SIDEBAR (ARCHIVE MANAGER) ---
 st.sidebar.title("📁 Archive Manager")
 if st.sidebar.button("➕ START NEW PROJECT"):
     st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Total", "Min_Lab", "Raw_Lab", "Lab_Math", "KG", "Is_Marquee", "Hire_Math_Str", "Discount"])
@@ -170,8 +168,6 @@ if followup_list:
         st.markdown("The following jobs are still in **Quoted** stage and starting soon:")
         df_follow = pd.DataFrame(followup_list)
         st.table(df_follow)
-        
-        # Hit List Export
         csv = df_follow.to_csv(index=False).encode('utf-8')
         st.download_button("📥 DOWNLOAD FOLLOW-UP HIT LIST (CSV)", csv, "FollowUp_HitList.csv", "text/csv")
         st.markdown("</div>", unsafe_allow_html=True)
@@ -186,7 +182,10 @@ st.markdown(f"<div style='height: 12px; background-color: {STAGE_COLORS[st.sessi
 c1, c2, c3 = st.columns(3)
 st.session_state.start_d = c1.date_input("Hire Start", value=st.session_state.start_d, format="DD/MM/YYYY")
 st.session_state.end_d = c2.date_input("Hire End", value=st.session_state.end_d, format="DD/MM/YYYY")
-st.session_state.km = c3.number_input("One-Way Distance (KM)", min_value=0.0, value=st.session_state.km if st.session_state.km > 0 else None, placeholder="Enter KM...")
+
+# BUG FIX: SAFETY GATE FOR NONE-TYPE COMPARISON
+val_to_use = st.session_state.km if (st.session_state.km is not None and st.session_state.km > 0) else None
+st.session_state.km = c3.number_input("One-Way Distance (KM)", min_value=0.0, value=val_to_use, placeholder="Enter KM...")
 
 total_days = (st.session_state.end_d - st.session_state.start_d).days
 weeks = math.ceil(total_days / 7) if total_days > 0 else 1
@@ -250,6 +249,7 @@ if not st.session_state.df.empty:
     for idx, row in st.session_state.df.iterrows():
         qty = row["Qty"]; brate = row["Unit Rate"]; gear_wk1 = qty * brate
         raw_l += row["Raw_Lab"]; max_min_l = max(max_min_l, row["Min_Lab"]); total_kg += row["KG"]
+        
         c1, c2, c3, c4, c5, c6 = st.columns([0.4, 3.2, 0.8, 1.2, 1, 1.2])
         if c1.button("🗑️", key=f"del_{idx}"): st.session_state.df = st.session_state.df.drop(idx); st.rerun()
         disc = c5.number_input("", 0.0, 100.0, float(row.get("Discount", 0)), 1.0, f"disc_{idx}", label_visibility="collapsed")
@@ -275,7 +275,7 @@ if not st.session_state.df.empty:
             c6b.markdown(f"<div class='summary-text' style='color:#7f8c8d; font-size:16px !important;'>${rec_t:,.2f}</div>", unsafe_allow_html=True)
 
     trucks = math.ceil(total_kg / 6000) if total_kg > 0 else 1
-    flab = max(max_min_l, raw_l); waiver = h_tot_wk1_gear * 0.07; dist = st.session_state.km
+    flab = max(max_min_l, raw_l); waiver = h_tot_wk1_gear * 0.07; dist = st.session_state.km if st.session_state.km else 0
     cartage = trucks * dist * 4 * 3.50 if cartage_mode == "Charge" else 0
     d_lab = flab if labour_mode == "Separate Line Item" else 0
     l_maths = [f"Damage Waiver: ${h_tot_wk1_gear:,.2f} x 7% = ${waiver:,.2f}", f"Cartage: {trucks} Trucks x {dist}km x 4 trips x $3.50 = ${cartage:,.2f}"]
@@ -284,12 +284,5 @@ if not st.session_state.df.empty:
     m1, m2, m3, m4, m5, m6 = st.columns(6)
     m1.metric("HIRE", f"${h_tot_c:,.2f}"); m2.metric("LABOUR", f"${d_lab:,.2f}"); m3.metric("WAIVER", f"${waiver:,.2f}"); m4.metric("CARTAGE", f"${cartage:,.2f}"); m5.metric("LOAD", f"{total_kg:,.0f}kg"); m6.metric("TRUCKS", f"{trucks}")
     
-    st.markdown("### 🛠️ Checklist")
-    st.markdown("<div class='guardrail-box'>", unsafe_allow_html=True)
-    if st.session_state.status == "Quoted":
-        st.checkbox("Email / enquiry printed"); st.checkbox("Quote printed and paperclipped to the front")
-    else: st.write("No specific office actions required.")
-    st.markdown("</div>", unsafe_allow_html=True)
-
     pdf_b = create_calculation_pdf(st.session_state.active_project, h_tot_c, d_lab, waiver, cartage, h_tot_c+d_lab+waiver+cartage, weeks, st.session_state.start_d, st.session_state.end_d, ph_maths, pl_maths, l_maths, st.session_state.status)
     st.download_button(f"📥 DOWNLOAD {st.session_state.status.upper()} PDF", pdf_b, file_name=f"{st.session_state.active_project}_Analysis.pdf")
