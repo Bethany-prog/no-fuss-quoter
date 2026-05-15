@@ -28,42 +28,83 @@ def check_password():
 if not check_password():
     st.stop()
 
-# --- PDF ENGINE (WITH ENCODING SAFETY) ---
+# --- PDF ENGINE (WITH AGGRESSIVE ENCODING SAFETY) ---
 def clean_text(txt):
-    """Replaces symbols that break FPDF standard fonts."""
-    return str(txt).replace("®", "(R)").replace("©", "(C)").replace("™", "(TM)")
+    """Deep-cleans text to ensure zero PDF crashes."""
+    if not txt:
+        return ""
+    # Map common special symbols to plain text
+    replacements = {
+        "®": "(R)",
+        "™": "(TM)",
+        "©": "(C)",
+        "└": "->",
+        "—": "-",
+        "–": "-",
+        "‘": "'",
+        "’": "'",
+        "“": '"',
+        "”": '"'
+    }
+    cleaned = str(txt)
+    for char, rep in replacements.items():
+        cleaned = cleaned.replace(char, rep)
+    
+    # Final pass: strip any non-latin-1 characters that FPDF Arial can't handle
+    return cleaned.encode('latin-1', 'replace').decode('latin-1')
 
 def create_calculation_pdf(name, subtotal, labour, waiver, cartage, grand, weeks, start, end, h_maths, l_details, log_maths, status):
     pdf = FPDF()
     pdf.add_page()
+    
+    # Title
     pdf.set_font("Arial", "B", 16)
-    pdf.cell(0, 10, clean_text(f"Louis Quoting Tool - Calculation Analysis"), ln=True, align="C")
+    pdf.cell(0, 10, clean_text("Louis Quoting Tool - Calculation Analysis"), ln=True, align="C")
+    
+    # Project Header
     pdf.set_font("Arial", "B", 10)
     pdf.cell(0, 7, clean_text(f"PROJECT: {name} | STATUS: {status.upper()}"), ln=True, align="C")
-    pdf.cell(0, 7, f"HIRE PERIOD: {start.strftime('%d/%m/%Y')} to {end.strftime('%d/%m/%Y')} ({weeks} Week(s))", ln=True, align="C"); pdf.ln(5)
+    pdf.cell(0, 7, f"HIRE PERIOD: {start.strftime('%d/%m/%Y')} to {end.strftime('%d/%m/%Y')} ({weeks} Week(s))", ln=True, align="C")
+    pdf.ln(5)
     
     # Hire Section
-    pdf.set_fill_color(240, 240, 240); pdf.set_font("Arial", "B", 12)
-    pdf.cell(0, 10, " CALCULATIONS (Hire Breakdown)", 0, 1, "L", True); pdf.set_font("Arial", "", 10)
+    pdf.set_fill_color(240, 240, 240)
+    pdf.set_font("Arial", "B", 12)
+    pdf.cell(0, 10, " CALCULATIONS (Hire Breakdown)", 0, 1, "L", True)
+    pdf.set_font("Arial", "", 10)
     for h in h_maths: 
         pdf.cell(0, 7, clean_text(f" {h}"), border="B", ln=True)
-    pdf.set_font("Arial", "B", 10); pdf.cell(0, 10, f" TOTAL HIRE: ${subtotal:,.2f}", ln=True, align="R"); pdf.ln(5)
+    pdf.set_font("Arial", "B", 10)
+    pdf.cell(0, 10, f" TOTAL HIRE: ${subtotal:,.2f}", ln=True, align="R")
+    pdf.ln(5)
     
     # Labour Section
     if labour > 0:
-        pdf.set_font("Arial", "B", 12); pdf.cell(0, 10, " LABOUR (Installation & Dismantle)", 0, 1, "L", True); pdf.set_font("Arial", "", 10)
+        pdf.set_font("Arial", "B", 12)
+        pdf.cell(0, 10, " LABOUR (Installation & Dismantle)", 0, 1, "L", True)
+        pdf.set_font("Arial", "", 10)
         for l in l_details: 
             pdf.cell(0, 7, clean_text(f" {l}"), border="B", ln=True)
-        pdf.set_font("Arial", "B", 10); pdf.cell(0, 10, f" TOTAL LABOUR POOL: ${labour:,.2f}", ln=True, align="R"); pdf.ln(5)
+        pdf.set_font("Arial", "B", 10)
+        pdf.cell(0, 10, f" TOTAL LABOUR POOL: ${labour:,.2f}", ln=True, align="R")
+        pdf.ln(5)
 
     # Logistics & Waiver
-    pdf.set_font("Arial", "B", 12); pdf.cell(0, 10, " LOGISTICS & WAIVER PROOFS", 0, 1, "L", True); pdf.set_font("Arial", "", 10)
+    pdf.set_font("Arial", "B", 12)
+    pdf.cell(0, 10, " LOGISTICS & WAIVER PROOFS", 0, 1, "L", True)
+    pdf.set_font("Arial", "", 10)
     for m in log_maths: 
         pdf.cell(0, 7, clean_text(f" {m}"), border="B", ln=True)
-    pdf.set_font("Arial", "B", 10); pdf.cell(0, 10, f" LOGISTICS SUBTOTAL: ${waiver + cartage:,.2f}", ln=True, align="R")
+    pdf.set_font("Arial", "B", 10)
+    pdf.cell(0, 10, f" LOGISTICS SUBTOTAL: ${waiver + cartage:,.2f}", ln=True, align="R")
     
-    pdf.ln(10); pdf.set_fill_color(26, 29, 45); pdf.set_text_color(255, 255, 255); pdf.set_font("Arial", "B", 14)
+    # Grand Total
+    pdf.ln(10)
+    pdf.set_fill_color(26, 29, 45)
+    pdf.set_text_color(255, 255, 255)
+    pdf.set_font("Arial", "B", 14)
     pdf.cell(0, 15, f" GRAND TOTAL (EX GST): ${grand:,.2f} ", 0, 1, "R", True)
+    
     return bytes(pdf.output())
 
 # --- VISUAL STYLING ---
@@ -123,14 +164,17 @@ def load_project_safe(fname):
             for c in ["Discount", "Lab_Math"]:
                 if c not in st.session_state.df.columns: st.session_state.df[c] = 0.0 if c=="Discount" else ""
             st.session_state.status, st.session_state.proj = d.get("status", "Quoted"), d.get("proj", fname.replace(".json", ""))
-            st.session_state.start_d = datetime.strptime(d.get("start_date", str(date.today())), '%Y-%m-%d').date()
-            st.session_state.end_d = datetime.strptime(d.get("end_date", str(date.today())), '%Y-%m-%d').date()
+            try: st.session_state.start_d = datetime.strptime(d.get("start_date", str(date.today())), '%Y-%m-%d').date()
+            except: st.session_state.start_d = date.today()
+            try: st.session_state.end_d = datetime.strptime(d.get("end_date", str(date.today())), '%Y-%m-%d').date()
+            except: st.session_state.end_d = date.today()
             st.session_state.km = float(d.get("km", 0.0))
     except: st.error("Load Error")
 
-# --- UI ---
+# --- MAIN UI ---
 st.title("⚡ Louis Quoting Tool")
 
+# DASHBOARD remiders
 quoted_files = [f for f in os.listdir("quotes") if f.endswith(".json")]
 for fn in quoted_files:
     try:
@@ -158,6 +202,7 @@ load_choice = st.sidebar.selectbox("Retrieval", ["-- Choose --"] + sorted([f.rep
 if st.sidebar.button("📂 LOAD PROJECT") and load_choice != "-- Choose --": load_project_safe(f"{load_choice}.json"); st.rerun()
 if st.sidebar.button("🗑️ DELETE JOB") and load_choice != "-- Choose --": os.remove(f"quotes/{load_choice}.json"); st.rerun()
 
+# Workspace
 st.markdown(f"### 📍 Project: {st.session_state.proj}")
 st.session_state.status = st.selectbox("Stage", STAGES, index=STAGES.index(st.session_state.status) if st.session_state.status in STAGES else 0)
 st.markdown(f"<div style='height: 12px; background-color: {STAGE_COLORS[st.session_state.status]}; border-radius: 6px; margin-bottom: 20px;'></div>", unsafe_allow_html=True)
@@ -182,7 +227,7 @@ with col1:
         if len(nums) >= 2:
             span, length = int(nums[0]), int(nums[1])
             logic = STRUCT_LOGIC.get(span, STRUCT_LOGIC[4])
-            sqm = span*length; rate = logic['s_rate'] if (length/logic.get('bay', 3)) <= 1 else logic.get('m_rate', rate)
+            sqm = span*length; rate = logic['s_rate'] if (length/logic.get('bay', 3)) <= 1 else logic.get('m_rate', 20)
             l1 = sqm * rate * m_q * logic['s_lab']
             st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame([{"Qty": m_q, "Product": f"Structure {span}x{length}m", "Unit Rate": sqm*rate, "Min_Lab": 350, "Raw_Lab": l1, "Lab_Math": f"Structure {span}x{length}: ${l1:,.2f}", "KG": (sqm*15)*m_q, "Is_Marquee": True, "Discount": 0.0}])], ignore_index=True); st.rerun()
 
@@ -196,9 +241,13 @@ with col2:
         l1 = f_qty * data['lab_fix']
         st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame([{"Qty": f_qty, "Product": p_sel, "Unit Rate": f_rate, "Min_Lab": 0, "Raw_Lab": l1, "Lab_Math": f"{p_sel}: ${l1:,.2f}", "KG": f_qty * data['kg'], "Is_Marquee": False, "Discount": 0.0}])], ignore_index=True); st.rerun()
 
+# --- SUMMARY ---
 if not st.session_state.df.empty:
     st.divider(); st.subheader("📝 QUOTE SUMMARY")
-    st.markdown("<div style='font-weight: 800; border-bottom: 2px solid #1A1D2D; padding-bottom: 10px;'>DESCRIPTION | QTY | RATE | DISC % | TOTAL</div>", unsafe_allow_html=True)
+    hc = st.columns([0.4, 3.2, 0.8, 1.2, 1, 1.2])
+    cols = ["", "DESCRIPTION", "QTY", "RATE", "DISC%", "TOTAL"]
+    for i, col in enumerate(hc): col.write(f"**{cols[i]}**")
+    
     h_tot_c, h_wk1_gear, total_kg, pdf_h, pdf_l = 0.0, 0.0, 0.0, [], []
     for idx, row in st.session_state.df.iterrows():
         qty, brate, dm = row["Qty"], row["Unit Rate"], (1 - (row["Discount"]/100))
@@ -213,15 +262,16 @@ if not st.session_state.df.empty:
         c5.write(f"${wk1_t:,.2f}")
         pdf_h.append(f"{row['Product']} Wk1: ${wk1_t:,.2f} (Incl {row['Discount']}% Disc)")
         if row["Lab_Math"]: pdf_l.append(row["Lab_Math"])
+
         if weeks > 1:
             r_rate = brate * 0.5 if row["Is_Marquee"] else brate
             r_tot = qty * r_rate * (weeks-1) * dm; h_tot_c += r_tot
-            b0, b1, b2, b3, b4, b5 = st.columns([0.4, 3.2, 0.8, 1.2, 1, 1.2])
-            b1.markdown(f"<div style='color:grey; font-style:italic;'>└ Recurring (x{weeks-1} wks)</div>", unsafe_allow_html=True)
-            b2.write(f"{qty:,.0f}"); b3.write(f"${r_rate*dm:,.2f}"); b5.write(f"${r_tot:,.2f}")
-            pdf_h.append(f"└ Recurring: ${r_tot:,.2f}")
+            cb = st.columns([0.4, 3.2, 0.8, 1.2, 1, 1.2])
+            cb[1].markdown(f"<div style='color:grey; font-style:italic;'>└ Recurring Hire (x{weeks-1} wks)</div>", unsafe_allow_html=True)
+            cb[2].write(f"{qty:,.0f}"); cb[3].write(f"${r_rate*dm:,.2f}"); cb[5].write(f"${r_tot:,.2f}")
+            pdf_h.append(f"-> Recurring: ${r_tot:,.2f}")
 
-    trks = math.ceil(total_kg / 6000) if total_kg > 0 else 1
+    trks = math.ceil(total_kg / 6000) or 1
     wav, crt = h_wk1_gear * 0.07, trks * st.session_state.km * 4 * 3.50 if cartage_mode == "Charge" else 0
     lab = max(st.session_state.df["Raw_Lab"].sum(), 350) if labour_mode == "Separate" else 0
     l_maths = [f"Damage Waiver (7% of Wk1 Gear): ${h_wk1_gear:,.2f} x 7% = ${wav:,.2f}", f"Cartage: {trks} Trucks x {st.session_state.km}km x 4 trips x $3.50 = ${crt:,.2f}"]
