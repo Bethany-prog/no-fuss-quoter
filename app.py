@@ -45,17 +45,21 @@ def create_calculation_pdf(name, subtotal, labour, waiver, cartage, grand, weeks
     pdf.set_font("Arial", "B", 10)
     pdf.cell(0, 7, clean_text(f"PROJECT: {name} | STATUS: {status.upper()}"), ln=True, align="C")
     pdf.cell(0, 7, f"HIRE PERIOD: {start.strftime('%d/%m/%Y')} to {end.strftime('%d/%m/%Y')} ({weeks} Week(s))", ln=True, align="C"); pdf.ln(5)
+    
     pdf.set_fill_color(240, 240, 240); pdf.set_font("Arial", "B", 12)
     pdf.cell(0, 10, " CALCULATIONS (Hire Breakdown)", 0, 1, "L", True); pdf.set_font("Arial", "", 10)
     for h in h_maths: pdf.cell(0, 7, clean_text(f" {h}"), border="B", ln=True)
     pdf.set_font("Arial", "B", 10); pdf.cell(0, 10, f" TOTAL HIRE: ${subtotal:,.2f}", ln=True, align="R"); pdf.ln(5)
+    
     if labour > 0:
         pdf.set_font("Arial", "B", 12); pdf.cell(0, 10, " LABOUR (Installation & Dismantle)", 0, 1, "L", True); pdf.set_font("Arial", "", 10)
         for l in l_details: pdf.cell(0, 7, clean_text(f" {l}"), border="B", ln=True)
         pdf.set_font("Arial", "B", 10); pdf.cell(0, 10, f" TOTAL LABOUR POOL: ${labour:,.2f}", ln=True, align="R"); pdf.ln(5)
+
     pdf.set_font("Arial", "B", 12); pdf.cell(0, 10, " LOGISTICS & WAIVER PROOFS", 0, 1, "L", True); pdf.set_font("Arial", "", 10)
     for m in log_maths: pdf.cell(0, 7, clean_text(f" {m}"), border="B", ln=True)
     pdf.set_font("Arial", "B", 10); pdf.cell(0, 10, f" LOGISTICS SUBTOTAL: ${waiver + cartage:,.2f}", ln=True, align="R")
+    
     pdf.ln(10); pdf.set_fill_color(26, 29, 45); pdf.set_text_color(255, 255, 255); pdf.set_font("Arial", "B", 14)
     pdf.cell(0, 15, f" GRAND TOTAL (EX GST): ${grand:,.2f} ", 0, 1, "R", True)
     return bytes(pdf.output())
@@ -79,13 +83,13 @@ STAGES = ["Quoted", "Accepted", "Paid", "On Hire", "Returned", "Cancelled"]
 STAGE_COLORS = {"Quoted": "#FF9100", "Accepted": "#00E676", "Paid": "#00B8D4", "On Hire": "#D500F9", "Returned": "#757575", "Cancelled": "#263238"}
 
 # --- EXPORT LOGIC ---
-export_data = []
+export_list = []
 for cat, items in GENERAL_PRODUCTS.items():
     for name, vals in items.items():
-        export_data.append({"Category": cat, "Product": name, "Weekly Rate": vals.get("rate",0), "Block Rate": vals.get("block",0), "Labour Fix": vals.get("lab_fix",0), "Weight (KG)": vals.get("kg",0)})
+        export_list.append({"Category": cat, "Product": name, "Weekly Rate": vals.get("rate",0), "Block Rate": vals.get("block",0), "Labour Fix": vals.get("lab_fix",0), "Weight (KG)": vals.get("kg",0)})
 for span, vals in STRUCT_LOGIC.items():
-    export_data.append({"Category": "Structure", "Product": f"Span {span}m", "Weekly Rate": vals["s_rate"], "Block Rate": vals["m_rate"], "Labour Fix": vals["s_lab"], "Weight (KG)": 15.0})
-master_df = pd.DataFrame(export_data)
+    export_list.append({"Category": "Structure", "Product": f"Span {span}m", "Weekly Rate": vals["s_rate"], "Block Rate": vals["m_rate"], "Labour Fix": vals["s_lab"], "Weight (KG)": 15.0})
+master_df = pd.DataFrame(export_list)
 
 # --- VISUAL STYLING ---
 st.markdown("""
@@ -123,7 +127,7 @@ def load_project_safe(fname):
 # --- MAIN UI ---
 st.title("⚡ Louis Quoting Engine")
 
-# Reminders
+# Reminders Dashboard
 quoted_files = [f for f in os.listdir("quotes") if f.endswith(".json")]
 for fn in quoted_files:
     try:
@@ -135,7 +139,7 @@ for fn in quoted_files:
                 if 0 <= diff <= 28:
                     cl, cr = st.columns([5, 1])
                     cl.warning(f"**{p.get('proj')}** starts in {diff} days.")
-                    if cr.button("📂 LOAD", key=f"edit_{fn}"): load_project_safe(fn); st.rerun()
+                    if cr.button("📂 LOAD", key=f"fedit_{fn}"): load_project_safe(fn); st.rerun()
     except: continue
 
 st.sidebar.title("📁 ARCHIVE")
@@ -162,7 +166,11 @@ st.session_state.status = st.selectbox("Stage", STAGES, index=STAGES.index(st.se
 st.markdown(f"<div style='height: 12px; background-color: {STAGE_COLORS[st.session_state.status]}; border-radius: 6px; margin-bottom: 20px;'></div>", unsafe_allow_html=True)
 c1, c2, c3 = st.columns(3)
 st.session_state.start_d, st.session_state.end_d = c1.date_input("Start", value=st.session_state.start_d), c2.date_input("End", value=st.session_state.end_d)
-st.session_state.km = c3.number_input("One-Way KM", value=st.session_state.km if st.session_state.km > 0 else None, placeholder="KM...")
+
+# CRITICAL FIX: Safe None comparison
+km_display = st.session_state.km if (st.session_state.km is not None and st.session_state.km > 0) else None
+st.session_state.km = c3.number_input("One-Way KM", value=km_display, placeholder="KM...")
+
 weeks = math.ceil(((st.session_state.end_d - st.session_state.start_d).days) / 7) or 1
 st.info(f"**Duration:** {weeks} Week(s)")
 
@@ -202,12 +210,12 @@ if not st.session_state.df.empty:
         qty, brate, dm = row["Qty"], row["Unit Rate"], (1 - (row["Discount"]/100))
         total_kg += row["KG"]; h_wk1_gear += (qty * brate)
         c0, c1, c2, c3, c4, c5 = st.columns([0.4, 3.2, 0.8, 1.2, 1, 1.2])
-        if c0.button("🗑️", key=f"del_{idx}"): st.session_state.df.drop(idx, inplace=True); st.rerun()
+        if c0.button("🗑️", key=f"sdel_{idx}"): st.session_state.df.drop(idx, inplace=True); st.rerun()
         wk1_t = (qty * brate + row["Raw_Lab"]) * dm if labour_mode == "Included" else (qty * brate) * dm
         h_tot_c += wk1_t
         c1.markdown(f"<div class='item-text'>{row['Product']} - Wk 1</div>", unsafe_allow_html=True)
         c2.write(f"{qty:,.0f}"); c3.write(f"${wk1_t/qty:,.2f}")
-        st.session_state.df.at[idx, "Discount"] = c4.number_input("", 0.0, 100.0, float(row["Discount"]), 1.0, key=f"d_{idx}", label_visibility="collapsed")
+        st.session_state.df.at[idx, "Discount"] = c4.number_input("", 0.0, 100.0, float(row["Discount"]), 1.0, key=f"sdisc_{idx}", label_visibility="collapsed")
         c5.write(f"${wk1_t:,.2f}"); pdf_h.append(f"{row['Product']} Wk1: ${wk1_t:,.2f}")
         if row["Lab_Math"]: pdf_l.append(row["Lab_Math"])
         if weeks > 1:
