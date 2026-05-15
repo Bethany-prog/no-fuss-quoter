@@ -28,17 +28,14 @@ def check_password():
 if not check_password():
     st.stop()
 
-# --- VISUAL STYLING (v36.1 - THE "CLEAN & BRIGHT" BUILD) ---
+# --- VISUAL STYLING (v36.2 - STABLE & POLISHED) ---
 st.set_page_config(page_title="Louis Quoting Tool", layout="wide")
 st.markdown("""
     <style>
     .main { background-color: #F4F7F9 !important; }
-    
-    /* Headers */
     h1 { color: #1A1D2D !important; font-size: 48px !important; font-weight: 900 !important; margin-bottom: 0px; }
     h3 { color: #FFFFFF !important; border-left: 10px solid #00E676; padding: 15px; background-color: #1A1D2D; border-radius: 0 10px 10px 0; font-size: 22px !important; }
     
-    /* Giant Metrics */
     div.stMetric { 
         background-color: #FFFFFF !important; 
         padding: 25px !important; 
@@ -47,25 +44,11 @@ st.markdown("""
         box-shadow: 0 4px 6px rgba(0,0,0,0.05) !important;
     }
     div[data-testid="stMetricValue"] { color: #3D5AFE !important; font-size: 34px !important; font-weight: 800 !important; }
-    [data-testid="stMetricLabel"] p { color: #5F6368 !important; font-weight: 700 !important; text-transform: uppercase; letter-spacing: 1px; }
+    [data-testid="stMetricLabel"] p { color: #5F6368 !important; font-weight: 700 !important; text-transform: uppercase; }
 
-    /* Summary Grid Alignment */
-    .row-align {
-        display: flex;
-        align-items: center;
-        padding: 12px 0;
-        border-bottom: 1px solid #E0E0E0;
-    }
     .item-text { font-size: 19px !important; font-weight: 600 !important; color: #202124; }
     .item-sub { font-size: 16px !important; color: #70757A; font-style: italic; }
     
-    /* Control Tower Cards */
-    .fup-card {
-        background-color: #FFFFFF; border-left: 8px solid #FF1744; padding: 20px; border-radius: 12px; margin-bottom: 15px;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-    }
-    
-    /* Big Grand Total */
     .gt-banner {
         background: #1A1D2D; color: #00E676; padding: 35px; border-radius: 20px;
         text-align: right; font-size: 44px !important; font-weight: 900;
@@ -110,16 +93,27 @@ if 'km' not in st.session_state: st.session_state.km = 0.0
 if 'start_d' not in st.session_state: st.session_state.start_d = date.today()
 if 'end_d' not in st.session_state: st.session_state.end_d = date.today()
 
-# --- LOAD FUNC ---
-def load_project(fname):
-    with open(f"quotes/{fname}", "r") as f:
-        d = json.load(f)
-        st.session_state.df = pd.DataFrame(d["items"])
-        if "Discount" not in st.session_state.df.columns: st.session_state.df["Discount"] = 0.0
-        st.session_state.status, st.session_state.proj = d.get("status", "Quoted"), d.get("proj", "New")
-        st.session_state.start_d = datetime.strptime(d["start_date"], '%Y-%m-%d').date()
-        st.session_state.end_d = datetime.strptime(d["end_date"], '%Y-%m-%d').date()
-        st.session_state.km = float(d.get("km", 0.0))
+# --- SAFE LOAD FUNC ---
+def load_project_safe(fname):
+    try:
+        with open(f"quotes/{fname}", "r") as f:
+            d = json.load(f)
+            st.session_state.df = pd.DataFrame(d["items"])
+            if "Discount" not in st.session_state.df.columns: st.session_state.df["Discount"] = 0.0
+            st.session_state.status = d.get("status", "Quoted")
+            st.session_state.proj = d.get("proj", fname.replace(".json", ""))
+            
+            # Safe Date Parsing
+            try: st.session_state.start_d = datetime.strptime(d.get("start_date"), '%Y-%m-%d').date()
+            except: st.session_state.start_d = date.today()
+            try: st.session_state.end_d = datetime.strptime(d.get("end_date"), '%Y-%m-%d').date()
+            except: st.session_state.end_d = date.today()
+            
+            # Safe KM Parsing (The Crash Fix)
+            km_raw = d.get("km", 0.0)
+            st.session_state.km = float(km_raw) if km_raw is not None else 0.0
+    except Exception as e:
+        st.error(f"Error loading file: {e}")
 
 # --- MAIN UI ---
 st.title("📦 NO FUSS QUOTER")
@@ -131,19 +125,19 @@ for fn in quoted_files:
     try:
         with open(f"quotes/{fn}", "r") as f:
             p = json.load(f)
-            if p.get("status") == "Quoted":
+            if p.get("status") == "Quoted" and p.get("start_date"):
                 sd = datetime.strptime(p["start_date"], '%Y-%m-%d').date()
                 diff = (sd - date.today()).days
-                if 0 <= diff <= 28: followups.append({"name": p.get("proj"), "days": diff, "file": fn})
+                if 0 <= diff <= 28: followups.append({"name": p.get("proj", "Unknown"), "days": diff, "file": fn})
     except: continue
 
 if followups:
     st.markdown("### 📡 ACTIVE FOLLOW-UPS")
     for f in followups:
-        c_left, c_right = st.columns([5, 1])
-        c_left.warning(f"**{f['name']}** starts in {f['days']} days.")
-        if c_right.button("📂 LOAD", key=f"edit_{f['file']}"):
-            load_project(f['file']); st.rerun()
+        cl, cr = st.columns([5, 1])
+        cl.warning(f"**{f['name']}** starts in {f['days']} days.")
+        if cr.button("📂 LOAD", key=f"edit_{f['file']}"):
+            load_project_safe(f['file']); st.rerun()
 
 # --- SIDEBAR ---
 st.sidebar.title("📁 ARCHIVE")
@@ -155,7 +149,7 @@ if st.sidebar.button("💾 SAVE PROJECT"):
     with open(f"quotes/{st.session_state.proj}.json", "w") as f: json.dump(data, f)
     st.sidebar.success("Saved!")
 
-# --- INPUTS ---
+# --- WORKSPACE ---
 st.markdown(f"### 📍 Project: {st.session_state.proj}")
 st.session_state.status = st.selectbox("Stage", STAGES, index=STAGES.index(st.session_state.status) if st.session_state.status in STAGES else 0)
 
@@ -163,9 +157,8 @@ c1, c2, c3 = st.columns(3)
 st.session_state.start_d = c1.date_input("Start", value=st.session_state.start_d)
 st.session_state.end_d = c2.date_input("End", value=st.session_state.end_d)
 
-# FIX: SAFETY FOR NONE-TYPE ERROR
-km_val = st.session_state.km if (st.session_state.km and st.session_state.km > 0) else None
-st.session_state.km = c3.number_input("One-Way KM", value=km_val, placeholder="KM...")
+k_val = st.session_state.km if (st.session_state.km and st.session_state.km > 0) else None
+st.session_state.km = c3.number_input("One-Way KM", value=k_val, placeholder="KM...")
 
 diff = (st.session_state.end_d - st.session_state.start_d).days
 weeks = math.ceil(diff / 7) if diff > 0 else 1
@@ -212,7 +205,6 @@ if not st.session_state.df.empty:
         qty, brate, dm = row["Qty"], row["Unit Rate"], (1 - (row["Discount"]/100))
         total_kg += row["KG"]; h_wk1_gear += (qty * brate)
         
-        # FIX: ALIGNMENT VIA FLEX COLUMNS
         c0, c1, c2, c3, c4, c5 = st.columns([0.4, 3.2, 0.8, 1.2, 1, 1.2])
         if c0.button("🗑️", key=f"del_{idx}"): st.session_state.df.drop(idx, inplace=True); st.rerun()
         
@@ -222,8 +214,6 @@ if not st.session_state.df.empty:
         c1.markdown(f"<div class='item-text'>{row['Product']} - Wk 1</div>", unsafe_allow_html=True)
         c2.markdown(f"<div class='item-text'>{qty:,.0f}</div>", unsafe_allow_html=True)
         c3.markdown(f"<div class='item-text'>${wk1_t/qty:,.2f}</div>", unsafe_allow_html=True)
-        
-        # Safety Discount Input
         st.session_state.df.at[idx, "Discount"] = c4.number_input("", 0.0, 100.0, float(row["Discount"]), 1.0, key=f"d_{idx}", label_visibility="collapsed")
         c5.markdown(f"<div class='item-text'>${wk1_t:,.2f}</div>", unsafe_allow_html=True)
 
@@ -236,9 +226,8 @@ if not st.session_state.df.empty:
             b3.markdown(f"<div class='item-sub'>${r_rate*dm:,.2f}</div>", unsafe_allow_html=True)
             b5.markdown(f"<div class='item-sub'>${r_tot:,.2f}</div>", unsafe_allow_html=True)
 
-    # FINAL TOTALS
     trks = math.ceil(total_kg / 6000) if total_kg > 0 else 1
-    wav = h_wk1_gear * 0.07; crt = trks * st.session_state.km * 4 * 3.50 if cartage_mode == "Charge" else 0
+    wav = h_wk1_gear * 0.07; crt = trks * (st.session_state.km if st.session_state.km else 0) * 4 * 3.50 if cartage_mode == "Charge" else 0
     lab = max(st.session_state.df["Min_Lab"].max(), st.session_state.df["Raw_Lab"].sum()) if labour_mode == "Separate" else 0
     
     st.divider()
