@@ -71,17 +71,24 @@ def create_calculation_pdf(name, subtotal, labour, waiver, cartage, grand, weeks
     pdf.set_font("Arial", "B", 10)
     pdf.cell(0, 7, clean_text(f"PROJECT: {name} | STATUS: {status.upper()}"), ln=True, align="C")
     pdf.cell(0, 7, f"HIRE PERIOD: {start.strftime('%d/%m/%Y')} to {end.strftime('%d/%m/%Y')} ({weeks} Week(s))", ln=True, align="C"); pdf.ln(5)
+    
     pdf.set_fill_color(240, 240, 240); pdf.set_font("Arial", "B", 12)
     pdf.cell(0, 10, " CALCULATIONS (Hire Breakdown)", 0, 1, "L", True); pdf.set_font("Arial", "", 10)
-    for h in h_maths: pdf.cell(0, 7, clean_text(f" {h}"), border="B", ln=True)
+    for h in h_maths: 
+        pdf.cell(0, 7, clean_text(f" {h}"), border="B", ln=True)
     pdf.set_font("Arial", "B", 10); pdf.cell(0, 10, f" TOTAL HIRE: ${subtotal:,.2f}", ln=True, align="R"); pdf.ln(5)
+    
     if labour > 0:
         pdf.set_font("Arial", "B", 12); pdf.cell(0, 10, " OTHER LABOUR", 0, 1, "L", True); pdf.set_font("Arial", "", 10)
-        for l in l_details: pdf.cell(0, 7, clean_text(f" {l}"), border="B", ln=True)
+        for l in l_details: 
+            pdf.cell(0, 7, clean_text(f" {l}"), border="B", ln=True)
         pdf.set_font("Arial", "B", 10); pdf.cell(0, 10, f" TOTAL LABOUR POOL: ${labour:,.2f}", ln=True, align="R"); pdf.ln(5)
+
     pdf.set_font("Arial", "B", 12); pdf.cell(0, 10, " LOGISTICS & WAIVER PROOFS", 0, 1, "L", True); pdf.set_font("Arial", "", 10)
-    for m in log_maths: pdf.cell(0, 7, clean_text(f" {m}"), border="B", ln=True)
+    for m in log_maths: 
+        pdf.cell(0, 7, clean_text(f" {m}"), border="B", ln=True)
     pdf.set_font("Arial", "B", 10); pdf.cell(0, 10, f" LOGISTICS SUBTOTAL: ${waiver + cartage:,.2f}", ln=True, align="R")
+    
     pdf.ln(10); pdf.set_fill_color(26, 29, 45); pdf.set_text_color(255, 255, 255); pdf.set_font("Arial", "B", 14)
     pdf.cell(0, 15, f" GRAND TOTAL (EX GST): ${grand:,.2f} ", 0, 1, "R", True)
     return bytes(pdf.output())
@@ -128,33 +135,16 @@ st.markdown("""
     .main { background-color: #F4F7F9 !important; }
     h1 { color: #1A1D2D !important; font-size: 48px !important; font-weight: 900 !important; }
     h3 { color: #FFFFFF !important; border-left: 10px solid #00E676; padding: 15px; background-color: #1A1D2D; border-radius: 0 10px 10px 0; }
-    div.stMetric { background-color: #FFFFFF !important; padding: 10px !important; border-radius: 12px !important; border: 2px solid #3D5AFE !important; }
-    div[data-testid="stMetricValue"] { color: #3D5AFE !important; font-size: 28px !important; font-weight: 800 !important; }
-    .item-text { font-size: 19px !important; font-weight: 700 !important; color: #1A1D2D; margin-top: 10px; }
-    .gt-banner { background: #1A1D2D; color: #00E676; padding: 35px; border-radius: 20px; text-align: right; font-size: 42px !important; font-weight: 900; margin-top: 30px; border: 5px solid #00E676; }
+    div.stMetric { background-color: #FFFFFF !important; padding: 15px !important; border-radius: 12px !important; border: 2px solid #3D5AFE !important; }
+    div[data-testid="stMetricValue"] { color: #3D5AFE !important; font-size: 32px !important; font-weight: 800 !important; }
+    .item-text { font-size: 20px !important; font-weight: 700 !important; color: #1A1D2D; margin-top: 10px; }
+    .gt-banner { background: #1A1D2D; color: #00E676; padding: 40px; border-radius: 20px; text-align: right; font-size: 44px !important; font-weight: 900; margin-top: 30px; border: 5px solid #00E676; }
     </style>
     """, unsafe_allow_html=True)
 
 # --- DASHBOARD ---
 st.title("⚡ Louis Master Quoter")
 quoted_files = sorted([f for f in os.listdir("quotes") if f.endswith(".json")])
-followups = []
-for fn in quoted_files:
-    try:
-        with open(f"quotes/{fn}", "r") as f:
-            p = json.load(f)
-            if p.get("status") == "Quoted" and p.get("start_date"):
-                sd = datetime.strptime(p["start_date"], '%Y-%m-%d').date()
-                diff = (sd - date.today()).days
-                if 0 <= diff <= 28: followups.append({"name": p.get("proj", fn), "days": diff, "file": fn})
-    except: continue
-
-if followups:
-    st.markdown("### 📡 CONTROL TOWER")
-    for f in followups:
-        cl, cr = st.columns([5, 1])
-        cl.warning(f"**{f['name']}** starts in {f['days']} days.")
-        if cr.button("📂 LOAD", key=f"dash_{f['file']}"): load_project_safe(f['file'])
 
 # --- SIDEBAR ---
 st.sidebar.title("📁 PROJECT ARCHIVE")
@@ -172,13 +162,14 @@ if st.sidebar.button("🗑️ DELETE JOB") and load_choice != "-- Choose --": os
 # --- WORKSPACE ---
 st.markdown(f"### 📍 Project: {st.session_state.proj}")
 st.session_state.status = st.selectbox("Stage", STAGES, index=STAGES.index(st.session_state.status) if st.session_state.status in STAGES else 0)
-st.markdown(f"<div style='height: 12px; background-color: {STAGE_COLORS[st.session_state.status]}; border-radius: 6px; margin-bottom: 20px;'></div>", unsafe_allow_html=True)
+st.markdown(f"<div style='height: 14px; background-color: {STAGE_COLORS[st.session_state.status]}; border-radius: 7px; margin-bottom: 25px;'></div>", unsafe_allow_html=True)
 
 c1, c2, c3 = st.columns(3)
-st.session_state.start_d, st.session_state.end_d = c1.date_input("Start", value=st.session_state.start_d), c2.date_input("End", value=st.session_state.end_d)
-st.session_state.km = c3.number_input("One-Way KM", value=st.session_state.km if st.session_state.km > 0 else None, placeholder="KM...")
+st.session_state.start_d = c1.date_input("Start", value=st.session_state.start_d)
+st.session_state.end_d = c2.date_input("End", value=st.session_state.end_d)
+km_val = st.session_state.km if (st.session_state.km and st.session_state.km > 0) else None
+st.session_state.km = c3.number_input("One-Way KM", value=km_val, placeholder="KM...")
 weeks = math.ceil(((st.session_state.end_d - st.session_state.start_d).days) / 7) or 1
-st.info(f"**Duration:** {weeks} Week(s)")
 
 b1, b2 = st.columns(2)
 cartage_mode, labour_mode = b1.segmented_control("Cartage", ["Charge", "Free"], default="Charge"), b2.segmented_control("Labour", ["Separate", "Include in Hire", "Free"], default="Separate")
