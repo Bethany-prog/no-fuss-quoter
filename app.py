@@ -67,7 +67,7 @@ def create_calculation_pdf(name, subtotal, labour, waiver, cartage, grand, weeks
     pdf.cell(0, 15, f" GRAND TOTAL (EX GST): ${grand:,.2f} ", 0, 1, "R", True)
     return bytes(pdf.output())
 
-# --- MASTER DATA FROM SPREADSHEET ---
+# --- MASTER DATA ---
 FLOORING_DATA = {
     "I-Trac®": {"rate": 23.40, "block": 46.80, "lab_fix": 4.65, "kg": 15.0},
     "Supa-Trac®": {"rate": 11.55, "block": 25.00, "lab_fix": 4.65, "kg": 4.5, "sheet_sqm": 3.13},
@@ -77,6 +77,7 @@ FLOORING_DATA = {
 }
 STRUCT_LOGIC = {span: {"bay": (5 if span >= 10 else 3), "s_rate": 23.0, "m_rate": 18.20, "s_lab": 0.40} for span in [3, 4, 6, 9, 10, 12, 15, 20]}
 STAGES = ["Quoted", "Accepted", "Paid", "On Hire", "Returned", "Cancelled"]
+STAGE_COLORS = {"Quoted": "#FF9100", "Accepted": "#00E676", "Paid": "#00B8D4", "On Hire": "#D500F9", "Returned": "#757575", "Cancelled": "#263238"}
 
 # --- SESSION STATE ---
 if 'df' not in st.session_state: st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Total", "Min_Lab", "Raw_Lab", "KG", "Is_Marquee", "Discount", "Lab_Math"])
@@ -86,10 +87,22 @@ if 'km' not in st.session_state: st.session_state.km = 0.0
 if 'start_d' not in st.session_state: st.session_state.start_d = date.today()
 if 'end_d' not in st.session_state: st.session_state.end_d = date.today()
 
+def load_project_safe(fname):
+    try:
+        with open(f"quotes/{fname}", "r") as f:
+            d = json.load(f); st.session_state.df = pd.DataFrame(d["items"])
+            for c in ["Discount", "Lab_Math"]:
+                if c not in st.session_state.df.columns: st.session_state.df[c] = 0.0 if c=="Discount" else ""
+            st.session_state.status, st.session_state.proj = d.get("status", "Quoted"), d.get("proj", fname.replace(".json", ""))
+            st.session_state.start_d = datetime.strptime(d.get("start_date", str(date.today())), '%Y-%m-%d').date()
+            st.session_state.end_d = datetime.strptime(d.get("end_date", str(date.today())), '%Y-%m-%d').date()
+            st.session_state.km = float(d.get("km", 0.0))
+    except: st.error("Load Error")
+
 # --- MAIN UI ---
 st.title("⚡ Louis Master Quoter")
 
-# Reminders Dashboard
+# Reminders
 quoted_files = [f for f in os.listdir("quotes") if f.endswith(".json")]
 for fn in quoted_files:
     try:
@@ -101,14 +114,7 @@ for fn in quoted_files:
                 if 0 <= diff <= 28:
                     cl, cr = st.columns([5, 1])
                     cl.warning(f"**{p.get('proj')}** starts in {diff} days.")
-                    if cr.button("📂 LOAD", key=f"fedit_{fn}"):
-                        with open(f"quotes/{fn}", "r") as f2:
-                            d = json.load(f2); st.session_state.df = pd.DataFrame(d["items"])
-                            st.session_state.status, st.session_state.proj = d.get("status", "Quoted"), d.get("proj", fn.replace(".json", ""))
-                            st.session_state.start_d = datetime.strptime(d.get("start_date", str(date.today())), '%Y-%m-%d').date()
-                            st.session_state.end_d = datetime.strptime(d.get("end_date", str(date.today())), '%Y-%m-%d').date()
-                            st.session_state.km = float(d.get("km", 0.0))
-                        st.rerun()
+                    if cr.button("📂 LOAD", key=f"fedit_{fn}"): load_project_safe(fn); st.rerun()
     except: continue
 
 st.sidebar.title("📁 ARCHIVE")
@@ -120,11 +126,19 @@ if st.sidebar.button("💾 SAVE PROJECT"):
     with open(f"quotes/{st.session_state.proj}.json", "w") as f: json.dump(data, f)
     st.sidebar.success("Saved!")
 
-# Inputs
+load_choice = st.sidebar.selectbox("Retrieval", ["-- Choose --"] + sorted([f.replace(".json", "") for f in os.listdir("quotes") if f.endswith(".json")]))
+if st.sidebar.button("📂 LOAD PROJECT") and load_choice != "-- Choose --": load_project_safe(f"{load_choice}.json"); st.rerun()
+if st.sidebar.button("🗑️ DELETE JOB") and load_choice != "-- Choose --": os.remove(f"quotes/{load_choice}.json"); st.rerun()
+
+# Workspace
+st.markdown(f"### 📍 Project: {st.session_state.proj}")
+st.session_state.status = st.selectbox("Stage", STAGES, index=STAGES.index(st.session_state.status) if st.session_state.status in STAGES else 0)
+st.markdown(f"<div style='height: 12px; background-color: {STAGE_COLORS[st.session_state.status]}; border-radius: 6px; margin-bottom: 20px;'></div>", unsafe_allow_html=True)
+
 c1, c2, c3 = st.columns(3)
 st.session_state.start_d, st.session_state.end_d = c1.date_input("Start", value=st.session_state.start_d), c2.date_input("End", value=st.session_state.end_d)
-km_val = st.session_state.km if (st.session_state.km and st.session_state.km > 0) else None
-st.session_state.km = c3.number_input("One-Way KM", value=km_val, placeholder="KM...")
+km_shw = st.session_state.km if (st.session_state.km and st.session_state.km > 0) else None
+st.session_state.km = c3.number_input("One-Way KM", value=km_shw, placeholder="KM...")
 
 weeks = math.ceil(((st.session_state.end_d - st.session_state.start_d).days) / 7) or 1
 st.info(f"**Duration:** {weeks} Week(s)")
@@ -141,7 +155,8 @@ with col1:
         if len(nums) >= 2:
             span, length = int(nums[0]), int(nums[1])
             logic = STRUCT_LOGIC.get(span, STRUCT_LOGIC[4])
-            sqm = span*length; rate = logic['s_rate'] if (length/logic.get('bay',3)) <= 1 else logic['m_rate']
+            sqm = span*length
+            rate = logic['s_rate'] if (length/3) <= 1 else logic['m_rate']
             l1 = sqm * rate * m_q * logic['s_lab']
             st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame([{"Qty": m_q, "Product": f"Structure {span}x{length}m", "Unit Rate": sqm*rate, "Min_Lab": 350, "Raw_Lab": l1, "Lab_Math": f"Structure {span}x{length}: ${l1:,.2f}", "KG": (sqm*15)*m_q, "Is_Marquee": True, "Discount": 0.0}])], ignore_index=True); st.rerun()
 
@@ -151,12 +166,10 @@ with col2:
     f_qty = st.number_input("Amount (SQM)", min_value=0.0, value=None)
     if st.button("Add Flooring") and f_qty:
         data = FLOORING_DATA[p_sel]
-        # Supa-Trac Sheet Logic
         effective_qty = f_qty
         if "sheet_sqm" in data:
             sheets = math.ceil(f_qty / data["sheet_sqm"])
             effective_qty = sheets * data["sheet_sqm"]
-        
         f_rate = (data['block']/4) if (weeks >= 4) else data['rate']
         l1 = f_qty * data['lab_fix']
         st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame([{"Qty": f_qty, "Product": p_sel, "Unit Rate": f_rate, "Min_Lab": 0, "Raw_Lab": l1, "Lab_Math": f"{p_sel}: ${l1:,.2f}", "KG": effective_qty * data['kg'], "Is_Marquee": False, "Discount": 0.0}])], ignore_index=True); st.rerun()
@@ -164,24 +177,36 @@ with col2:
 # --- SUMMARY ---
 if not st.session_state.df.empty:
     st.divider(); st.subheader("📝 QUOTE SUMMARY")
+    hc = st.columns([0.4, 3.2, 0.8, 1.2, 1, 1.2])
+    cols = ["", "DESCRIPTION", "QTY", "RATE", "DISC%", "TOTAL"]
+    for i, col in enumerate(hc): col.write(f"**{cols[i]}**")
+    
     h_tot_c, h_wk1_gear, total_kg, pdf_h, pdf_l = 0.0, 0.0, 0.0, [], []
     for idx, row in st.session_state.df.iterrows():
         qty, brate, dm = row["Qty"], row["Unit Rate"], (1 - (row["Discount"]/100))
         total_kg += row["KG"]; h_wk1_gear += (qty * brate)
         c0, c1, c2, c3, c4, c5 = st.columns([0.4, 3.2, 0.8, 1.2, 1, 1.2])
         if c0.button("🗑️", key=f"sdel_{idx}"): st.session_state.df.drop(idx, inplace=True); st.rerun()
+        
         wk1_t = (qty * brate + row["Raw_Lab"]) * dm if labour_mode == "Include in Hire" else (qty * brate) * dm
         h_tot_c += wk1_t
         c1.markdown(f"<div style='font-size:18px; font-weight:600;'>{row['Product']} - Wk 1</div>", unsafe_allow_html=True)
         c2.write(f"{qty:,.0f}"); c3.write(f"${wk1_t/qty:,.2f}")
         st.session_state.df.at[idx, "Discount"] = c4.number_input("", 0.0, 100.0, float(row["Discount"]), 1.0, key=f"sd_{idx}", label_visibility="collapsed")
-        c5.write(f"${wk1_t:,.2f}"); pdf_h.append(f"{row['Product']} Wk1: ${wk1_t:,.2f}"); if row["Lab_Math"]: pdf_l.append(row["Lab_Math"])
+        c5.write(f"${wk1_t:,.2f}")
+        
+        # PDF FIX: Fixed syntax formatting
+        pdf_h.append(f"{row['Product']} Wk1: ${wk1_t:,.2f}")
+        if row["Lab_Math"]:
+            pdf_l.append(row["Lab_Math"])
+
         if weeks > 1:
             r_rate = brate * 0.5 if row["Is_Marquee"] else brate
             r_tot = qty * r_rate * (weeks-1) * dm; h_tot_c += r_tot
             cb = st.columns([0.4, 3.2, 0.8, 1.2, 1, 1.2])
             cb[1].markdown(f"<div style='color:grey; font-style:italic;'>└ Recurring (x{weeks-1} wks)</div>", unsafe_allow_html=True)
-            cb[2].write(f"{qty:,.0f}"); cb[3].write(f"${r_rate*dm:,.2f}"); cb[5].write(f"${r_tot:,.2f}"); pdf_h.append(f"-> Recurring: ${r_tot:,.2f}")
+            cb[2].write(f"{qty:,.0f}"); cb[3].write(f"${r_rate*dm:,.2f}"); cb[5].write(f"${r_tot:,.2f}")
+            pdf_h.append(f"-> Recurring: ${r_tot:,.2f}")
 
     trucks, cur_km = (math.ceil(total_kg / 6000) or 1), (st.session_state.km if st.session_state.km else 0)
     wav, crt = h_wk1_gear * 0.07, trucks * cur_km * 4 * 3.50 if cartage_mode == "Charge" else 0
