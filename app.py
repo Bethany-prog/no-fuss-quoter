@@ -237,7 +237,6 @@ st.divider(); col1, col2 = st.columns(2)
 with col1:
     st.markdown("### ⚡ Structures")
     m_in, m_q = st.text_input("Size (e.g. 10x15)"), st.number_input("Qty", min_value=1, value=None, key="mq_in")
-    # Added anchoring toggle interface control directly inside the layout block
     anchoring_type = st.segmented_control("Anchoring Method", ["Pegged", "Weighted"], default="Pegged")
     
     if st.button("Add Structure") and m_in and m_q:
@@ -247,11 +246,48 @@ with col1:
             logic = STRUCT_LOGIC.get(span, STRUCT_LOGIC[4])
             sqm = span*length; hire_rate = logic['s_rate'] if (length/3) <= 1 else logic['m_rate']
             brate = sqm * hire_rate; lab_cost = brate * logic['s_lab']
+            
+            # 1. Append Structure Primary Record
             st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame([{
                 "Qty": m_q, "Product": f"Structure {span}x{length}m", "Unit Rate": brate, "Min_Lab": 350, 
                 "Raw_Lab": lab_cost, "Lab_Math": f"Structure {span}x{length} ({anchoring_type}): ${lab_cost:,.2f}", "KG": (sqm*15)*m_q, 
                 "Is_Marquee": True, "Discount": 0.0, "Lab_Per_Unit": 0, "Base_Hire": brate, "Anchoring": anchoring_type
-            }])], ignore_index=True); st.rerun()
+            }])], ignore_index=True)
+            
+            # 2. AUTOMATIC STRUCTURAL WEIGHT CALCULATION
+            if anchoring_type == "Weighted":
+                bay_len = logic.get('bay', 3)
+                num_bays = math.ceil(length / bay_len)
+                legs_per_structure = (num_bays + 1) * 2
+                total_legs = legs_per_structure * m_q
+                
+                # Wind-loading weight distribution matrix scaling by structure size
+                if span <= 6:
+                    weights_per_leg = 2   # 60kg per leg
+                elif span <= 12:
+                    weights_per_leg = 4   # 120kg per leg
+                else:
+                    weights_per_leg = 6   # 180kg per leg
+                    
+                calculated_weights = total_legs * weights_per_leg
+                
+                # Append weights line item automatically
+                st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame([{
+                    "Qty": calculated_weights, 
+                    "Product": "30kg Weights", 
+                    "Unit Rate": 6.60, 
+                    "Min_Lab": 0, 
+                    "Raw_Lab": calculated_weights * 1.65, 
+                    "Lab_Math": f"30kg Weights: {calculated_weights:,.0f} units x $1.65 = ${calculated_weights * 1.65:,.2f}", 
+                    "KG": calculated_weights * 30.0, 
+                    "Is_Marquee": False, 
+                    "Discount": 0.0, 
+                    "Lab_Per_Unit": 1.65, 
+                    "Base_Hire": 6.60, 
+                    "Anchoring": ""
+                }])], ignore_index=True)
+                
+            st.rerun()
 
 with col2:
     st.markdown("### 🪵 Catalog Items")
@@ -291,7 +327,7 @@ if not st.session_state.df.empty:
         if c0.button("🗑️", key=f"sdel_{idx}"): st.session_state.df.drop(idx, inplace=True); st.rerun()
         
         prod_display = row['Product']
-        if row['Anchoring']:
+        if 'Anchoring' in row and row['Anchoring']:
             prod_display += f" ({row['Anchoring']})"
             
         c1.markdown(f"<div class='item-text'>{prod_display} - Wk 1</div>", unsafe_allow_html=True)
