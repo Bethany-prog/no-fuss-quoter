@@ -6,6 +6,7 @@ from fpdf import FPDF
 import re
 import json
 import os
+import urllib.parse
 
 # --- DIRECTORIES ---
 if not os.path.exists("quotes"):
@@ -128,7 +129,7 @@ for f_name in quoted_files:
                     followup_list.append({"Project": p_data.get("proj", "Unknown"), "Start Date": sd.strftime('%d/%m/%Y'), "Days Left": diff, "Priority": "🚨 URGENT" if diff <= 14 else "⚠️ WARNING"})
     except: continue
 
-# --- SIDEBAR (ARCHIVE MANAGER) ---
+# --- SIDEBAR ---
 st.sidebar.title("📁 Archive Manager")
 if st.sidebar.button("➕ START NEW PROJECT"):
     st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Total", "Min_Lab", "Raw_Lab", "Lab_Math", "KG", "Is_Marquee", "Hire_Math_Str", "Discount"])
@@ -252,7 +253,18 @@ if not st.session_state.df.empty:
         
         c1, c2, c3, c4, c5, c6 = st.columns([0.4, 3.2, 0.8, 1.2, 1, 1.2])
         if c1.button("🗑️", key=f"del_{idx}"): st.session_state.df = st.session_state.df.drop(idx); st.rerun()
-        disc = c5.number_input("", 0.0, 100.0, float(row.get("Discount", 0)), 1.0, f"disc_{idx}", label_visibility="collapsed")
+        
+        # BUG FIX: FIXED PARAMETER MISMATCH IN number_input
+        current_disc = float(row.get("Discount", 0.0))
+        disc = c5.number_input(
+            label="", 
+            min_value=0.0, 
+            max_value=100.0, 
+            value=current_disc, 
+            step=1.0, 
+            key=f"disc_{idx}", 
+            label_visibility="collapsed"
+        )
         st.session_state.df.at[idx, "Discount"] = disc
         dm = (1 - (disc / 100)); h_tot_wk1_gear += gear_wk1
 
