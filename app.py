@@ -28,13 +28,12 @@ def check_password():
 if not check_password():
     st.stop()
 
-# --- VISUAL STYLING (v36.2 - STABLE & POLISHED) ---
-st.set_page_config(page_title="Louis Quoting Tool", layout="wide")
+# --- VISUAL STYLING ---
 st.markdown("""
     <style>
     .main { background-color: #F4F7F9 !important; }
-    h1 { color: #1A1D2D !important; font-size: 48px !important; font-weight: 900 !important; margin-bottom: 0px; }
-    h3 { color: #FFFFFF !important; border-left: 10px solid #00E676; padding: 15px; background-color: #1A1D2D; border-radius: 0 10px 10px 0; font-size: 22px !important; }
+    h1 { color: #1A1D2D !important; font-size: 48px !important; font-weight: 900 !important; }
+    h3 { color: #FFFFFF !important; border-left: 10px solid #00E676; padding: 15px; background-color: #1A1D2D; border-radius: 0 10px 10px 0; }
     
     div.stMetric { 
         background-color: #FFFFFF !important; 
@@ -82,7 +81,8 @@ GENERAL_PRODUCTS = {
         "Barrier": {"rate": 70.00, "lab_p": 0.40, "kg": 60.0}
     }
 }
-STAGES = ["Quoted", "Accepted", "Paid", "On Hire", "Returned"]
+STAGES = ["Quoted", "Accepted", "Paid", "On Hire", "Returned", "Cancelled"]
+STAGE_COLORS = {"Quoted": "#FF9100", "Accepted": "#00E676", "Paid": "#00B8D4", "On Hire": "#D500F9", "Returned": "#757575", "Cancelled": "#263238"}
 
 # --- SESSION STATE ---
 if 'df' not in st.session_state:
@@ -93,32 +93,26 @@ if 'km' not in st.session_state: st.session_state.km = 0.0
 if 'start_d' not in st.session_state: st.session_state.start_d = date.today()
 if 'end_d' not in st.session_state: st.session_state.end_d = date.today()
 
-# --- SAFE LOAD FUNC ---
+# --- SAFE LOAD ---
 def load_project_safe(fname):
     try:
         with open(f"quotes/{fname}", "r") as f:
             d = json.load(f)
             st.session_state.df = pd.DataFrame(d["items"])
             if "Discount" not in st.session_state.df.columns: st.session_state.df["Discount"] = 0.0
-            st.session_state.status = d.get("status", "Quoted")
-            st.session_state.proj = d.get("proj", fname.replace(".json", ""))
-            
-            # Safe Date Parsing
+            st.session_state.status, st.session_state.proj = d.get("status", "Quoted"), d.get("proj", fname.replace(".json", ""))
             try: st.session_state.start_d = datetime.strptime(d.get("start_date"), '%Y-%m-%d').date()
             except: st.session_state.start_d = date.today()
             try: st.session_state.end_d = datetime.strptime(d.get("end_date"), '%Y-%m-%d').date()
             except: st.session_state.end_d = date.today()
-            
-            # Safe KM Parsing (The Crash Fix)
             km_raw = d.get("km", 0.0)
             st.session_state.km = float(km_raw) if km_raw is not None else 0.0
-    except Exception as e:
-        st.error(f"Error loading file: {e}")
+    except Exception as e: st.error(f"Load failed: {e}")
 
 # --- MAIN UI ---
 st.title("📦 NO FUSS QUOTER")
 
-# --- CONTROL TOWER ---
+# --- DASHBOARD ---
 quoted_files = [f for f in os.listdir("quotes") if f.endswith(".json")]
 followups = []
 for fn in quoted_files:
@@ -132,33 +126,47 @@ for fn in quoted_files:
     except: continue
 
 if followups:
-    st.markdown("### 📡 ACTIVE FOLLOW-UPS")
+    st.markdown("### 📡 FOLLOW-UP CONTROL TOWER")
     for f in followups:
         cl, cr = st.columns([5, 1])
         cl.warning(f"**{f['name']}** starts in {f['days']} days.")
-        if cr.button("📂 LOAD", key=f"edit_{f['file']}"):
-            load_project_safe(f['file']); st.rerun()
+        if cr.button("📂 LOAD", key=f"edit_{f['file']}"): load_project_safe(f['file']); st.rerun()
 
 # --- SIDEBAR ---
-st.sidebar.title("📁 ARCHIVE")
-if st.sidebar.button("➕ START NEW"):
+st.sidebar.title("📁 ARCHIVE MANAGER")
+if st.sidebar.button("➕ START NEW PROJECT"):
     st.session_state.df = pd.DataFrame(columns=st.session_state.df.columns); st.session_state.km = 0.0; st.rerun()
+
+st.sidebar.divider()
 st.session_state.proj = st.sidebar.text_input("Project Label", st.session_state.proj)
-if st.sidebar.button("💾 SAVE PROJECT"):
+if st.sidebar.button("💾 SAVE / UPDATE PROJECT"):
     data = {"status": st.session_state.status, "items": st.session_state.df.to_dict(orient='records'), "proj": st.session_state.proj, "start_date": str(st.session_state.start_d), "end_date": str(st.session_state.end_d), "km": st.session_state.km}
     with open(f"quotes/{st.session_state.proj}.json", "w") as f: json.dump(data, f)
     st.sidebar.success("Saved!")
 
+st.sidebar.divider()
+saved_quotes = sorted([f.replace(".json", "") for f in os.listdir("quotes") if f.endswith(".json")])
+load_choice = st.sidebar.selectbox("Select Project", ["-- Choose --"] + saved_quotes)
+cl, cd = st.sidebar.columns(2)
+if cl.button("📂 LOAD PROJECT") and load_choice != "-- Choose --":
+    load_project_safe(f"{load_choice}.json"); st.rerun()
+
+# Targeted Deletion
+if cd.button("🗑️ DELETE JOB") and load_choice != "-- Choose --":
+    os.remove(f"quotes/{load_choice}.json")
+    st.sidebar.warning(f"Deleted: {load_choice}")
+    st.rerun()
+
 # --- WORKSPACE ---
 st.markdown(f"### 📍 Project: {st.session_state.proj}")
 st.session_state.status = st.selectbox("Stage", STAGES, index=STAGES.index(st.session_state.status) if st.session_state.status in STAGES else 0)
+st.markdown(f"<div style='height: 12px; background-color: {STAGE_COLORS[st.session_state.status]}; border-radius: 6px; margin-bottom: 20px;'></div>", unsafe_allow_html=True)
 
 c1, c2, c3 = st.columns(3)
 st.session_state.start_d = c1.date_input("Start", value=st.session_state.start_d)
 st.session_state.end_d = c2.date_input("End", value=st.session_state.end_d)
-
-k_val = st.session_state.km if (st.session_state.km and st.session_state.km > 0) else None
-st.session_state.km = c3.number_input("One-Way KM", value=k_val, placeholder="KM...")
+km_val = st.session_state.km if (st.session_state.km and st.session_state.km > 0) else None
+st.session_state.km = c3.number_input("One-Way KM", value=km_val, placeholder="Enter KM...")
 
 diff = (st.session_state.end_d - st.session_state.start_d).days
 weeks = math.ceil(diff / 7) if diff > 0 else 1
@@ -173,16 +181,20 @@ st.divider(); col1, col2 = st.columns(2)
 
 with col1:
     st.markdown("### ⚡ STRUCTURES")
-    m_in = st.text_input("Size (10x15)")
-    m_q = st.number_input("Qty", min_value=1, value=None)
-    if st.button("Add Marquee") and m_in and m_q:
+    m_in, m_q = st.text_input("Size (10x15)"), st.number_input("Qty", min_value=1, value=None)
+    m_sec = st.radio("Securing", ["Weights", "Pegging"], horizontal=True)
+    if st.button("Add Structure") and m_in and m_q:
         nums = re.findall(r'\d+', m_in)
         if len(nums) >= 2:
             span, length = int(nums[0]), int(nums[1])
             logic = STRUCT_LOGIC.get(span, STRUCT_LOGIC[4])
             sqm = span*length; rate = logic['s_rate'] if (length/logic['bay']) <= 1 else logic['m_rate']
             l1 = sqm * rate * m_q * logic['s_lab']
-            st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame([{"Qty": m_q, "Product": f"Structure {span}x{length}m", "Unit Rate": sqm*rate, "Min_Lab": logic['min_lab'], "Raw_Lab": l1, "KG": (sqm*15)*m_q, "Is_Marquee": True, "Discount": 0.0}])], ignore_index=True); st.rerun()
+            st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame([{"Qty": m_q, "Product": f"Structure {span}x{length}m", "Unit Rate": sqm*rate, "Min_Lab": logic['min_lab'], "Raw_Lab": l1, "KG": (sqm*15)*m_q, "Is_Marquee": True, "Discount": 0.0}])], ignore_index=True)
+            if m_sec == "Weights":
+                w_tot = int((((length/logic['bay'])+1)*2)*6*m_q)
+                st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame([{"Qty": w_tot, "Product": "30kg Weights", "Unit Rate": 6.60, "Min_Lab": 0, "Raw_Lab": w_tot*1.65, "KG": w_tot*30, "Is_Marquee": True, "Discount": 0.0}])], ignore_index=True)
+            st.rerun()
 
 with col2:
     st.markdown("### 🪵 FLOORING / ACCS")
@@ -197,26 +209,22 @@ with col2:
 # --- SUMMARY ---
 if not st.session_state.df.empty:
     st.divider(); st.subheader("📝 QUOTE SUMMARY")
-    st.markdown("<div style='font-weight: 800; border-bottom: 2px solid #1A1D2D; padding-bottom: 10px;'>DESCRIPTION | QTY | RATE | DISC % | TOTAL</div>", unsafe_allow_html=True)
+    hc = st.columns([0.4, 3.2, 0.8, 1.2, 1, 1.2])
+    cols = ["", "DESCRIPTION", "QTY", "RATE", "DISC%", "TOTAL"]
+    for i, col in enumerate(hc): col.write(f"**{cols[i]}**")
     
     h_tot_c, h_wk1_gear, total_kg = 0.0, 0.0, 0.0
-    
     for idx, row in st.session_state.df.iterrows():
         qty, brate, dm = row["Qty"], row["Unit Rate"], (1 - (row["Discount"]/100))
         total_kg += row["KG"]; h_wk1_gear += (qty * brate)
-        
         c0, c1, c2, c3, c4, c5 = st.columns([0.4, 3.2, 0.8, 1.2, 1, 1.2])
         if c0.button("🗑️", key=f"del_{idx}"): st.session_state.df.drop(idx, inplace=True); st.rerun()
-        
         wk1_t = (qty * brate + row["Raw_Lab"]) * dm if labour_mode == "Included" else (qty * brate) * dm
         h_tot_c += wk1_t
-        
         c1.markdown(f"<div class='item-text'>{row['Product']} - Wk 1</div>", unsafe_allow_html=True)
-        c2.markdown(f"<div class='item-text'>{qty:,.0f}</div>", unsafe_allow_html=True)
-        c3.markdown(f"<div class='item-text'>${wk1_t/qty:,.2f}</div>", unsafe_allow_html=True)
+        c2.write(f"{qty:,.0f}"); c3.write(f"${wk1_t/qty:,.2f}")
         st.session_state.df.at[idx, "Discount"] = c4.number_input("", 0.0, 100.0, float(row["Discount"]), 1.0, key=f"d_{idx}", label_visibility="collapsed")
-        c5.markdown(f"<div class='item-text'>${wk1_t:,.2f}</div>", unsafe_allow_html=True)
-
+        c5.write(f"${wk1_t:,.2f}")
         if weeks > 1:
             r_rate = brate * 0.5 if row["Is_Marquee"] else brate
             r_tot = qty * r_rate * (weeks-1) * dm; h_tot_c += r_tot
@@ -227,12 +235,8 @@ if not st.session_state.df.empty:
             b5.markdown(f"<div class='item-sub'>${r_tot:,.2f}</div>", unsafe_allow_html=True)
 
     trks = math.ceil(total_kg / 6000) if total_kg > 0 else 1
-    wav = h_wk1_gear * 0.07; crt = trks * (st.session_state.km if st.session_state.km else 0) * 4 * 3.50 if cartage_mode == "Charge" else 0
+    wav, crt = h_wk1_gear * 0.07, trks * (st.session_state.km if st.session_state.km else 0) * 4 * 3.50 if cartage_mode == "Charge" else 0
     lab = max(st.session_state.df["Min_Lab"].max(), st.session_state.df["Raw_Lab"].sum()) if labour_mode == "Separate" else 0
-    
-    st.divider()
-    m = st.columns(6)
-    m[0].metric("HIRE", f"${h_tot_c:,.2f}"); m[1].metric("LABOUR", f"${lab:,.2f}"); m[2].metric("WAIVER", f"${wav:,.2f}")
-    m[3].metric("CARTAGE", f"${crt:,.2f}"); m[4].metric("WEIGHT", f"{total_kg:,.0f}kg"); m[5].metric("TRUCKS", f"{trks}")
-    
+    st.divider(); m = st.columns(6)
+    m[0].metric("HIRE", f"${h_tot_c:,.2f}"); m[1].metric("LABOUR", f"${lab:,.2f}"); m[2].metric("WAIVER", f"${wav:,.2f}"); m[3].metric("CARTAGE", f"${crt:,.2f}"); m[4].metric("WEIGHT", f"{total_kg:,.0f}kg"); m[5].metric("TRUCKS", f"{trks}")
     st.markdown(f"<div class='gt-banner'>GRAND TOTAL: ${h_tot_c + lab + wav + crt:,.2f}</div>", unsafe_allow_html=True)
