@@ -28,7 +28,7 @@ def check_password():
 if not check_password():
     st.stop()
 
-# --- VISUAL STYLING (v35.2 - HIGH VISIBILITY STABLE) ---
+# --- VISUAL STYLING (v35.3 - HIGH VISIBILITY INTERACTIVE) ---
 st.markdown("""
     <style>
     /* Professional Headers */
@@ -45,9 +45,11 @@ st.markdown("""
     div[data-testid="stMetricValue"] { color: #00E676 !important; font-size: 38px !important; font-weight: bold !important; }
     [data-testid="stMetricLabel"] p { color: #FFFFFF !important; font-size: 16px !important; font-weight: bold !important; }
     
-    /* Control Tower Alerts */
-    .urgent-card { background-color: #FFEBEE; border-left: 10px solid #D32F2F; padding: 15px; border-radius: 10px; margin-bottom: 10px; color: #B71C1C; }
-    .warning-card { background-color: #FFF3E0; border-left: 10px solid #F57C00; padding: 15px; border-radius: 10px; margin-bottom: 10px; color: #E65100; }
+    /* Control Tower Interactive Cards */
+    .urgent-row { background-color: #FFEBEE; border-left: 10px solid #D32F2F; padding: 15px; border-radius: 10px; margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between; }
+    .warning-row { background-color: #FFF3E0; border-left: 10px solid #F57C00; padding: 15px; border-radius: 10px; margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between; }
+    .card-text { color: #1A1D2D; font-size: 18px; font-weight: 700; }
+    .card-subtext { color: #455A64; font-size: 14px; font-weight: 500; }
     
     /* Summary Text Size */
     .summary-text { font-size: 18px !important; font-weight: 600 !important; color: #2c3e50; display: flex; align-items: center; height: 100%; }
@@ -97,6 +99,28 @@ GENERAL_PRODUCTS = {
 STAGES = ["Quoted", "Accepted", "Paid", "On Hire", "Returned"]
 STAGE_COLORS = {"Quoted": "#FF9100", "Accepted": "#00E676", "Paid": "#00B8D4", "On Hire": "#D500F9", "Returned": "#757575"}
 
+# --- PDF ENGINE ---
+def create_calculation_pdf(name, subtotal, labour, waiver, cartage, grand, weeks, start, end, h_maths, l_details, log_maths, status):
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", "B", 16); pdf.cell(0, 10, f"Louis Quoting Tool - Calculation Analysis", ln=True, align="C")
+    pdf.set_font("Arial", "B", 10); pdf.cell(0, 7, f"PROJECT: {name} | STATUS: {status.upper()}", ln=True, align="C")
+    pdf.cell(0, 7, f"HIRE PERIOD: {start.strftime('%d/%m/%Y')} to {end.strftime('%d/%m/%Y')} ({weeks} Week(s))", ln=True, align="C"); pdf.ln(5)
+    pdf.set_fill_color(240, 240, 240); pdf.set_font("Arial", "B", 12)
+    pdf.cell(0, 10, " CALCULATIONS (Hire)", 0, 1, "L", True); pdf.set_font("Arial", "", 10)
+    for h in h_maths: pdf.cell(0, 7, f" {h}", border="B", ln=True)
+    pdf.set_font("Arial", "B", 10); pdf.cell(0, 10, f" TOTAL HIRE CONTRACT: ${subtotal:,.2f}", ln=True, align="R"); pdf.ln(5)
+    if labour > 0:
+        pdf.set_font("Arial", "B", 12); pdf.cell(0, 10, " LABOUR (Week 1 Only)", 0, 1, "L", True); pdf.set_font("Arial", "", 10)
+        for l in l_details: pdf.cell(0, 7, f" {l}", border="B", ln=True)
+        pdf.set_font("Arial", "B", 10); pdf.cell(0, 10, f" TOTAL LABOUR POOL: ${labour:,.2f}", ln=True, align="R"); pdf.ln(5)
+    pdf.set_font("Arial", "B", 12); pdf.cell(0, 10, " LOGISTICS & WAIVER", 0, 1, "L", True); pdf.set_font("Arial", "", 10)
+    for m in log_maths: pdf.cell(0, 7, f" {m}", border="B", ln=True)
+    pdf.set_font("Arial", "B", 10); pdf.cell(0, 10, f" LOGISTICS SUBTOTAL: ${waiver + cartage:,.2f}", ln=True, align="R")
+    pdf.ln(10); pdf.set_fill_color(26, 29, 45); pdf.set_text_color(255, 255, 255); pdf.set_font("Arial", "B", 14)
+    pdf.cell(0, 15, f" GRAND TOTAL (EX GST): ${grand:,.2f} ", 0, 1, "R", True)
+    return bytes(pdf.output())
+
 # --- SESSION STATE ---
 if 'df' not in st.session_state:
     st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Total", "Min_Lab", "Raw_Lab", "Lab_Math", "KG", "Is_Marquee", "Discount"])
@@ -106,7 +130,19 @@ if 'start_d' not in st.session_state: st.session_state.start_d = date.today()
 if 'end_d' not in st.session_state: st.session_state.end_d = date.today()
 if 'km' not in st.session_state: st.session_state.km = 0.0
 
-# --- SCAN ARCHIVE ---
+# --- CORE LOAD LOGIC ---
+def load_project_file(filename):
+    with open(f"quotes/{filename}", "r") as f:
+        loaded = json.load(f)
+        st.session_state.df = pd.DataFrame(loaded["items"])
+        if "Discount" not in st.session_state.df.columns: st.session_state.df["Discount"] = 0.0
+        st.session_state.status = loaded.get("status", "Quoted")
+        st.session_state.active_project = loaded.get("proj", filename.replace(".json", ""))
+        if "start_date" in loaded: st.session_state.start_d = datetime.strptime(loaded["start_date"], '%Y-%m-%d').date()
+        if "end_date" in loaded: st.session_state.end_d = datetime.strptime(loaded["end_date"], '%Y-%m-%d').date()
+        st.session_state.km = float(loaded.get("km", 0.0))
+
+# --- SCAN ARCHIVE FOR DASHBOARD ---
 quoted_files = [f for f in os.listdir("quotes") if f.endswith(".json")]
 followup_list = []
 for f_name in quoted_files:
@@ -117,7 +153,7 @@ for f_name in quoted_files:
                 sd = datetime.strptime(p["start_date"], '%Y-%m-%d').date()
                 diff = (sd - date.today()).days
                 if 0 <= diff <= 28:
-                    followup_list.append({"Proj": p.get("proj", "Unknown"), "Date": sd.strftime('%d/%m/%Y'), "Days": diff})
+                    followup_list.append({"Proj": p.get("proj", "Unknown"), "Date": sd.strftime('%d/%m/%Y'), "Days": diff, "File": f_name})
     except: continue
 
 # --- SIDEBAR ---
@@ -136,23 +172,31 @@ saved_quotes = sorted([f.replace(".json", "") for f in os.listdir("quotes") if f
 load_choice = st.sidebar.selectbox("Retrieval", ["-- Choose --"] + saved_quotes)
 cl, cd = st.sidebar.columns(2)
 if cl.button("📂 LOAD") and load_choice != "-- Choose --":
-    with open(f"quotes/{load_choice}.json", "r") as f:
-        loaded = json.load(f); st.session_state.df = pd.DataFrame(loaded["items"])
-        st.session_state.status = loaded.get("status", "Quoted"); st.session_state.active_project = loaded.get("proj", load_choice)
-        if "start_date" in loaded: st.session_state.start_d = datetime.strptime(loaded["start_date"], '%Y-%m-%d').date()
-        if "end_date" in loaded: st.session_state.end_d = datetime.strptime(loaded["end_date"], '%Y-%m-%d').date()
-        st.session_state.km = float(loaded.get("km", 0.0)); st.rerun()
-if cd.button("🗑️ DELETE"): os.remove(f"quotes/{load_choice}.json"); st.rerun()
+    load_project_file(f"{load_choice}.json"); st.rerun()
+if cd.button("🗑️ DELETE") and load_choice != "-- Choose --":
+    os.remove(f"quotes/{load_choice}.json"); st.rerun()
 
 # --- MAIN UI ---
 st.title("⚡ Louis Quoting Tool")
 
-# --- CONTROL TOWER ---
+# --- INTERACTIVE CONTROL TOWER ---
 if followup_list:
     st.markdown("### 📡 Follow-up Control Tower")
     for item in followup_list:
-        card = "urgent-card" if item['Days'] <= 14 else "warning-card"
-        st.markdown(f"<div class='{card}'><strong>{item['Proj']}</strong> starts in {item['Days']} days ({item['Date']})</div>", unsafe_allow_html=True)
+        card_class = "urgent-row" if item['Days'] <= 14 else "warning-row"
+        col_text, col_btn = st.columns([4, 1])
+        with col_text:
+            st.markdown(f"""
+                <div class='{card_class}'>
+                    <div>
+                        <span class='card-text'>{item['Proj']}</span><br>
+                        <span class='card-subtext'>Starts in {item['Days']} days ({item['Date']})</span>
+                    </div>
+                </div>
+            """, unsafe_allow_html=True)
+        with col_btn:
+            if st.button("📂 EDIT", key=f"fup_{item['File']}"):
+                load_project_file(item['File']); st.rerun()
     st.divider()
 
 st.markdown(f"### 📍 Active: {st.session_state.active_project}")
@@ -164,7 +208,6 @@ st.markdown(f"<div style='height: 12px; background-color: {STAGE_COLORS[st.sessi
 c1, c2, c3 = st.columns(3)
 st.session_state.start_d = c1.date_input("Start", value=st.session_state.start_d)
 st.session_state.end_d = c2.date_input("End", value=st.session_state.end_d)
-# SAFETY GATE
 k_val = st.session_state.km if (st.session_state.km and st.session_state.km > 0) else None
 st.session_state.km = c3.number_input("One-Way KM", min_value=0.0, value=k_val, placeholder="Enter KM...")
 
