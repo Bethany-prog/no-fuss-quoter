@@ -83,14 +83,18 @@ def create_calculation_pdf(name, subtotal, labour, waiver, cartage, grand, weeks
     pdf.cell(0, 7, f"PERIOD: {start.strftime('%d/%m/%Y')} to {end.strftime('%d/%m/%Y')} ({weeks} Week(s))", ln=True, align="C")
     pdf.ln(10)
 
-    # Hire working out
+    # 1. Hire Calculations
     pdf.set_fill_color(26, 29, 45); pdf.set_text_color(255, 255, 255); pdf.set_font("Arial", "B", 12)
     pdf.cell(0, 10, " 1. HIRE CALCULATIONS (WORKING OUT)", 0, 1, "L", True)
     pdf.set_text_color(0, 0, 0); pdf.set_font("Arial", "", 10)
     
     for item in items_list:
-        w1_total = (item['Qty'] * item['Base_Hire']) * (1 - (item['Discount']/100))
-        math_str = f"{item['Product']} (Wk 1): {item['Qty']:,.0f} x ${item['Base_Hire']:,.2f} [-{item['Discount']}% Disc]"
+        w1_total = (item['Qty'] * item['Unit Rate']) * (1 - (item['Discount']/100))
+        prod_label = item['Product']
+        if 'Anchoring' in item and item['Anchoring']:
+            prod_label += f" ({item['Anchoring']})"
+            
+        math_str = f"{prod_label} (Wk 1): {item['Qty']:,.0f} x ${item['Base_Hire']:,.2f} [-{item['Discount']}% Disc]"
         pdf.cell(140, 8, clean_text(math_str), border="B")
         pdf.cell(50, 8, f"${w1_total:,.2f}", border="B", ln=True, align="R")
         
@@ -101,7 +105,7 @@ def create_calculation_pdf(name, subtotal, labour, waiver, cartage, grand, weeks
             pdf.cell(140, 8, clean_text(r_math), border="B")
             pdf.cell(50, 8, f"${r_total:,.2f}", border="B", ln=True, align="R")
 
-    # Labour and Logistics proofs
+    # 2. Labour and Logistics Proofs
     pdf.ln(5); pdf.set_fill_color(26, 29, 45); pdf.set_text_color(255, 255, 255); pdf.set_font("Arial", "B", 12)
     pdf.cell(0, 10, " 2. LABOUR & LOGISTICS PROOFS", 0, 1, "L", True)
     pdf.set_text_color(0, 0, 0); pdf.set_font("Arial", "", 10)
@@ -117,7 +121,7 @@ def create_calculation_pdf(name, subtotal, labour, waiver, cartage, grand, weeks
     return bytes(pdf.output())
 
 # ==============================================================================
-# 4. MASTER PRODUCT LIST
+# 4. MASTER PRODUCT CATALOG LIST
 # ==============================================================================
 CATALOG = {
     "Flooring": {
@@ -138,7 +142,7 @@ STAGE_COLORS = {"Quoted": "#FF9100", "Accepted": "#00E676", "Paid": "#00B8D4", "
 # 5. STREAMLIT INTERNAL STORAGE PERSISTENCE
 # ==============================================================================
 if 'df' not in st.session_state: 
-    st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Total", "Min_Lab", "Raw_Lab", "KG", "Is_Marquee", "Discount", "Lab_Math", "Lab_Per_Unit", "Base_Hire"])
+    st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Total", "Min_Lab", "Raw_Lab", "KG", "Is_Marquee", "Discount", "Lab_Math", "Lab_Per_Unit", "Base_Hire", "Anchoring"])
 if 'status' not in st.session_state: st.session_state.status = "Quoted"
 if 'proj' not in st.session_state: st.session_state.proj = "New Project"
 if 'km' not in st.session_state: st.session_state.km = 0.0
@@ -147,7 +151,11 @@ if 'truck_override' not in st.session_state: st.session_state.truck_override = 0
 def load_project_safe(fname):
     try:
         with open(f"quotes/{fname}", "r") as f:
-            d = json.load(f); st.session_state.df = pd.DataFrame(d["items"])
+            d = json.load(f)
+            loaded_df = pd.DataFrame(d["items"])
+            if "Anchoring" not in loaded_df.columns:
+                loaded_df["Anchoring"] = ""
+            st.session_state.df = loaded_df
             st.session_state.status, st.session_state.proj = d.get("status", "Quoted"), d.get("proj", fname.replace(".json", ""))
             st.session_state.km = float(d.get("km", 0.0))
             st.rerun()
@@ -194,10 +202,13 @@ if followups:
 # Sidebar Archive Actions
 st.sidebar.title("📁 PROJECT ARCHIVE")
 if st.sidebar.button("➕ START NEW"):
-    st.session_state.df = pd.DataFrame(columns=st.session_state.df.columns); st.session_state.km = 0.0; st.session_state.proj = "New Project"; st.rerun()
+    st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Total", "Min_Lab", "Raw_Lab", "KG", "Is_Marquee", "Discount", "Lab_Math", "Lab_Per_Unit", "Base_Hire", "Anchoring"])
+    st.session_state.km = 0.0
+    st.session_state.proj = "New Project"
+    st.rerun()
 st.session_state.proj = st.sidebar.text_input("Project Label", st.session_state.proj)
 if st.sidebar.button("💾 SAVE / UPDATE"):
-    data = {"status": st.session_state.status, "items": st.session_state.df.to_dict(orient='records'), "proj": st.session_state.proj, "km": st.session_state.km}
+    data = {"status": st.session_state.status, "items": st.session_state.df.to_dict(orient='records'), "proj": st.session_state.proj, "km": st.session_state.km, "start_date": str(date.today()), "end_date": str(date.today())}
     with open(f"quotes/{st.session_state.proj}.json", "w") as f: json.dump(data, f)
     st.sidebar.success("Saved!")
 load_choice = st.sidebar.selectbox("Retrieval", ["-- Choose --"] + [f.replace(".json", "") for f in quoted_files])
@@ -206,7 +217,7 @@ if st.sidebar.button("📂 LOAD PROJECT") and load_choice != "-- Choose --": loa
 # Variable Selection Cards
 st.markdown(f"### 📍 Project: {st.session_state.proj}")
 st.session_state.status = st.selectbox("Stage", STAGES, index=STAGES.index(st.session_state.status) if st.session_state.status in STAGES else 0)
-st.markdown(f"<div style='height: 14px; background-color: {STAGE_COLORS[st.session_state.status]}; border-radius: 7px; margin-bottom: 25px;'></div>", unsafe_allow_html=True)
+st.markdown(f"<div style='height: 14px; background-color: {STAGE_COLORS[st.session_state.status]}; border-radius: 6px; margin-bottom: 20px;'></div>", unsafe_allow_html=True)
 
 c1, c2, c3 = st.columns(3)
 start_d = c1.date_input("Start", value=date.today())
@@ -226,6 +237,9 @@ st.divider(); col1, col2 = st.columns(2)
 with col1:
     st.markdown("### ⚡ Structures")
     m_in, m_q = st.text_input("Size (e.g. 10x15)"), st.number_input("Qty", min_value=1, value=None, key="mq_in")
+    # Added anchoring toggle interface control directly inside the layout block
+    anchoring_type = st.segmented_control("Anchoring Method", ["Pegged", "Weighted"], default="Pegged")
+    
     if st.button("Add Structure") and m_in and m_q:
         nums = re.findall(r'\d+', m_in)
         if len(nums) >= 2:
@@ -235,8 +249,8 @@ with col1:
             brate = sqm * hire_rate; lab_cost = brate * logic['s_lab']
             st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame([{
                 "Qty": m_q, "Product": f"Structure {span}x{length}m", "Unit Rate": brate, "Min_Lab": 350, 
-                "Raw_Lab": lab_cost, "Lab_Math": f"Structure {span}x{length}: ${lab_cost:,.2f}", "KG": (sqm*15)*m_q, 
-                "Is_Marquee": True, "Discount": 0.0, "Lab_Per_Unit": 0, "Base_Hire": brate
+                "Raw_Lab": lab_cost, "Lab_Math": f"Structure {span}x{length} ({anchoring_type}): ${lab_cost:,.2f}", "KG": (sqm*15)*m_q, 
+                "Is_Marquee": True, "Discount": 0.0, "Lab_Per_Unit": 0, "Base_Hire": brate, "Anchoring": anchoring_type
             }])], ignore_index=True); st.rerun()
 
 with col2:
@@ -257,7 +271,7 @@ with col2:
         st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame([{
             "Qty": f_qty, "Product": p_sel, "Unit Rate": unit_rate, "Min_Lab": 0, "Raw_Lab": raw_lab_pool, 
             "Lab_Math": lab_desc, "KG": eff_qty * data['kg'], "Is_Marquee": False, "Discount": 0.0, 
-            "Lab_Per_Unit": lab_per_unit, "Base_Hire": base_h
+            "Lab_Per_Unit": lab_per_unit, "Base_Hire": base_h, "Anchoring": ""
         }])], ignore_index=True); st.rerun()
 
 # ==============================================================================
@@ -275,7 +289,12 @@ if not st.session_state.df.empty:
         
         c0, c1, c2, c3, c4, c5 = st.columns([0.4, 4.0, 0.8, 1.2, 1.0, 1.4])
         if c0.button("🗑️", key=f"sdel_{idx}"): st.session_state.df.drop(idx, inplace=True); st.rerun()
-        c1.markdown(f"<div class='item-text'>{row['Product']} - Wk 1</div>", unsafe_allow_html=True)
+        
+        prod_display = row['Product']
+        if row['Anchoring']:
+            prod_display += f" ({row['Anchoring']})"
+            
+        c1.markdown(f"<div class='item-text'>{prod_display} - Wk 1</div>", unsafe_allow_html=True)
         c2.write(f"{qty:,.0f}"); c3.write(f"${wk1_t/qty:,.2f}")
         st.session_state.df.at[idx, "Discount"] = c4.number_input("", 0.0, 100.0, float(row["Discount"]), 1.0, key=f"sd_{idx}", label_visibility="collapsed")
         c5.write(f"${wk1_t:,.2f}")
@@ -318,4 +337,4 @@ if not st.session_state.df.empty:
     l_maths = [f"Damage Waiver: ${h_wk1_gear:,.2f} x 0.07 = ${wav:,.2f}", f"Cartage: {trks} Trucks x {safe_km}km x 4 x $3.50 = ${crt:,.2f}"]
     items_for_pdf = st.session_state.df.to_dict('records')
     pdf_b = create_calculation_pdf(st.session_state.proj, h_tot_c, lab, wav, crt, h_tot_c+lab+wav+crt, weeks, start_d, end_d, items_for_pdf, l_maths, st.session_state.status)
-    st.download_button("📥 DOWNLOAD PDF", pdf_b, file_name=f"{st.session_state.proj}_Analysis.pdf")
+    st.download_button("📥 DOWNLOAD AUDIT PDF", pdf_b, file_name=f"{st.session_state.proj}_Analysis.pdf")
