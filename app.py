@@ -108,7 +108,6 @@ STAGES = ["Quoted", "Accepted", "Paid", "On Hire", "Returned", "Cancelled"]
 
 # --- SESSION STATE ---
 if 'df' not in st.session_state: 
-    # Added 'Lab_Per_Unit' to track the internal labour component for Week 1
     st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Total", "Min_Lab", "Raw_Lab", "KG", "Is_Marquee", "Discount", "Lab_Math", "Lab_Per_Unit", "Base_Hire"])
 if 'km' not in st.session_state: st.session_state.km = 0.0
 
@@ -119,7 +118,12 @@ st.title("⚡ Louis Master Quoter")
 c1, c2, c3 = st.columns(3)
 start_d = c1.date_input("Start", value=date.today())
 end_d = c2.date_input("End", value=date.today())
-st.session_state.km = c3.number_input("One-Way KM", value=st.session_state.km if st.session_state.km > 0 else None, placeholder="KM...")
+
+# STABILITY FIX: Safe Null-Check for KM
+km_current = st.session_state.km
+km_val_safe = km_current if (km_current is not None and km_current > 0) else None
+st.session_state.km = c3.number_input("One-Way KM", value=km_val_safe, placeholder="KM...")
+
 weeks = math.ceil(((end_d - start_d).days) / 7) or 1
 
 b1, b2 = st.columns(2)
@@ -158,12 +162,10 @@ with col2:
         lab_desc = ""
 
         if cat_sel == "Grandstands":
-            # Per Seat rate logic
             lab_per_unit, lab_desc = get_gs_per_seat_labour(f_qty)
             unit_rate = base_h + lab_per_unit
-            raw_lab_pool = 0 # It's in the hire
+            raw_lab_pool = 0 
         else:
-            # Standard logic
             unit_rate = base_h
             raw_lab_pool = f_qty * data.get('lab_fix', 0)
             lab_desc = f"{p_sel}: ${raw_lab_pool:,.2f}"
@@ -183,11 +185,8 @@ if not st.session_state.df.empty:
     for idx, row in st.session_state.df.iterrows():
         qty, brate, dm = row["Qty"], row["Unit Rate"], (1 - (row["Discount"]/100))
         total_kg += row["KG"]
-        
-        # Gear Hire (for waiver calculation) is just the hire component
         h_wk1_gear += (qty * row["Base_Hire"])
         
-        # Week 1 Total (includes the baked-in labour for Grandstands or Raw_Lab if Included)
         wk1_t = (qty * brate + row["Raw_Lab"]) * dm if labour_mode == "Include in Hire" else (qty * brate) * dm
         h_tot_c += wk1_t
         
@@ -202,23 +201,24 @@ if not st.session_state.df.empty:
         if row["Lab_Math"]: pdf_l.append(row["Lab_Math"])
             
         if weeks > 1:
-            # Recurring hire is calculated on Base_Hire only (removing labour component)
             base_r = row["Base_Hire"]
             r_unit_rate = base_r * 0.5 if row["Is_Marquee"] else base_r
             r_tot = qty * r_unit_rate * (weeks-1) * dm
             h_tot_c += r_tot
-            
             cb = st.columns([0.4, 3.2, 0.8, 1.2, 1, 1.2])
             cb[1].markdown(f"<div style='color:grey; font-style:italic;'>└ Recurring Hire (x{weeks-1} wks)</div>", unsafe_allow_html=True)
             cb[2].write(f"{qty:,.0f}"); cb[3].write(f"${r_unit_rate*dm:,.2f}"); cb[5].write(f"${r_tot:,.2f}")
             pdf_h.append(f"-> Recurring: ${r_tot:,.2f}")
 
-    trucks, safe_km = (math.ceil(total_kg / 6000) or 1), (st.session_state.km if st.session_state.km else 0)
-    wav, crt = h_wk1_gear * 0.07, trucks * safe_km * 4 * 3.50 if cartage_mode == "Charge" else 0
-    # GS labour is already in h_tot_c, so Lab only sums separate Raw_Labs
+    trucks = (math.ceil(total_kg / 6000) or 1)
+    # STABILITY FIX: Use 0 if KM box is empty
+    safe_km_calc = st.session_state.km if (st.session_state.km is not None) else 0
+    
+    wav = h_wk1_gear * 0.07
+    crt = trucks * safe_km_calc * 4 * 3.50 if cartage_mode == "Charge" else 0
     lab = max(st.session_state.df["Raw_Lab"].sum(), 350) if labour_mode == "Separate" else 0
     
-    l_maths = [f"Damage Waiver (7%): ${h_wk1_gear:,.2f} x 0.07 = ${wav:,.2f}", f"Cartage: {trucks} Trucks x {safe_km}km x 4 x $3.50 = ${crt:,.2f}"]
+    l_maths = [f"Damage Waiver (7%): ${h_wk1_gear:,.2f} x 0.07 = ${wav:,.2f}", f"Cartage: {trucks} Trucks x {safe_km_calc}km x 4 x $3.50 = ${crt:,.2f}"]
 
     st.divider(); m = st.columns(6)
     m[0].metric("HIRE", f"${h_tot_c:,.2f}"); m[1].metric("LABOUR", f"${lab:,.2f}"); m[2].metric("WAIVER", f"${wav:,.2f}"); m[3].metric("CARTAGE", f"${crt:,.2f}"); m[4].metric("WEIGHT", f"{total_kg:,.0f}kg"); m[5].metric("TRUCKS", f"{trucks}")
