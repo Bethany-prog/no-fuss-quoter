@@ -123,19 +123,19 @@ def load_project_safe(fname):
 st.markdown("""
     <style>
     .main { background-color: #F4F7F9 !important; }
-    h1 { color: #1A1D2D !important; font-size: 48px !important; font-weight: 900 !important; }
-    div.stMetric { background-color: #FFFFFF !important; padding: 15px !important; border-radius: 12px !important; border: 2px solid #3D5AFE !important; }
+    h1 { color: #1A1D2D !important; font-size: 52px !important; font-weight: 900 !important; }
+    h3 { color: #FFFFFF !important; border-left: 10px solid #00E676; padding: 18px; background-color: #1A1D2D; border-radius: 0 12px 12px 0; font-size: 24px !important; }
+    div.stMetric { background-color: #FFFFFF !important; padding: 15px !important; border-radius: 12px !important; border: 2px solid #3D5AFE !important; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
     div[data-testid="stMetricValue"] { color: #3D5AFE !important; font-size: 30px !important; font-weight: 800 !important; }
     .item-text { font-size: 20px !important; font-weight: 700 !important; color: #1A1D2D; margin-top: 10px; }
-    .gt-banner { background: #1A1D2D; color: #00E676; padding: 40px; border-radius: 20px; text-align: right; font-size: 44px !important; font-weight: 900; margin-top: 30px; border: 5px solid #00E676; }
+    .gt-banner { background: #1A1D2D; color: #00E676; padding: 40px; border-radius: 20px; text-align: right; font-size: 44px !important; font-weight: 900; margin-top: 30px; border: 6px solid #00E676; box-shadow: 0 10px 20px rgba(0,0,0,0.2); }
     </style>
     """, unsafe_allow_html=True)
 
-# --- HEADER ---
+# --- HEADER & SIDEBAR ---
 st.title("⚡ Louis Master Quoter")
 quoted_files = sorted([f for f in os.listdir("quotes") if f.endswith(".json")])
 
-# --- SIDEBAR ---
 st.sidebar.title("📁 PROJECT ARCHIVE")
 if st.sidebar.button("➕ START NEW"):
     st.session_state.df = pd.DataFrame(columns=st.session_state.df.columns); st.session_state.km = 0.0; st.session_state.proj = "New Project"; st.rerun()
@@ -158,17 +158,18 @@ end_d = c2.date_input("End", value=date.today())
 km_val = st.session_state.km if (st.session_state.km and st.session_state.km > 0) else None
 st.session_state.km = c3.number_input("One-Way KM", value=km_val, placeholder="KM...")
 weeks = math.ceil(((end_d - start_d).days) / 7) or 1
+st.info(f"**Hire Duration:** {weeks} Week(s)")
 
 # --- LOGISTICS CONTROLS ---
 l1, l2, l3 = st.columns(3)
-cartage_mode = l1.segmented_control("Cartage", ["Charge", "Free"], default="Charge")
-labour_mode = l2.segmented_control("Labour", ["Separate", "Include in Hire", "Free"], default="Separate")
+cartage_mode = l1.segmented_control("Cartage Math", ["Charge", "Free"], default="Charge")
+labour_mode = l2.segmented_control("Labour Math", ["Separate", "Include in Hire", "Free"], default="Separate")
 waiver_mode = l3.segmented_control("Damage Waiver", ["Charge", "Free"], default="Charge")
 
 st.divider(); col1, col2 = st.columns(2)
 with col1:
     st.markdown("### ⚡ Structures")
-    m_in, m_q = st.text_input("Size (10x15)"), st.number_input("Qty", min_value=1, value=None, key="mq_in")
+    m_in, m_q = st.text_input("Size (e.g. 10x15)"), st.number_input("Qty", min_value=1, value=None, key="mq_in")
     if st.button("Add Structure") and m_in and m_q:
         nums = re.findall(r'\d+', m_in)
         if len(nums) >= 2:
@@ -186,8 +187,8 @@ with col2:
     st.markdown("### 🪵 Catalog Items")
     cat_sel = st.selectbox("Category", list(CATALOG.keys()))
     p_sel = st.selectbox("Product", list(CATALOG[cat_sel].keys()))
-    f_qty = st.number_input("Seats / SQM Count", min_value=0.0, value=None, key="p_qty")
-    if st.button("Add to Quote") and f_qty:
+    f_qty = st.number_input("Quantity / Count", min_value=0.0, value=None, key="p_qty")
+    if st.button("Add Item") and f_qty:
         data = CATALOG[cat_sel][p_sel]
         base_h = (data['block']/4) if (weeks >= 4 and 'block' in data) else data['rate']
         lab_per_unit, raw_lab_pool, lab_desc = 0, 0, ""
@@ -227,9 +228,9 @@ if not st.session_state.df.empty:
 
     # --- FINAL LOGISTICS ---
     st.divider()
-    tc1, tc2 = st.columns([1, 2])
+    tc1, tc2 = st.columns([2, 5])
     min_trucks = math.ceil(total_kg / 6000) or 1
-    trks = tc1.number_input("Total Trucks Required", min_value=min_trucks, value=max(min_trucks, st.session_state.truck_override))
+    trks = tc1.number_input("Manually Set Truck Count", min_value=min_trucks, value=max(min_trucks, st.session_state.truck_override))
     st.session_state.truck_override = trks
 
     safe_km = st.session_state.km if st.session_state.km else 0
@@ -238,14 +239,14 @@ if not st.session_state.df.empty:
     lab = max(st.session_state.df["Raw_Lab"].sum(), 350) if labour_mode == "Separate" else 0
     
     m = st.columns(6)
-    m[0].metric("HIRE", f"${round(h_tot_c, 2):,}")
+    m[0].metric("HIRE COST", f"${round(h_tot_c, 2):,}")
     m[1].metric("LABOUR", f"${round(lab, 2):,}")
     m[2].metric("WAIVER", f"${round(wav, 2):,}")
     m[3].metric("CARTAGE", f"${round(crt, 2):,}")
     m[4].metric("WEIGHT", f"{round(total_kg, 0):,}kg")
     m[5].metric("TRUCKS", f"{trks}")
     
-    st.markdown(f"<div class='gt-banner'>GRAND TOTAL: ${h_tot_c + lab + wav + crt:,.2f}</div>", unsafe_allow_html=True)
+    st.markdown(f"<div class='gt-banner'>GRAND TOTAL (EX GST): ${h_tot_c + lab + wav + crt:,.2f}</div>", unsafe_allow_html=True)
     l_maths = [f"Damage Waiver: ${h_wk1_gear:,.2f} x 0.07 = ${wav:,.2f}", f"Cartage: {trks} Trucks x {safe_km}km x 4 x $3.50 = ${crt:,.2f}"]
     pdf_b = create_calculation_pdf(st.session_state.proj, h_tot_c, lab, wav, crt, h_tot_c+lab+wav+crt, weeks, start_d, end_d, pdf_h, pdf_l, l_maths, st.session_state.status)
-    st.download_button("📥 DOWNLOAD PDF", pdf_b, file_name=f"{st.session_state.proj}_Analysis.pdf")
+    st.download_button("📥 DOWNLOAD PDF ANALYSIS", pdf_b, file_name=f"{st.session_state.proj}_Analysis.pdf")
