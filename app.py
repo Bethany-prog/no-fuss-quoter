@@ -123,8 +123,8 @@ def load_project_safe(fname):
 st.markdown("""
     <style>
     .main { background-color: #F4F7F9 !important; }
-    h1 { color: #1A1D2D !important; font-size: 52px !important; font-weight: 900 !important; }
-    h3 { color: #FFFFFF !important; border-left: 10px solid #00E676; padding: 18px; background-color: #1A1D2D; border-radius: 0 12px 12px 0; font-size: 24px !important; }
+    h1 { color: #1A1D2D !important; font-size: 48px !important; font-weight: 900 !important; }
+    h3 { color: #FFFFFF !important; border-left: 10px solid #00E676; padding: 40px; background-color: #1A1D2D; border-radius: 0 12px 12px 0; font-size: 24px !important; margin-bottom: 15px; }
     div.stMetric { background-color: #FFFFFF !important; padding: 15px !important; border-radius: 12px !important; border: 2px solid #3D5AFE !important; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
     div[data-testid="stMetricValue"] { color: #3D5AFE !important; font-size: 30px !important; font-weight: 800 !important; }
     .item-text { font-size: 20px !important; font-weight: 700 !important; color: #1A1D2D; margin-top: 10px; }
@@ -226,18 +226,24 @@ if not st.session_state.df.empty:
             cb[1].markdown(f"<div style='color:grey; font-style:italic; font-size:18px;'>└ Recurring (x{weeks-1} wks)</div>", unsafe_allow_html=True)
             cb[2].write(f"{qty:,.0f}"); cb[3].write(f"${r_rate*dm:,.2f}"); cb[5].write(f"${r_tot:,.2f}"); pdf_h.append(f"-> Recurring: ${r_tot:,.2f}")
 
-    # --- FINAL LOGISTICS ---
+    # --- FINAL LOGISTICS & OVERRIDE GRID ---
     st.divider()
-    tc1, tc2 = st.columns([2, 5])
-    min_trucks = math.ceil(total_kg / 6000) or 1
-    trks = tc1.number_input("Manually Set Truck Count", min_value=min_trucks, value=max(min_trucks, st.session_state.truck_override))
-    st.session_state.truck_override = trks
+    col_left, col_right = st.columns(2)
+    
+    with col_left:
+        # VISUAL UPGRADE: Transformed Truck Input into an aligned high-appeal box header
+        st.markdown("### 🚛 Logistics Override")
+        min_trucks = math.ceil(total_kg / 6000) or 1
+        trks = st.number_input("Manually Set Truck Count", min_value=min_trucks, value=max(min_trucks, st.session_state.truck_override))
+        st.session_state.truck_override = trks
 
+    # Run remaining equations with the override data
     safe_km = st.session_state.km if st.session_state.km else 0
     wav = h_wk1_gear * 0.07 if waiver_mode == "Charge" else 0
     crt = trks * safe_km * 4 * 3.50 if cartage_mode == "Charge" else 0
     lab = max(st.session_state.df["Raw_Lab"].sum(), 350) if labour_mode == "Separate" else 0
     
+    st.divider()
     m = st.columns(6)
     m[0].metric("HIRE COST", f"${round(h_tot_c, 2):,}")
     m[1].metric("LABOUR", f"${round(lab, 2):,}")
@@ -249,4 +255,4 @@ if not st.session_state.df.empty:
     st.markdown(f"<div class='gt-banner'>GRAND TOTAL (EX GST): ${h_tot_c + lab + wav + crt:,.2f}</div>", unsafe_allow_html=True)
     l_maths = [f"Damage Waiver: ${h_wk1_gear:,.2f} x 0.07 = ${wav:,.2f}", f"Cartage: {trks} Trucks x {safe_km}km x 4 x $3.50 = ${crt:,.2f}"]
     pdf_b = create_calculation_pdf(st.session_state.proj, h_tot_c, lab, wav, crt, h_tot_c+lab+wav+crt, weeks, start_d, end_d, pdf_h, pdf_l, l_maths, st.session_state.status)
-    st.download_button("📥 DOWNLOAD PDF ANALYSIS", pdf_b, file_name=f"{st.session_state.proj}_Analysis.pdf")
+    st.download_button("📥 DOWNLOAD PDF", pdf_b, file_name=f"{st.session_state.proj}_Analysis.pdf")
