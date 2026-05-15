@@ -29,6 +29,7 @@ if not check_password():
     st.stop()
 
 # --- VISUAL STYLING ---
+st.set_page_config(page_title="Louis Quoting Tool", layout="wide")
 st.markdown("""
     <style>
     .main { background-color: #F4F7F9 !important; }
@@ -45,18 +46,22 @@ st.markdown("""
     div[data-testid="stMetricValue"] { color: #3D5AFE !important; font-size: 34px !important; font-weight: 800 !important; }
     [data-testid="stMetricLabel"] p { color: #5F6368 !important; font-weight: 700 !important; text-transform: uppercase; }
 
-    .item-text { font-size: 19px !important; font-weight: 600 !important; color: #202124; }
+    .item-text { font-size: 19px !important; font-weight: 600 !important; color: #202124; margin-top: 5px; }
     .item-sub { font-size: 16px !important; color: #70757A; font-style: italic; }
     
+    /* Massive Grand Total Banner */
     .gt-banner {
         background: #1A1D2D; color: #00E676; padding: 35px; border-radius: 20px;
         text-align: right; font-size: 44px !important; font-weight: 900;
         margin-top: 30px; border: 5px solid #00E676;
     }
+    
+    /* Alignment fix for trash icon */
+    .stButton > button { line-height: 1.2 !important; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- MASTER DATA ---
+# --- MASTER DATA (INCLUDING TRAKMAT) ---
 CONFIG = {"W_KG": 30, "W_H": 6.60, "W_L": 1.65, "PAYLOAD": 6000, "KM_RATE": 3.50}
 STRUCT_LOGIC = {
     3:  {"bay": 3, "s_rate": 22.05, "m_rate": 22.05, "s_lab": 0.55, "m_lab": 0.55, "min_lab": 350.00},
@@ -73,7 +78,8 @@ GENERAL_PRODUCTS = {
         "I-Trac®": {"rate": 23.40, "block": 46.80, "lab_fix": 4.65, "kg": 15.0},
         "Supa-Trac®": {"rate": 11.55, "block": 25.00, "lab_fix": 4.65, "kg": 4.5},
         "Plastorip": {"rate": 10.15, "block": 20.30, "lab_fix": 3.05, "kg": 4.0},
-        "Rollout": {"rate": 7.10, "block": 15.00, "lab_fix": 3.05, "kg": 3.5}
+        "Rollout": {"rate": 7.10, "block": 15.00, "lab_fix": 3.05, "kg": 3.5},
+        "Trakmat": {"rate": 22.05, "block": 44.10, "lab_fix": 5.00, "kg": 35.0} # NEW
     },
     "Accessories": {
         "Weights": {"rate": 6.60, "lab_fix": 1.65, "kg": 30.0},
@@ -110,7 +116,7 @@ def load_project_safe(fname):
     except Exception as e: st.error(f"Load failed: {e}")
 
 # --- MAIN UI ---
-st.title("📦 NO FUSS QUOTER")
+st.title("📦 NO FUSS QUOTING ENGINE")
 
 # --- DASHBOARD ---
 quoted_files = [f for f in os.listdir("quotes") if f.endswith(".json")]
@@ -136,7 +142,6 @@ if followups:
 st.sidebar.title("📁 ARCHIVE MANAGER")
 if st.sidebar.button("➕ START NEW PROJECT"):
     st.session_state.df = pd.DataFrame(columns=st.session_state.df.columns); st.session_state.km = 0.0; st.rerun()
-
 st.sidebar.divider()
 st.session_state.proj = st.sidebar.text_input("Project Label", st.session_state.proj)
 if st.sidebar.button("💾 SAVE / UPDATE PROJECT"):
@@ -148,14 +153,10 @@ st.sidebar.divider()
 saved_quotes = sorted([f.replace(".json", "") for f in os.listdir("quotes") if f.endswith(".json")])
 load_choice = st.sidebar.selectbox("Select Project", ["-- Choose --"] + saved_quotes)
 cl, cd = st.sidebar.columns(2)
-if cl.button("📂 LOAD PROJECT") and load_choice != "-- Choose --":
+if cl.button("📂 LOAD") and load_choice != "-- Choose --":
     load_project_safe(f"{load_choice}.json"); st.rerun()
-
-# Targeted Deletion
-if cd.button("🗑️ DELETE JOB") and load_choice != "-- Choose --":
-    os.remove(f"quotes/{load_choice}.json")
-    st.sidebar.warning(f"Deleted: {load_choice}")
-    st.rerun()
+if cd.button("🗑️ DELETE") and load_choice != "-- Choose --":
+    os.remove(f"quotes/{load_choice}.json"); st.rerun()
 
 # --- WORKSPACE ---
 st.markdown(f"### 📍 Project: {st.session_state.proj}")
@@ -175,7 +176,7 @@ st.info(f"**Duration:** {diff // 7} Weeks, {diff % 7} Days")
 st.markdown("#### 💳 BILLING SETTINGS")
 b1, b2 = st.columns(2)
 cartage_mode = b1.segmented_control("Cartage", ["Charge", "Free"], default="Charge")
-labour_mode = b2.segmented_control("Labour", ["Separate", "Included", "Free"], default="Separate")
+labour_mode = b2.segmented_control("Labour", ["Separate", "Include in Hire", "Free"], default="Separate")
 
 st.divider(); col1, col2 = st.columns(2)
 
@@ -219,7 +220,8 @@ if not st.session_state.df.empty:
         total_kg += row["KG"]; h_wk1_gear += (qty * brate)
         c0, c1, c2, c3, c4, c5 = st.columns([0.4, 3.2, 0.8, 1.2, 1, 1.2])
         if c0.button("🗑️", key=f"del_{idx}"): st.session_state.df.drop(idx, inplace=True); st.rerun()
-        wk1_t = (qty * brate + row["Raw_Lab"]) * dm if labour_mode == "Included" else (qty * brate) * dm
+        
+        wk1_t = (qty * brate + row["Raw_Lab"]) * dm if labour_mode == "Include in Hire" else (qty * brate) * dm
         h_tot_c += wk1_t
         c1.markdown(f"<div class='item-text'>{row['Product']} - Wk 1</div>", unsafe_allow_html=True)
         c2.write(f"{qty:,.0f}"); c3.write(f"${wk1_t/qty:,.2f}")
