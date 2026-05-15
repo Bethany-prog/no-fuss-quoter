@@ -53,7 +53,6 @@ def get_gs_per_seat_labour(seats):
     rate = 55.00
     for b in GRAND_LOGIC:
         if seats <= b["max"]:
-            # (Staff x Hrs x 55) x 2 Bump In/Out x 2 Profit
             total_pool = (b["staff"] * b["hrs"] * rate) * 2 * 2
             per_seat = total_pool / seats
             desc = f"Grandstand Seating Labour: ({b['staff']} staff x {b['hrs']}hrs x $55) x 2 x 2 = ${total_pool:,.2f}"
@@ -261,17 +260,21 @@ with col1:
                 legs_per_structure = (num_bays + 1) * 2
                 total_legs = legs_per_structure * m_q
                 
-                # Wind-loading weight distribution matrix scaling by structure size
+                # Dynamic scaling from your engineering chart matrix rules
                 if span <= 6:
                     weights_per_leg = 2   # 60kg per leg
-                elif span <= 12:
+                elif span <= 9:
                     weights_per_leg = 4   # 120kg per leg
-                else:
+                elif span <= 12:
                     weights_per_leg = 6   # 180kg per leg
+                elif span <= 15:
+                    weights_per_leg = 8   # 240kg per leg
+                else:
+                    weights_per_leg = 10  # 300kg per leg
                     
                 calculated_weights = total_legs * weights_per_leg
                 
-                # Append weights line item automatically
+                # Append ballast record directly to summary grid array
                 st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame([{
                     "Qty": calculated_weights, 
                     "Product": "30kg Weights", 
