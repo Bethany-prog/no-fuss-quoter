@@ -7,7 +7,12 @@ import re
 import json
 import os
 
+# --- INITIAL CONFIG ---
+st.set_page_config(page_title="Louis Master Quoter", layout="wide")
+
 # --- DIRECTORIES ---
+if not os.listdir(".") and not os.path.exists("quotes"):
+    os.makedirs("quotes")
 if not os.path.exists("quotes"):
     os.makedirs("quotes")
 
@@ -68,17 +73,24 @@ def create_calculation_pdf(name, subtotal, labour, waiver, cartage, grand, weeks
     pdf.set_font("Arial", "B", 10)
     pdf.cell(0, 7, clean_text(f"PROJECT: {name} | STATUS: {status.upper()}"), ln=True, align="C")
     pdf.cell(0, 7, f"HIRE PERIOD: {start.strftime('%d/%m/%Y')} to {end.strftime('%d/%m/%Y')} ({weeks} Week(s))", ln=True, align="C"); pdf.ln(5)
+    
     pdf.set_fill_color(240, 240, 240); pdf.set_font("Arial", "B", 12)
     pdf.cell(0, 10, " CALCULATIONS (Hire Breakdown)", 0, 1, "L", True); pdf.set_font("Arial", "", 10)
-    for h in h_maths: pdf.cell(0, 7, clean_text(f" {h}"), border="B", ln=True)
+    for h in h_maths: 
+        pdf.cell(0, 7, clean_text(f" {h}"), border="B", ln=True)
     pdf.set_font("Arial", "B", 10); pdf.cell(0, 10, f" TOTAL HIRE: ${subtotal:,.2f}", ln=True, align="R"); pdf.ln(5)
+    
     if labour > 0:
         pdf.set_font("Arial", "B", 12); pdf.cell(0, 10, " OTHER LABOUR", 0, 1, "L", True); pdf.set_font("Arial", "", 10)
-        for l in l_details: pdf.cell(0, 7, clean_text(f" {l}"), border="B", ln=True)
+        for l in l_details: 
+            pdf.cell(0, 7, clean_text(f" {l}"), border="B", ln=True)
         pdf.set_font("Arial", "B", 10); pdf.cell(0, 10, f" TOTAL LABOUR POOL: ${labour:,.2f}", ln=True, align="R"); pdf.ln(5)
+
     pdf.set_font("Arial", "B", 12); pdf.cell(0, 10, " LOGISTICS & WAIVER PROOFS", 0, 1, "L", True); pdf.set_font("Arial", "", 10)
-    for m in log_maths: pdf.cell(0, 7, clean_text(f" {m}"), border="B", ln=True)
+    for m in log_maths: 
+        pdf.cell(0, 7, clean_text(f" {m}"), border="B", ln=True)
     pdf.set_font("Arial", "B", 10); pdf.cell(0, 10, f" LOGISTICS SUBTOTAL: ${waiver + cartage:,.2f}", ln=True, align="R")
+    
     pdf.ln(10); pdf.set_fill_color(26, 29, 45); pdf.set_text_color(255, 255, 255); pdf.set_font("Arial", "B", 14)
     pdf.cell(0, 15, f" GRAND TOTAL (EX GST): ${grand:,.2f} ", 0, 1, "R", True)
     return bytes(pdf.output())
@@ -100,7 +112,8 @@ STAGES = ["Quoted", "Accepted", "Paid", "On Hire", "Returned", "Cancelled"]
 STAGE_COLORS = {"Quoted": "#FF9100", "Accepted": "#00E676", "Paid": "#00B8D4", "On Hire": "#D500F9", "Returned": "#757575", "Cancelled": "#263238"}
 
 # --- SESSION STATE ---
-if 'df' not in st.session_state: st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Total", "Min_Lab", "Raw_Lab", "KG", "Is_Marquee", "Discount", "Lab_Math", "Lab_Per_Unit", "Base_Hire"])
+if 'df' not in st.session_state: 
+    st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Total", "Min_Lab", "Raw_Lab", "KG", "Is_Marquee", "Discount", "Lab_Math", "Lab_Per_Unit", "Base_Hire"])
 if 'status' not in st.session_state: st.session_state.status = "Quoted"
 if 'proj' not in st.session_state: st.session_state.proj = "New Project"
 if 'km' not in st.session_state: st.session_state.km = 0.0
@@ -118,10 +131,21 @@ def load_project_safe(fname):
             st.rerun()
     except: st.error("Load Error")
 
-# --- UI ---
-st.title("⚡ Louis Master Quoter")
+# --- UI STYLING ---
+st.markdown("""
+    <style>
+    .main { background-color: #F4F7F9 !important; }
+    h1 { color: #1A1D2D !important; font-size: 48px !important; font-weight: 900 !important; }
+    h3 { color: #FFFFFF !important; border-left: 10px solid #00E676; padding: 15px; background-color: #1A1D2D; border-radius: 0 10px 10px 0; }
+    div.stMetric { background-color: #FFFFFF !important; padding: 15px !important; border-radius: 12px !important; border: 2px solid #3D5AFE !important; }
+    div[data-testid="stMetricValue"] { color: #3D5AFE !important; font-size: 32px !important; font-weight: 800 !important; }
+    .item-text { font-size: 20px !important; font-weight: 700 !important; color: #1A1D2D; margin-top: 10px; }
+    .gt-banner { background: #1A1D2D; color: #00E676; padding: 40px; border-radius: 20px; text-align: right; font-size: 44px !important; font-weight: 900; margin-top: 30px; border: 5px solid #00E676; }
+    </style>
+    """, unsafe_allow_html=True)
 
-# 📡 CONTROL TOWER
+# --- DASHBOARD (CONTROL TOWER) ---
+st.title("⚡ Louis Master Quoter")
 quoted_files = sorted([f for f in os.listdir("quotes") if f.endswith(".json")])
 followups = []
 for fn in quoted_files:
@@ -135,13 +159,14 @@ for fn in quoted_files:
     except: continue
 
 if followups:
-    st.markdown("### 📡 CONTROL TOWER (Follow-Ups)")
-    for f in followups:
-        cl, cr = st.columns([5, 1])
-        cl.warning(f"**{f['name']}** starts in {f['days']} days.")
-        if cr.button("📂 LOAD", key=f"dash_{f['file']}"): load_project_safe(f['file'])
+    with st.container():
+        st.markdown("### 📡 CONTROL TOWER (Follow-Ups)")
+        for f in followups:
+            cl, cr = st.columns([5, 1])
+            cl.warning(f"**{f['name']}** starts in {f['days']} days.")
+            if cr.button("📂 LOAD", key=f"dash_{f['file']}"): load_project_safe(f['file'])
 
-# 📁 SIDEBAR ARCHIVE
+# --- SIDEBAR ARCHIVE ---
 st.sidebar.title("📁 PROJECT ARCHIVE")
 if st.sidebar.button("➕ START NEW"):
     st.session_state.df = pd.DataFrame(columns=st.session_state.df.columns); st.session_state.km = 0.0; st.session_state.proj = "New Project"; st.rerun()
@@ -154,17 +179,19 @@ load_choice = st.sidebar.selectbox("Retrieval", ["-- Choose --"] + [f.replace(".
 if st.sidebar.button("📂 LOAD PROJECT") and load_choice != "-- Choose --": load_project_safe(f"{load_choice}.json")
 if st.sidebar.button("🗑️ DELETE JOB") and load_choice != "-- Choose --": os.remove(f"quotes/{load_choice}.json"); st.rerun()
 
-# Workspace
+# --- WORKSPACE ---
 st.markdown(f"### 📍 Project: {st.session_state.proj}")
 st.session_state.status = st.selectbox("Stage", STAGES, index=STAGES.index(st.session_state.status) if st.session_state.status in STAGES else 0)
-st.markdown(f"<div style='height: 12px; background-color: {STAGE_COLORS[st.session_state.status]}; border-radius: 6px; margin-bottom: 20px;'></div>", unsafe_allow_html=True)
+st.markdown(f"<div style='height: 14px; background-color: {STAGE_COLORS[st.session_state.status]}; border-radius: 7px; margin-bottom: 25px;'></div>", unsafe_allow_html=True)
 
 c1, c2, c3 = st.columns(3)
 st.session_state.start_d = c1.date_input("Start", value=st.session_state.start_d)
 st.session_state.end_d = c2.date_input("End", value=st.session_state.end_d)
-km_val = st.session_state.km if (st.session_state.km and st.session_state.km > 0) else None
-st.session_state.km = c3.number_input("One-Way KM", value=km_val, placeholder="KM...")
+km_curr = st.session_state.km
+km_shw = km_curr if (km_curr is not None and km_curr > 0) else None
+st.session_state.km = c3.number_input("One-Way KM", value=km_shw, placeholder="KM...")
 weeks = math.ceil(((st.session_state.end_d - st.session_state.start_d).days) / 7) or 1
+st.info(f"**Duration:** {weeks} Week(s)")
 
 b1, b2 = st.columns(2)
 cartage_mode, labour_mode = b1.segmented_control("Cartage", ["Charge", "Free"], default="Charge"), b2.segmented_control("Labour", ["Separate", "Include in Hire", "Free"], default="Separate")
@@ -209,9 +236,10 @@ if not st.session_state.df.empty:
         total_kg += row["KG"]; h_wk1_gear += (qty * row["Base_Hire"])
         wk1_t = (qty * brate + row["Raw_Lab"]) * dm if labour_mode == "Include in Hire" else (qty * brate) * dm
         h_tot_c += wk1_t
-        c0, c1, c2, c3, c4, c5 = st.columns([0.4, 3.2, 0.8, 1.2, 1, 1.2])
+        
+        c0, c1, c2, c3, c4, c5 = st.columns([0.4, 4.0, 0.8, 1.2, 1.0, 1.4])
         if c0.button("🗑️", key=f"sdel_{idx}"): st.session_state.df.drop(idx, inplace=True); st.rerun()
-        c1.markdown(f"<div style='font-size:18px; font-weight:600;'>{row['Product']} - Wk 1</div>", unsafe_allow_html=True)
+        c1.markdown(f"<div class='item-text'>{row['Product']} - Wk 1</div>", unsafe_allow_html=True)
         c2.write(f"{qty:,.0f}"); c3.write(f"${wk1_t/qty:,.2f}")
         st.session_state.df.at[idx, "Discount"] = c4.number_input("", 0.0, 100.0, float(row["Discount"]), 1.0, key=f"sd_{idx}", label_visibility="collapsed")
         c5.write(f"${wk1_t:,.2f}"); pdf_h.append(f"{row['Product']} Wk1: ${wk1_t:,.2f}")
@@ -219,8 +247,8 @@ if not st.session_state.df.empty:
         if weeks > 1:
             base_r = row["Base_Hire"]
             r_rate, r_tot = (base_r * 0.5 if row["Is_Marquee"] else base_r), qty * (base_r * 0.5 if row["Is_Marquee"] else base_r) * (weeks-1) * dm
-            h_tot_c += r_tot; cb = st.columns([0.4, 3.2, 0.8, 1.2, 1, 1.2])
-            cb[1].markdown(f"<div style='color:grey; font-style:italic;'>└ Recurring (x{weeks-1} wks)</div>", unsafe_allow_html=True)
+            h_tot_c += r_tot; cb = st.columns([0.4, 4.0, 0.8, 1.2, 1.0, 1.4])
+            cb[1].markdown(f"<div style='color:grey; font-style:italic; font-size:18px;'>└ Recurring (x{weeks-1} wks)</div>", unsafe_allow_html=True)
             cb[2].write(f"{qty:,.0f}"); cb[3].write(f"${r_rate*dm:,.2f}"); cb[5].write(f"${r_tot:,.2f}"); pdf_h.append(f"-> Recurring: ${r_tot:,.2f}")
 
     trks, safe_km = (math.ceil(total_kg / 6000) or 1), (st.session_state.km if st.session_state.km else 0)
@@ -229,6 +257,6 @@ if not st.session_state.df.empty:
     l_maths = [f"Damage Waiver (7%): ${h_wk1_gear:,.2f} x 0.07 = ${wav:,.2f}", f"Cartage: {trks} Trucks x {safe_km}km x 4 x $3.50 = ${crt:,.2f}"]
     st.divider(); m = st.columns(6)
     m[0].metric("HIRE", f"${h_tot_c:,.2f}"); m[1].metric("LABOUR", f"${lab:,.2f}"); m[2].metric("WAIVER", f"${wav:,.2f}"); m[3].metric("CARTAGE", f"${crt:,.2f}"); m[4].metric("WEIGHT", f"{total_kg:,.0f}kg"); m[5].metric("TRUCKS", f"{trks}")
-    st.markdown(f"<div style='background:#1A1D2D; color:#00E676; padding:30px; border-radius:20px; text-align:right; font-size:40px; font-weight:900;'>GRAND TOTAL: ${h_tot_c + lab + wav + crt:,.2f}</div>", unsafe_allow_html=True)
+    st.markdown(f"<div class='gt-banner'>GRAND TOTAL: ${h_tot_c + lab + wav + crt:,.2f}</div>", unsafe_allow_html=True)
     pdf_b = create_calculation_pdf(st.session_state.proj, h_tot_c, lab, wav, crt, h_tot_c+lab+wav+crt, weeks, st.session_state.start_d, st.session_state.end_d, pdf_h, pdf_l, l_maths, st.session_state.status)
     st.download_button("📥 DOWNLOAD PDF", pdf_b, file_name=f"{st.session_state.proj}_Analysis.pdf")
