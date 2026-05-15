@@ -51,7 +51,7 @@ def get_gs_per_seat_labour(seats):
             total_pool = (b["staff"] * b["hrs"] * rate) * 2 * 2
             per_seat = total_pool / seats
             desc = f"Labour Buildup: ({b['staff']} staff x {b['hrs']}hrs x $55) x 2 x 2 / {seats} seats"
-            return round(per_seat, 2), desc
+            return per_seat, desc
     return 0, ""
 
 # --- PDF ENGINE ---
@@ -68,20 +68,18 @@ def create_calculation_pdf(name, subtotal, labour, waiver, cartage, grand, weeks
     pdf.add_page()
     pdf.set_font("Arial", "B", 16)
     pdf.cell(0, 10, clean_text("Louis Quoting Tool - Calculation Analysis"), ln=True, align="C")
-    pdf.set_font("Arial", "B", 10)
-    pdf.cell(0, 7, clean_text(f"PROJECT: {name} | STATUS: {status.upper()}"), ln=True, align="C")
+    pdf.set_font("Arial", "B", 10); pdf.cell(0, 7, clean_text(f"PROJECT: {name} | STATUS: {status.upper()}"), ln=True, align="C")
     pdf.cell(0, 7, f"HIRE PERIOD: {start.strftime('%d/%m/%Y')} to {end.strftime('%d/%m/%Y')} ({weeks} Week(s))", ln=True, align="C"); pdf.ln(5)
     pdf.set_fill_color(240, 240, 240); pdf.set_font("Arial", "B", 12)
-    pdf.cell(0, 10, " CALCULATIONS (Hire Breakdown)", 0, 1, "L", True); pdf.set_font("Arial", "", 10)
+    pdf.cell(0, 10, " CALCULATIONS", 0, 1, "L", True); pdf.set_font("Arial", "", 10)
     for h in h_maths: pdf.cell(0, 7, clean_text(f" {h}"), border="B", ln=True)
     pdf.set_font("Arial", "B", 10); pdf.cell(0, 10, f" TOTAL HIRE: ${subtotal:,.2f}", ln=True, align="R"); pdf.ln(5)
     if labour > 0:
         pdf.set_font("Arial", "B", 12); pdf.cell(0, 10, " OTHER LABOUR", 0, 1, "L", True); pdf.set_font("Arial", "", 10)
         for l in l_details: pdf.cell(0, 7, clean_text(f" {l}"), border="B", ln=True)
         pdf.set_font("Arial", "B", 10); pdf.cell(0, 10, f" TOTAL LABOUR POOL: ${labour:,.2f}", ln=True, align="R"); pdf.ln(5)
-    pdf.set_font("Arial", "B", 12); pdf.cell(0, 10, " LOGISTICS & WAIVER PROOFS", 0, 1, "L", True); pdf.set_font("Arial", "", 10)
+    pdf.set_font("Arial", "B", 12); pdf.cell(0, 10, " LOGISTICS & WAIVER", 0, 1, "L", True); pdf.set_font("Arial", "", 10)
     for m in log_maths: pdf.cell(0, 7, clean_text(f" {m}"), border="B", ln=True)
-    pdf.set_font("Arial", "B", 10); pdf.cell(0, 10, f" LOGISTICS SUBTOTAL: ${waiver + cartage:,.2f}", ln=True, align="R")
     pdf.ln(10); pdf.set_fill_color(26, 29, 45); pdf.set_text_color(255, 255, 255); pdf.set_font("Arial", "B", 14)
     pdf.cell(0, 15, f" GRAND TOTAL (EX GST): ${grand:,.2f} ", 0, 1, "R", True)
     return bytes(pdf.output())
@@ -103,23 +101,17 @@ STAGES = ["Quoted", "Accepted", "Paid", "On Hire", "Returned", "Cancelled"]
 STAGE_COLORS = {"Quoted": "#FF9100", "Accepted": "#00E676", "Paid": "#00B8D4", "On Hire": "#D500F9", "Returned": "#757575", "Cancelled": "#263238"}
 
 # --- SESSION STATE ---
-if 'df' not in st.session_state: 
-    st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Total", "Min_Lab", "Raw_Lab", "KG", "Is_Marquee", "Discount", "Lab_Math", "Lab_Per_Unit", "Base_Hire"])
+if 'df' not in st.session_state: st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Total", "Min_Lab", "Raw_Lab", "KG", "Is_Marquee", "Discount", "Lab_Math", "Lab_Per_Unit", "Base_Hire"])
 if 'status' not in st.session_state: st.session_state.status = "Quoted"
 if 'proj' not in st.session_state: st.session_state.proj = "New Project"
 if 'km' not in st.session_state: st.session_state.km = 0.0
-if 'start_d' not in st.session_state: st.session_state.start_d = date.today()
-if 'end_d' not in st.session_state: st.session_state.end_d = date.today()
 
 def load_project_safe(fname):
     try:
         with open(f"quotes/{fname}", "r") as f:
             d = json.load(f); st.session_state.df = pd.DataFrame(d["items"])
             st.session_state.status, st.session_state.proj = d.get("status", "Quoted"), d.get("proj", fname.replace(".json", ""))
-            st.session_state.start_d = datetime.strptime(d.get("start_date", str(date.today())), '%Y-%m-%d').date()
-            st.session_state.end_d = datetime.strptime(d.get("end_date", str(date.today())), '%Y-%m-%d').date()
-            st.session_state.km = float(d.get("km", 0.0))
-            st.rerun()
+            st.session_state.km = float(d.get("km", 0.0)); st.rerun()
     except: st.error("Load Error")
 
 # --- UI STYLING ---
@@ -128,46 +120,31 @@ st.markdown("""
     .main { background-color: #F4F7F9 !important; }
     h1 { color: #1A1D2D !important; font-size: 48px !important; font-weight: 900 !important; }
     h3 { color: #FFFFFF !important; border-left: 10px solid #00E676; padding: 15px; background-color: #1A1D2D; border-radius: 0 10px 10px 0; }
-    div.stMetric { background-color: #FFFFFF !important; padding: 10px !important; border-radius: 12px !important; border: 2px solid #3D5AFE !important; }
-    div[data-testid="stMetricValue"] { color: #3D5AFE !important; font-size: 28px !important; font-weight: 800 !important; }
+    
+    /* CUSTOM METRIC BOXES */
+    .metric-card {
+        background: white; padding: 15px; border-radius: 12px; border: 2px solid #3D5AFE;
+        text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+    }
+    .metric-label { font-size: 14px; font-weight: 700; color: #5F6368; text-transform: uppercase; margin-bottom: 5px; }
+    .metric-value { font-size: 24px; font-weight: 800; color: #3D5AFE; word-break: break-all; }
+    
     .item-text { font-size: 19px !important; font-weight: 700 !important; color: #1A1D2D; margin-top: 10px; }
-    .gt-banner { background: #1A1D2D; color: #00E676; padding: 35px; border-radius: 20px; text-align: right; font-size: 42px !important; font-weight: 900; margin-top: 30px; border: 5px solid #00E676; }
+    .gt-banner { background: #1A1D2D; color: #00E676; padding: 35px; border-radius: 20px; text-align: right; font-size: 42px !important; font-weight: 900; margin-top: 20px; border: 5px solid #00E676; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- DASHBOARD ---
+# --- DASHBOARD & SIDEBAR ---
 st.title("⚡ Louis Master Quoter")
 quoted_files = sorted([f for f in os.listdir("quotes") if f.endswith(".json")])
-followups = []
-for fn in quoted_files:
-    try:
-        with open(f"quotes/{fn}", "r") as f:
-            p = json.load(f)
-            if p.get("status") == "Quoted" and p.get("start_date"):
-                sd = datetime.strptime(p["start_date"], '%Y-%m-%d').date()
-                diff = (sd - date.today()).days
-                if 0 <= diff <= 28: followups.append({"name": p.get("proj", fn), "days": diff, "file": fn})
-    except: continue
-
-if followups:
-    st.markdown("### 📡 CONTROL TOWER")
-    for f in followups:
-        cl, cr = st.columns([5, 1])
-        cl.warning(f"**{f['name']}** starts in {f['days']} days.")
-        if cr.button("📂 LOAD", key=f"dash_{f['file']}"): load_project_safe(f['file'])
-
-# --- SIDEBAR ---
 st.sidebar.title("📁 PROJECT ARCHIVE")
-if st.sidebar.button("➕ START NEW"):
-    st.session_state.df = pd.DataFrame(columns=st.session_state.df.columns); st.session_state.km = 0.0; st.session_state.proj = "New Project"; st.rerun()
 st.session_state.proj = st.sidebar.text_input("Project Label", st.session_state.proj)
 if st.sidebar.button("💾 SAVE / UPDATE"):
-    data = {"status": st.session_state.status, "items": st.session_state.df.to_dict(orient='records'), "proj": st.session_state.proj, "start_date": str(st.session_state.start_d), "end_date": str(st.session_state.end_d), "km": st.session_state.km}
+    data = {"status": st.session_state.status, "items": st.session_state.df.to_dict(orient='records'), "proj": st.session_state.proj, "km": st.session_state.km}
     with open(f"quotes/{st.session_state.proj}.json", "w") as f: json.dump(data, f)
     st.sidebar.success("Saved!")
 load_choice = st.sidebar.selectbox("Retrieval", ["-- Choose --"] + [f.replace(".json", "") for f in quoted_files])
 if st.sidebar.button("📂 LOAD PROJECT") and load_choice != "-- Choose --": load_project_safe(f"{load_choice}.json")
-if st.sidebar.button("🗑️ DELETE JOB") and load_choice != "-- Choose --": os.remove(f"quotes/{load_choice}.json"); st.rerun()
 
 # --- WORKSPACE ---
 st.markdown(f"### 📍 Project: {st.session_state.proj}")
@@ -175,13 +152,15 @@ st.session_state.status = st.selectbox("Stage", STAGES, index=STAGES.index(st.se
 st.markdown(f"<div style='height: 12px; background-color: {STAGE_COLORS[st.session_state.status]}; border-radius: 6px; margin-bottom: 20px;'></div>", unsafe_allow_html=True)
 
 c1, c2, c3 = st.columns(3)
-st.session_state.start_d, st.session_state.end_d = c1.date_input("Start", value=st.session_state.start_d), c2.date_input("End", value=st.session_state.end_d)
-st.session_state.km = c3.number_input("One-Way KM", value=st.session_state.km if st.session_state.km > 0 else None, placeholder="KM...")
-weeks = math.ceil(((st.session_state.end_d - st.session_state.start_d).days) / 7) or 1
-st.info(f"**Duration:** {weeks} Week(s)")
+start_d = c1.date_input("Start", value=date.today())
+end_d = c2.date_input("End", value=date.today())
+km_in = st.session_state.km
+st.session_state.km = c3.number_input("One-Way KM", value=km_in if (km_in and km_in > 0) else None, placeholder="KM...")
+weeks = math.ceil(((end_d - start_d).days) / 7) or 1
 
 b1, b2 = st.columns(2)
-cartage_mode, labour_mode = b1.segmented_control("Cartage", ["Charge", "Free"], default="Charge"), b2.segmented_control("Labour", ["Separate", "Include in Hire", "Free"], default="Separate")
+cartage_mode = b1.segmented_control("Cartage", ["Charge", "Free"], default="Charge")
+labour_mode = b2.segmented_control("Labour", ["Separate", "Include in Hire", "Free"], default="Separate")
 
 st.divider(); col1, col2 = st.columns(2)
 with col1:
@@ -194,32 +173,24 @@ with col1:
             logic = STRUCT_LOGIC.get(span, STRUCT_LOGIC[4])
             sqm = span*length; hire_rate = logic['s_rate'] if (length/3) <= 1 else logic['m_rate']
             brate = sqm * hire_rate; l1 = brate * logic['s_lab']
-            st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame([{
-                "Qty": m_q, "Product": f"Structure {span}x{length}m", "Unit Rate": brate, "Min_Lab": 350, 
-                "Raw_Lab": l1, "Lab_Math": f"Structure {span}x{length}: ${l1:,.2f}", "KG": (sqm*15)*m_q, 
-                "Is_Marquee": True, "Discount": 0.0, "Lab_Per_Unit": 0, "Base_Hire": brate
-            }])], ignore_index=True); st.rerun()
+            st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame([{"Qty": m_q, "Product": f"Structure {span}x{length}m", "Unit Rate": brate, "Min_Lab": 350, "Raw_Lab": l1, "Lab_Math": f"Structure {span}x{length}: ${l1:,.2f}", "KG": (sqm*15)*m_q, "Is_Marquee": True, "Discount": 0.0, "Lab_Per_Unit": 0, "Base_Hire": brate}])], ignore_index=True); st.rerun()
 
 with col2:
     st.markdown("### 🪵 Catalog Items")
     cat_sel = st.selectbox("Category", list(CATALOG.keys()))
     p_sel = st.selectbox("Product", list(CATALOG[cat_sel].keys()))
-    f_qty = st.number_input("Seats / SQM Count", min_value=0.0, value=None, key="p_qty")
+    f_qty = st.number_input("Count / SQM", min_value=0.0, value=None, key="p_qty")
     if st.button("Add to Quote") and f_qty:
         data = CATALOG[cat_sel][p_sel]
         base_h = (data['block']/4) if (weeks >= 4 and 'block' in data) else data['rate']
-        lab_per_unit, raw_lab_pool, lab_desc = 0, 0, ""
+        lab_per_u, raw_lab, lab_desc = 0, 0, ""
         if cat_sel == "Grandstands":
-            lab_per_unit, lab_desc = get_gs_per_seat_labour(f_qty)
-            unit_rate = base_h + lab_per_unit
+            lab_per_u, lab_desc = get_gs_per_seat_labour(f_qty)
+            u_rate = base_h + lab_per_u
         else:
-            unit_rate = base_h; raw_lab_pool = f_qty * data.get('lab_fix', 0); lab_desc = f"{p_sel}: ${raw_lab_pool:,.2f}"
+            u_rate = base_h; raw_lab = f_qty * data.get('lab_fix', 0); lab_desc = f"{p_sel}: ${raw_lab:,.2f}"
         eff_qty = (math.ceil(f_qty / data["sheet_sqm"]) * data["sheet_sqm"]) if "sheet_sqm" in data else f_qty
-        st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame([{
-            "Qty": f_qty, "Product": p_sel, "Unit Rate": unit_rate, "Min_Lab": 0, "Raw_Lab": raw_lab_pool, 
-            "Lab_Math": lab_desc, "KG": eff_qty * data['kg'], "Is_Marquee": False, "Discount": 0.0, 
-            "Lab_Per_Unit": lab_per_unit, "Base_Hire": base_h
-        }])], ignore_index=True); st.rerun()
+        st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame([{"Qty": f_qty, "Product": p_sel, "Unit Rate": u_rate, "Min_Lab": 0, "Raw_Lab": raw_lab, "Lab_Math": lab_desc, "KG": eff_qty * data['kg'], "Is_Marquee": False, "Discount": 0.0, "Lab_Per_Unit": lab_per_u, "Base_Hire": base_h}])], ignore_index=True); st.rerun()
 
 # --- SUMMARY ---
 if not st.session_state.df.empty:
@@ -246,16 +217,14 @@ if not st.session_state.df.empty:
     trks, safe_km = (math.ceil(total_kg / 6000) or 1), (st.session_state.km if st.session_state.km else 0)
     wav, crt = h_wk1_gear * 0.07, trks * safe_km * 4 * 3.50 if cartage_mode == "Charge" else 0
     lab = max(st.session_state.df["Raw_Lab"].sum(), 350) if labour_mode == "Separate" else 0
-    
+
     st.divider(); m = st.columns(6)
-    m[0].metric("HIRE", f"${round(h_tot_c, 2):,}")
-    m[1].metric("LABOUR", f"${round(lab, 2):,}")
-    m[2].metric("WAIVER", f"${round(wav, 2):,}")
-    m[3].metric("CARTAGE", f"${round(crt, 2):,}")
-    m[4].metric("WEIGHT", f"{round(total_kg, 0):,}kg")
-    m[5].metric("TRUCKS", f"{trks}")
+    metrics = [("Hire", h_tot_c), ("Labour", lab), ("Waiver", wav), ("Cartage", crt), ("Weight", total_kg, "kg"), ("Trucks", trks, "")]
+    for i, (label, val, *unit) in enumerate(metrics):
+        suffix = unit[0] if unit else ""
+        m[i].markdown(f"""<div class='metric-card'><div class='metric-label'>{label}</div><div class='metric-value'>{"$" if label != "Trucks" and label != "Weight" else ""}{val:,.2f}{suffix}</div></div>""", unsafe_allow_html=True)
     
     st.markdown(f"<div class='gt-banner'>GRAND TOTAL: ${h_tot_c + lab + wav + crt:,.2f}</div>", unsafe_allow_html=True)
     l_maths = [f"Damage Waiver (7%): ${h_wk1_gear:,.2f} x 0.07 = ${wav:,.2f}", f"Cartage: {trks} Trucks x {safe_km}km x 4 x $3.50 = ${crt:,.2f}"]
-    pdf_b = create_calculation_pdf(st.session_state.proj, h_tot_c, lab, wav, crt, h_tot_c+lab+wav+crt, weeks, st.session_state.start_d, st.session_state.end_d, pdf_h, pdf_l, l_maths, st.session_state.status)
-    st.download_button("📥 DOWNLOAD PDF", pdf_b, file_name=f"{st.session_state.proj}_Analysis.pdf")
+    pdf_b = create_calculation_pdf(st.session_state.proj, h_tot_c, lab, wav, crt, h_tot_c+lab+wav+crt, weeks, start_d, end_d, pdf_h, pdf_l, l_maths, st.session_state.status)
+    st.download_button("📥 DOWNLOAD PDF ANALYSIS", pdf_b, file_name=f"{st.session_state.proj}_Analysis.pdf")
