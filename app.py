@@ -12,7 +12,6 @@ import os
 # ==============================================================================
 st.set_page_config(page_title="Louis Master Quoter", layout="wide")
 
-# Bulletproof internal database folder on the web container drive
 VAULT_DIR = "cloud_vault"
 if not os.path.exists(VAULT_DIR):
     os.makedirs(VAULT_DIR)
@@ -186,12 +185,15 @@ vault_jobs = pull_vault_archive_list()
 
 # Sidebar Archive Actions
 st.sidebar.title("📁 PROJECT ARCHIVE")
-if st.sidebar.button("➕ START NEW"):
+st.sidebar.markdown("---") # Added visual line marker for clarity
+
+if st.sidebar.button("➕ START NEW", use_container_width=True):
     st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Total", "Min_Lab", "Raw_Lab", "KG", "Is_Marquee", "Discount", "Lab_Math", "Lab_Per_Unit", "Base_Hire", "Anchoring"])
     st.session_state.km = 0.0
     st.session_state.proj = "New Project"
     st.rerun()
 
+st.sidebar.markdown("---")
 st.session_state.proj = st.sidebar.text_input("Project Label", st.session_state.proj)
 
 if vault_jobs:
@@ -361,7 +363,6 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     st.markdown("")  
     action_col_1, action_col_2 = st.columns(2)
     
-    # SYSTEM UPGRADE v48.0: Direct internal cloud vault file commit - 100% bypasses Google link errors
     if action_col_1.button("💾 SAVE PROJECT TO CLOUD", use_container_width=True):
         if st.session_state.df is not None and not st.session_state.df.empty:
             try:
