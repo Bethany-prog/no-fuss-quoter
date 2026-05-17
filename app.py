@@ -59,7 +59,6 @@ def get_gs_per_seat_labour(seats):
     rate = 55.00
     for b in GRAND_LOGIC:
         if seats <= b["max"]:
-            # (Staff x Hrs x 55) x 2 Bump In/Out x 2 Profit
             total_pool = (b["staff"] * b["hrs"] * rate) * 2 * 2
             per_seat = total_pool / seats
             desc = f"Grandstand Seating Labour: ({b['staff']} staff x {b['hrs']}hrs x $55) x 2 x 2 = ${total_pool:,.2f}"
@@ -212,16 +211,18 @@ if st.sidebar.button("➕ START NEW"):
 st.session_state.proj = st.sidebar.text_input("Project Label", st.session_state.proj)
 
 if st.sidebar.button("💾 SAVE / UPDATE TO SHEET"):
-    if conn is not None and not st.session_state.df.empty:
+    # STABILITY PATCH v47.0: Force session state check directly on current dataframe state
+    if conn is not None and st.session_state.df is not None and len(st.session_state.df) > 0:
         try:
             fresh_rows = []
-            project_unique_key = f"{st.session_state.proj}_{datetime.now().strftime('%Y%m%d')}"
+            target_label = st.session_state.proj if st.session_state.proj != "New Project" else f"Draft_{datetime.now().strftime('%Y%m%d_%H%M')}"
+            project_unique_key = f"{target_label}_{datetime.now().strftime('%Y%m%d')}"
             
             for _, item in st.session_state.df.iterrows():
                 item_dict = item.to_dict()
                 fresh_rows.append({
                     "Project_Key": project_unique_key,
-                    "Project_Label": st.session_state.proj,
+                    "Project_Label": target_label,
                     "Stage_Status": st.session_state.status,
                     "One_Way_KM": st.session_state.km,
                     "Timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
@@ -234,16 +235,17 @@ if st.sidebar.button("💾 SAVE / UPDATE TO SHEET"):
             except:
                 historical_sheet_df = pd.DataFrame()
                 
-            if not historical_sheet_df.empty:
-                historical_sheet_df = historical_sheet_df[historical_sheet_df["Project_Label"] != st.session_state.proj]
+            if not historical_sheet_df.empty and "Project_Label" in historical_sheet_df.columns:
+                historical_sheet_df = historical_sheet_df[historical_sheet_df["Project_Label"] != target_label]
                 combined_sheet_df = pd.concat([historical_sheet_df, new_records_df], ignore_index=True)
             else:
                 combined_sheet_df = new_records_df
                 
             conn.update(data=combined_sheet_df)
-            st.sidebar.success("Database Saved Successfully!")
+            st.sidebar.success(f"Saved under layout: {target_label}!")
+            st.rerun()
         except Exception:
-            st.sidebar.error("Database connection refused. Check permissions.")
+            st.sidebar.error("Database tracking sequence interrupted. Please check permissions.")
     else:
         st.sidebar.error("Cannot save empty quotes.")
 
@@ -338,7 +340,7 @@ with col2:
 # ==============================================================================
 # 8. LIVE CALCULATION DATA VIEWER
 # ==============================================================================
-if not st.session_state.df.empty:
+if st.session_state.df is not None and not st.session_state.df.empty:
     st.divider(); st.subheader("📝 QUOTE SUMMARY")
     h_tot_c, h_wk1_gear, total_kg = 0.0, 0.0, 0.0
     
