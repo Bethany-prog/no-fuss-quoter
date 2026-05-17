@@ -361,10 +361,9 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     # ==============================================================================
     # 9. INTEGRATED MAIN VOLUME SAVE & PDF DOWNLOAD GRID
     # ==============================================================================
-    st.ln(2)
+    st.markdown("")  # FIXED v47.3: Corrected AttributeError syntax space line
     action_col_1, action_col_2 = st.columns(2)
     
-    # SUCCESS RELOCATION ACTION: Save Routine directly linked to core workspace scope
     if action_col_1.button("💾 CLOUD DATA COMPILATION - SAVE/UPDATE", use_container_width=True):
         if conn is not None and st.session_state.df is not None and not st.session_state.df.empty:
             try:
