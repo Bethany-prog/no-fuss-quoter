@@ -3,17 +3,23 @@ import math
 import pandas as pd
 from datetime import date, datetime
 from fpdf import FPDF
+from streamlit_gsheets import GSheetsConnection
 import re
 import json
 import os
 
 # ==============================================================================
-# 0. INITIAL GLOBAL CONFIG (FORCES WIDE SCREEN ONLY)
+# 0. INITIAL GLOBAL CONFIG & DATABASE LINK
 # ==============================================================================
 st.set_page_config(page_title="Louis Master Quoter", layout="wide")
 
-if not os.path.exists("quotes"):
-    os.makedirs("quotes")
+# HARDCODED DATABASE TARGET: Secure pipeline linking directly to your verified spreadsheet
+TARGET_SPREADSHEET_URL = "https://docs.google.com/spreadsheets/d/1Fs-WAeLWr-I3oduyIAX0V-cNTLCd8_j91ummWa_k-Rw/edit?usp=sharing"
+
+try:
+    conn = st.connection("gsheets", type=GSheetsConnection, url=TARGET_SPREADSHEET_URL)
+except Exception:
+    conn = None
 
 # ==============================================================================
 # 1. ACCESS CONTROL TOWER
@@ -53,6 +59,7 @@ def get_gs_per_seat_labour(seats):
     rate = 55.00
     for b in GRAND_LOGIC:
         if seats <= b["max"]:
+            # (Staff x Hrs x 55) x 2 Bump In/Out x 2 Profit
             total_pool = (b["staff"] * b["hrs"] * rate) * 2 * 2
             per_seat = total_pool / seats
             desc = f"Grandstand Seating Labour: ({b['staff']} staff x {b['hrs']}hrs x $55) x 2 x 2 = ${total_pool:,.2f}"
@@ -74,7 +81,6 @@ def create_calculation_pdf(name, subtotal, labour, waiver, cartage, grand, weeks
     pdf = FPDF()
     pdf.add_page()
     
-    # Header Info
     pdf.set_font("Arial", "B", 16)
     pdf.cell(0, 10, clean_text("Louis Quoting Tool - Detailed Calculation Audit"), ln=True, align="C")
     pdf.set_font("Arial", "B", 10)
@@ -82,7 +88,6 @@ def create_calculation_pdf(name, subtotal, labour, waiver, cartage, grand, weeks
     pdf.cell(0, 7, f"PERIOD: {start.strftime('%d/%m/%Y')} to {end.strftime('%d/%m/%Y')} ({weeks} Week(s))", ln=True, align="C")
     pdf.ln(10)
 
-    # 1. Hire Calculations
     pdf.set_fill_color(26, 29, 45); pdf.set_text_color(255, 255, 255); pdf.set_font("Arial", "B", 12)
     pdf.cell(0, 10, " 1. HIRE CALCULATIONS (WORKING OUT)", 0, 1, "L", True)
     pdf.set_text_color(0, 0, 0); pdf.set_font("Arial", "", 10)
@@ -104,7 +109,6 @@ def create_calculation_pdf(name, subtotal, labour, waiver, cartage, grand, weeks
             pdf.cell(140, 8, clean_text(r_math), border="B")
             pdf.cell(50, 8, f"${r_total:,.2f}", border="B", ln=True, align="R")
 
-    # 2. Labour and Logistics Proofs
     pdf.ln(5); pdf.set_fill_color(26, 29, 45); pdf.set_text_color(255, 255, 255); pdf.set_font("Arial", "B", 12)
     pdf.cell(0, 10, " 2. LABOUR & LOGISTICS PROOFS", 0, 1, "L", True)
     pdf.set_text_color(0, 0, 0); pdf.set_font("Arial", "", 10)
@@ -114,7 +118,6 @@ def create_calculation_pdf(name, subtotal, labour, waiver, cartage, grand, weeks
     for m in log_maths: 
         pdf.cell(0, 8, clean_text(f" {m}"), border="B", ln=True)
 
-    # Grand Total Banner
     pdf.ln(10); pdf.set_fill_color(0, 230, 118); pdf.set_text_color(26, 29, 45); pdf.set_font("Arial", "B", 14)
     pdf.cell(0, 15, f" GRAND TOTAL (EX GST): ${grand:,.2f} ", 0, 1, "R", True)
     return bytes(pdf.output())
@@ -147,18 +150,36 @@ if 'proj' not in st.session_state: st.session_state.proj = "New Project"
 if 'km' not in st.session_state: st.session_state.km = 0.0
 if 'truck_override' not in st.session_state: st.session_state.truck_override = 0
 
-def load_project_safe(fname):
+def pull_global_cloud_archive():
+    if conn is None: return []
     try:
-        with open(f"quotes/{fname}", "r") as f:
-            d = json.load(f)
-            loaded_df = pd.DataFrame(d["items"])
-            if "Anchoring" not in loaded_df.columns:
-                loaded_df["Anchoring"] = ""
-            st.session_state.df = loaded_df
-            st.session_state.status, st.session_state.proj = d.get("status", "Quoted"), d.get("proj", fname.replace(".json", ""))
-            st.session_state.km = float(d.get("km", 0.0))
-            st.rerun()
-    except: st.error("Load Error")
+        existing_df = conn.read(ttl="0s")
+        if not existing_df.empty and "Project_Key" in existing_df.columns:
+            return sorted(list(existing_df["Project_Key"].unique()))
+    except: pass
+    return []
+
+def load_project_from_cloud(project_key_name):
+    if conn is None or not project_key_name: return
+    try:
+        master_cloud_df = conn.read(ttl="0s")
+        sub_df = master_cloud_df[master_cloud_df["Project_Key"] == project_key_name]
+        if not sub_df.empty:
+            first_row = sub_df.iloc[0]
+            st.session_state.status = first_row.get("Stage_Status", "Quoted")
+            st.session_state.proj = first_row.get("Project_Label", "Loaded Job")
+            st.session_state.km = float(first_row.get("One_Way_KM", 0.0))
+            
+            rebuilt_items = []
+            for _, r in sub_df.iterrows():
+                try:
+                    rebuilt_items.append(json.loads(r["Item_Payload_JSON"]))
+                except: pass
+            
+            if rebuilt_items:
+                st.session_state.df = pd.DataFrame(rebuilt_items)
+                st.rerun()
+    except: st.error("Database cloud read timeout.")
 
 # ==============================================================================
 # 6. VISUAL CSS LOOK & FEEL (FRONT-OF-HOUSE)
@@ -177,26 +198,8 @@ st.markdown("""<style>
 # 7. MAIN INTERFACE WORKSPACE
 # ==============================================================================
 st.title("⚡ Louis Master Quoter")
-quoted_files = sorted([f for f in os.listdir("quotes") if f.endswith(".json")])
 
-# Control Tower Reminder Panel
-followups = []
-for fn in quoted_files:
-    try:
-        with open(f"quotes/{fn}", "r") as f:
-            p = json.load(f)
-            if p.get("status") == "Quoted" and p.get("start_date"):
-                sd = datetime.strptime(p["start_date"], '%Y-%m-%d').date()
-                diff = (sd - date.today()).days
-                if 0 <= diff <= 28: followups.append({"name": p.get("proj", fn), "days": diff, "file": fn})
-    except: continue
-
-if followups:
-    st.markdown("### 📡 CONTROL TOWER (Follow-Ups)")
-    for f in followups:
-        cl, cr = st.columns([5, 1])
-        cl.warning(f"**{f['name']}** starts in {f['days']} days.")
-        if cr.button("📂 LOAD", key=f"dash_{f['file']}"): load_project_safe(f['file'])
+cloud_jobs_list = pull_global_cloud_archive()
 
 # Sidebar Archive Actions
 st.sidebar.title("📁 PROJECT ARCHIVE")
@@ -205,13 +208,48 @@ if st.sidebar.button("➕ START NEW"):
     st.session_state.km = 0.0
     st.session_state.proj = "New Project"
     st.rerun()
+
 st.session_state.proj = st.sidebar.text_input("Project Label", st.session_state.proj)
-if st.sidebar.button("💾 SAVE / UPDATE"):
-    data = {"status": st.session_state.status, "items": st.session_state.df.to_dict(orient='records'), "proj": st.session_state.proj, "km": st.session_state.km, "start_date": str(date.today()), "end_date": str(date.today())}
-    with open(f"quotes/{st.session_state.proj}.json", "w") as f: json.dump(data, f)
-    st.sidebar.success("Saved!")
-load_choice = st.sidebar.selectbox("Retrieval", ["-- Choose --"] + [f.replace(".json", "") for f in quoted_files])
-if st.sidebar.button("📂 LOAD PROJECT") and load_choice != "-- Choose --": load_project_safe(f"{load_choice}.json")
+
+if st.sidebar.button("💾 SAVE / UPDATE TO SHEET"):
+    if conn is not None and not st.session_state.df.empty:
+        try:
+            fresh_rows = []
+            project_unique_key = f"{st.session_state.proj}_{datetime.now().strftime('%Y%m%d')}"
+            
+            for _, item in st.session_state.df.iterrows():
+                item_dict = item.to_dict()
+                fresh_rows.append({
+                    "Project_Key": project_unique_key,
+                    "Project_Label": st.session_state.proj,
+                    "Stage_Status": st.session_state.status,
+                    "One_Way_KM": st.session_state.km,
+                    "Timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    "Item_Payload_JSON": json.dumps(item_dict)
+                })
+            
+            new_records_df = pd.DataFrame(fresh_rows)
+            try:
+                historical_sheet_df = conn.read(ttl="0s")
+            except:
+                historical_sheet_df = pd.DataFrame()
+                
+            if not historical_sheet_df.empty:
+                historical_sheet_df = historical_sheet_df[historical_sheet_df["Project_Label"] != st.session_state.proj]
+                combined_sheet_df = pd.concat([historical_sheet_df, new_records_df], ignore_index=True)
+            else:
+                combined_sheet_df = new_records_df
+                
+            conn.update(data=combined_sheet_df)
+            st.sidebar.success("Database Saved Successfully!")
+        except Exception:
+            st.sidebar.error("Database connection refused. Check permissions.")
+    else:
+        st.sidebar.error("Cannot save empty quotes.")
+
+load_choice = st.sidebar.selectbox("Cloud Retrieval Menus", ["-- Choose Project --"] + cloud_jobs_list)
+if st.sidebar.button("📂 LOAD PROJECT") and load_choice != "-- Choose Project --":
+    load_project_from_cloud(load_choice)
 
 # Variable Selection Cards
 st.markdown(f"### 📍 Project: {st.session_state.proj}")
@@ -246,50 +284,31 @@ with col1:
             sqm = span*length; hire_rate = logic['s_rate'] if (length/3) <= 1 else logic['m_rate']
             brate = sqm * hire_rate; lab_cost = brate * logic['s_lab']
             
-            # 1. Append Structure Primary Record
             st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame([{
                 "Qty": m_q, "Product": f"Structure {span}x{length}m", "Unit Rate": brate, "Min_Lab": 350, 
                 "Raw_Lab": lab_cost, "Lab_Math": f"Structure {span}x{length} ({anchoring_type}): ${lab_cost:,.2f}", "KG": (sqm*15)*m_q, 
                 "Is_Marquee": True, "Discount": 0.0, "Lab_Per_Unit": 0, "Base_Hire": brate, "Anchoring": anchoring_type
             }])], ignore_index=True)
             
-            # 2. AUTOMATIC STRUCTURAL WEIGHT CALCULATION
             if anchoring_type == "Weighted":
                 bay_len = logic.get('bay', 3)
                 num_bays = math.ceil(length / bay_len)
                 legs_per_structure = (num_bays + 1) * 2
                 total_legs = legs_per_structure * m_q
                 
-                # Dynamic scaling from your engineering chart matrix rules
-                if span <= 6:
-                    weights_per_leg = 2   # 60kg per leg
-                elif span <= 9:
-                    weights_per_leg = 4   # 120kg per leg
-                elif span <= 12:
-                    weights_per_leg = 6   # 180kg per leg
-                elif span <= 15:
-                    weights_per_leg = 8   # 240kg per leg
-                else:
-                    weights_per_leg = 10  # 300kg per leg
+                if span <= 6: weights_per_leg = 2
+                elif span <= 9: weights_per_leg = 4
+                elif span <= 12: weights_per_leg = 6
+                elif span <= 15: weights_per_leg = 8
+                else: weights_per_leg = 10
                     
                 calculated_weights = total_legs * weights_per_leg
                 
-                # Append ballast record directly to summary grid array
                 st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame([{
-                    "Qty": calculated_weights, 
-                    "Product": "30kg Weights", 
-                    "Unit Rate": 6.60, 
-                    "Min_Lab": 0, 
-                    "Raw_Lab": calculated_weights * 1.65, 
-                    "Lab_Math": f"30kg Weights: {calculated_weights:,.0f} units x $1.65 = ${calculated_weights * 1.65:,.2f}", 
-                    "KG": calculated_weights * 30.0, 
-                    "Is_Marquee": False, 
-                    "Discount": 0.0, 
-                    "Lab_Per_Unit": 1.65, 
-                    "Base_Hire": 6.60, 
-                    "Anchoring": ""
+                    "Qty": calculated_weights, "Product": "30kg Weights", "Unit Rate": 6.60, "Min_Lab": 0, 
+                    "Raw_Lab": calculated_weights * 1.65, "Lab_Math": f"30kg Weights: {calculated_weights:,.0f} units x $1.65 = ${calculated_weights * 1.65:,.2f}", 
+                    "KG": calculated_weights * 30.0, "Is_Marquee": False, "Discount": 0.0, "Lab_Per_Unit": 1.65, "Base_Hire": 6.60, "Anchoring": ""
                 }])], ignore_index=True)
-                
             st.rerun()
 
 with col2:
