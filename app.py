@@ -211,14 +211,16 @@ if st.sidebar.button("➕ START NEW"):
 st.session_state.proj = st.sidebar.text_input("Project Label", st.session_state.proj)
 
 if st.sidebar.button("💾 SAVE / UPDATE TO SHEET"):
-    # STABILITY PATCH v47.0: Force session state check directly on current dataframe state
-    if conn is not None and st.session_state.df is not None and len(st.session_state.df) > 0:
+    # RE-ENGINEERED ARROW v47.1: Directly evaluate session cache status ignoring sidebar states
+    current_active_dataframe = st.session_state.get('df', pd.DataFrame())
+    
+    if conn is not None and current_active_dataframe is not None and not current_active_dataframe.empty:
         try:
             fresh_rows = []
             target_label = st.session_state.proj if st.session_state.proj != "New Project" else f"Draft_{datetime.now().strftime('%Y%m%d_%H%M')}"
             project_unique_key = f"{target_label}_{datetime.now().strftime('%Y%m%d')}"
             
-            for _, item in st.session_state.df.iterrows():
+            for _, item in current_active_dataframe.iterrows():
                 item_dict = item.to_dict()
                 fresh_rows.append({
                     "Project_Key": project_unique_key,
@@ -242,10 +244,10 @@ if st.sidebar.button("💾 SAVE / UPDATE TO SHEET"):
                 combined_sheet_df = new_records_df
                 
             conn.update(data=combined_sheet_df)
-            st.sidebar.success(f"Saved under layout: {target_label}!")
+            st.sidebar.success(f"Saved layout: {target_label}!")
             st.rerun()
         except Exception:
-            st.sidebar.error("Database tracking sequence interrupted. Please check permissions.")
+            st.sidebar.error("Database cloud syncing issue. Check spreadsheet headers.")
     else:
         st.sidebar.error("Cannot save empty quotes.")
 
