@@ -210,47 +210,6 @@ if st.sidebar.button("➕ START NEW"):
 
 st.session_state.proj = st.sidebar.text_input("Project Label", st.session_state.proj)
 
-if st.sidebar.button("💾 SAVE / UPDATE TO SHEET"):
-    # RE-ENGINEERED ARROW v47.1: Directly evaluate session cache status ignoring sidebar states
-    current_active_dataframe = st.session_state.get('df', pd.DataFrame())
-    
-    if conn is not None and current_active_dataframe is not None and not current_active_dataframe.empty:
-        try:
-            fresh_rows = []
-            target_label = st.session_state.proj if st.session_state.proj != "New Project" else f"Draft_{datetime.now().strftime('%Y%m%d_%H%M')}"
-            project_unique_key = f"{target_label}_{datetime.now().strftime('%Y%m%d')}"
-            
-            for _, item in current_active_dataframe.iterrows():
-                item_dict = item.to_dict()
-                fresh_rows.append({
-                    "Project_Key": project_unique_key,
-                    "Project_Label": target_label,
-                    "Stage_Status": st.session_state.status,
-                    "One_Way_KM": st.session_state.km,
-                    "Timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                    "Item_Payload_JSON": json.dumps(item_dict)
-                })
-            
-            new_records_df = pd.DataFrame(fresh_rows)
-            try:
-                historical_sheet_df = conn.read(ttl="0s")
-            except:
-                historical_sheet_df = pd.DataFrame()
-                
-            if not historical_sheet_df.empty and "Project_Label" in historical_sheet_df.columns:
-                historical_sheet_df = historical_sheet_df[historical_sheet_df["Project_Label"] != target_label]
-                combined_sheet_df = pd.concat([historical_sheet_df, new_records_df], ignore_index=True)
-            else:
-                combined_sheet_df = new_records_df
-                
-            conn.update(data=combined_sheet_df)
-            st.sidebar.success(f"Saved layout: {target_label}!")
-            st.rerun()
-        except Exception:
-            st.sidebar.error("Database cloud syncing issue. Check spreadsheet headers.")
-    else:
-        st.sidebar.error("Cannot save empty quotes.")
-
 if cloud_jobs_list:
     load_choice = st.sidebar.selectbox("Cloud Retrieval Menus", ["-- Choose Project --"] + cloud_jobs_list)
     if st.sidebar.button("📂 LOAD PROJECT") and load_choice != "-- Choose Project --":
@@ -399,7 +358,51 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     # Grand Output Elements
     st.markdown(f"<div class='gt-banner'>GRAND TOTAL (EX GST): ${h_tot_c + lab + wav + crt:,.2f}</div>", unsafe_allow_html=True)
     
+    # ==============================================================================
+    # 9. INTEGRATED MAIN VOLUME SAVE & PDF DOWNLOAD GRID
+    # ==============================================================================
+    st.ln(2)
+    action_col_1, action_col_2 = st.columns(2)
+    
+    # SUCCESS RELOCATION ACTION: Save Routine directly linked to core workspace scope
+    if action_col_1.button("💾 CLOUD DATA COMPILATION - SAVE/UPDATE", use_container_width=True):
+        if conn is not None and st.session_state.df is not None and not st.session_state.df.empty:
+            try:
+                fresh_rows = []
+                target_label = st.session_state.proj if st.session_state.proj != "New Project" else f"Draft_{datetime.now().strftime('%Y%m%d_%H%M')}"
+                project_unique_key = f"{target_label}_{datetime.now().strftime('%Y%m%d')}"
+                
+                for _, item in st.session_state.df.iterrows():
+                    item_dict = item.to_dict()
+                    fresh_rows.append({
+                        "Project_Key": project_unique_key,
+                        "Project_Label": target_label,
+                        "Stage_Status": st.session_state.status,
+                        "One_Way_KM": st.session_state.km,
+                        "Timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                        "Item_Payload_JSON": json.dumps(item_dict)
+                    })
+                
+                new_records_df = pd.DataFrame(fresh_rows)
+                try:
+                    historical_sheet_df = conn.read(ttl="0s")
+                except:
+                    historical_sheet_df = pd.DataFrame()
+                    
+                if not historical_sheet_df.empty and "Project_Label" in historical_sheet_df.columns:
+                    historical_sheet_df = historical_sheet_df[historical_sheet_df["Project_Label"] != target_label]
+                    combined_sheet_df = pd.concat([historical_sheet_df, new_records_df], ignore_index=True)
+                else:
+                    combined_sheet_df = new_records_df
+                    
+                conn.update(data=combined_sheet_df)
+                st.success(f"Successfully saved and committed: {target_label} to the cloud registry!")
+            except Exception:
+                st.error("Sheet writing interrupted. Please verify Google Drive column values.")
+        else:
+            st.error("Cannot sync data tables because workspace is empty.")
+            
     l_maths = [f"Damage Waiver: ${h_wk1_gear:,.2f} x 0.07 = ${wav:,.2f}", f"Cartage: {trks} Trucks x {safe_km}km x 4 x $3.50 = ${crt:,.2f}"]
     items_for_pdf = st.session_state.df.to_dict('records')
     pdf_b = create_calculation_pdf(st.session_state.proj, h_tot_c, lab, wav, crt, h_tot_c+lab+wav+crt, weeks, start_d, end_d, items_for_pdf, l_maths, st.session_state.status)
-    st.download_button("📥 DOWNLOAD AUDIT PDF", pdf_b, file_name=f"{st.session_state.proj}_Analysis.pdf")
+    action_col_2.download_button("📥 DOWNLOAD DETAILED AUDIT PDF", pdf_b, file_name=f"{st.session_state.proj}_Analysis.pdf", use_container_width=True)
