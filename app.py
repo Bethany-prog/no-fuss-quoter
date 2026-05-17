@@ -247,9 +247,12 @@ if st.sidebar.button("💾 SAVE / UPDATE TO SHEET"):
     else:
         st.sidebar.error("Cannot save empty quotes.")
 
-load_choice = st.sidebar.selectbox("Cloud Retrieval Menus", ["-- Choose Project --"] + cloud_jobs_list)
-if st.sidebar.button("📂 LOAD PROJECT") and load_choice != "-- Choose Project --":
-    load_project_from_cloud(load_choice)
+if cloud_jobs_list:
+    load_choice = st.sidebar.selectbox("Cloud Retrieval Menus", ["-- Choose Project --"] + cloud_jobs_list)
+    if st.sidebar.button("📂 LOAD PROJECT") and load_choice != "-- Choose Project --":
+        load_project_from_cloud(load_choice)
+else:
+    st.sidebar.info("No Projects Archived Yet")
 
 # Variable Selection Cards
 st.markdown(f"### 📍 Project: {st.session_state.proj}")
