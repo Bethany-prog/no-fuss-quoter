@@ -148,6 +148,7 @@ if 'status' not in st.session_state: st.session_state.status = "Quoted"
 if 'proj' not in st.session_state: st.session_state.proj = "New Project"
 if 'km' not in st.session_state: st.session_state.km = 0.0
 if 'truck_override' not in st.session_state: st.session_state.truck_override = 0
+if 'persistent_items' not in st.session_state: st.session_state.persistent_items = []
 
 def pull_global_cloud_archive():
     if conn is None: return []
@@ -177,6 +178,7 @@ def load_project_from_cloud(project_key_name):
             
             if rebuilt_items:
                 st.session_state.df = pd.DataFrame(rebuilt_items)
+                st.session_state.persistent_items = rebuilt_items
                 st.rerun()
     except: st.error("Database cloud read timeout.")
 
@@ -204,6 +206,7 @@ cloud_jobs_list = pull_global_cloud_archive()
 st.sidebar.title("📁 PROJECT ARCHIVE")
 if st.sidebar.button("➕ START NEW"):
     st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Total", "Min_Lab", "Raw_Lab", "KG", "Is_Marquee", "Discount", "Lab_Math", "Lab_Per_Unit", "Base_Hire", "Anchoring"])
+    st.session_state.persistent_items = []
     st.session_state.km = 0.0
     st.session_state.proj = "New Project"
     st.rerun()
@@ -250,11 +253,12 @@ with col1:
             sqm = span*length; hire_rate = logic['s_rate'] if (length/3) <= 1 else logic['m_rate']
             brate = sqm * hire_rate; lab_cost = brate * logic['s_lab']
             
-            st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame([{
+            struct_item = {
                 "Qty": m_q, "Product": f"Structure {span}x{length}m", "Unit Rate": brate, "Min_Lab": 350, 
                 "Raw_Lab": lab_cost, "Lab_Math": f"Structure {span}x{length} ({anchoring_type}): ${lab_cost:,.2f}", "KG": (sqm*15)*m_q, 
                 "Is_Marquee": True, "Discount": 0.0, "Lab_Per_Unit": 0, "Base_Hire": brate, "Anchoring": anchoring_type
-            }])], ignore_index=True)
+            }
+            st.session_state.persistent_items.append(struct_item)
             
             if anchoring_type == "Weighted":
                 bay_len = logic.get('bay', 3)
@@ -270,11 +274,14 @@ with col1:
                     
                 calculated_weights = total_legs * weights_per_leg
                 
-                st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame([{
+                weight_item = {
                     "Qty": calculated_weights, "Product": "30kg Weights", "Unit Rate": 6.60, "Min_Lab": 0, 
                     "Raw_Lab": calculated_weights * 1.65, "Lab_Math": f"30kg Weights: {calculated_weights:,.0f} units x $1.65 = ${calculated_weights * 1.65:,.2f}", 
                     "KG": calculated_weights * 30.0, "Is_Marquee": False, "Discount": 0.0, "Lab_Per_Unit": 1.65, "Base_Hire": 6.60, "Anchoring": ""
-                }])], ignore_index=True)
+                }
+                st.session_state.persistent_items.append(weight_item)
+                
+            st.session_state.df = pd.DataFrame(st.session_state.persistent_items)
             st.rerun()
 
 with col2:
@@ -292,16 +299,21 @@ with col2:
         else:
             unit_rate = base_h; raw_lab_pool = f_qty * data.get('lab_fix', 0); lab_desc = f"{p_sel}: ${raw_lab_pool:,.2f}"
         eff_qty = (math.ceil(f_qty / data["sheet_sqm"]) * data["sheet_sqm"]) if "sheet_sqm" in data else f_qty
-        st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame([{
+        
+        catalog_item = {
             "Qty": f_qty, "Product": p_sel, "Unit Rate": unit_rate, "Min_Lab": 0, "Raw_Lab": raw_lab_pool, 
             "Lab_Math": lab_desc, "KG": eff_qty * data['kg'], "Is_Marquee": False, "Discount": 0.0, 
             "Lab_Per_Unit": lab_per_unit, "Base_Hire": base_h, "Anchoring": ""
-        }])], ignore_index=True); st.rerun()
+        }
+        st.session_state.persistent_items.append(catalog_item)
+        st.session_state.df = pd.DataFrame(st.session_state.persistent_items)
+        st.rerun()
 
 # ==============================================================================
 # 8. LIVE CALCULATION DATA VIEWER
 # ==============================================================================
-if st.session_state.df is not None and not st.session_state.df.empty:
+if st.session_state.persistent_items:
+    st.session_state.df = pd.DataFrame(st.session_state.persistent_items)
     st.divider(); st.subheader("📝 QUOTE SUMMARY")
     h_tot_c, h_wk1_gear, total_kg = 0.0, 0.0, 0.0
     
@@ -312,7 +324,10 @@ if st.session_state.df is not None and not st.session_state.df.empty:
         h_tot_c += wk1_t
         
         c0, c1, c2, c3, c4, c5 = st.columns([0.4, 4.0, 0.8, 1.2, 1.0, 1.4])
-        if c0.button("🗑️", key=f"sdel_{idx}"): st.session_state.df.drop(idx, inplace=True); st.rerun()
+        if c0.button("🗑️", key=f"sdel_{idx}"):
+            st.session_state.persistent_items.pop(idx)
+            st.session_state.df = pd.DataFrame(st.session_state.persistent_items)
+            st.rerun()
         
         prod_display = row['Product']
         if 'Anchoring' in row and row['Anchoring']:
@@ -320,7 +335,13 @@ if st.session_state.df is not None and not st.session_state.df.empty:
             
         c1.markdown(f"<div class='item-text'>{prod_display} - Wk 1</div>", unsafe_allow_html=True)
         c2.write(f"{qty:,.0f}"); c3.write(f"${wk1_t/qty:,.2f}")
-        st.session_state.df.at[idx, "Discount"] = c4.number_input("", 0.0, 100.0, float(row["Discount"]), 1.0, key=f"sd_{idx}", label_visibility="collapsed")
+        
+        # Immediate state tracking for discounts to prevent button memory loss
+        new_disc = c4.number_input("", 0.0, 100.0, float(row["Discount"]), 1.0, key=f"sd_{idx}", label_visibility="collapsed")
+        if new_disc != row["Discount"]:
+            st.session_state.persistent_items[idx]["Discount"] = new_disc
+            st.rerun()
+            
         c5.write(f"${wk1_t:,.2f}")
         
         if weeks > 1:
@@ -361,18 +382,18 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     # ==============================================================================
     # 9. INTEGRATED MAIN VOLUME SAVE & PDF DOWNLOAD GRID
     # ==============================================================================
-    st.markdown("")  # FIXED v47.3: Corrected AttributeError syntax space line
+    st.markdown("")  
     action_col_1, action_col_2 = st.columns(2)
     
+    # SYSTEM PATCH v47.4: Pulls database payloads straight from the persistent memory arrays
     if action_col_1.button("💾 CLOUD DATA COMPILATION - SAVE/UPDATE", use_container_width=True):
-        if conn is not None and st.session_state.df is not None and not st.session_state.df.empty:
+        if conn is not None and st.session_state.persistent_items:
             try:
                 fresh_rows = []
                 target_label = st.session_state.proj if st.session_state.proj != "New Project" else f"Draft_{datetime.now().strftime('%Y%m%d_%H%M')}"
                 project_unique_key = f"{target_label}_{datetime.now().strftime('%Y%m%d')}"
                 
-                for _, item in st.session_state.df.iterrows():
-                    item_dict = item.to_dict()
+                for item_dict in st.session_state.persistent_items:
                     fresh_rows.append({
                         "Project_Key": project_unique_key,
                         "Project_Label": target_label,
