@@ -310,7 +310,6 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     st.divider(); st.subheader("📝 QUOTE SUMMARY")
     h_tot_c, h_wk1_gear, total_kg = 0.0, 0.0, 0.0
     
-    # Render line items out of unified data array source safely
     for idx, row in st.session_state.df.iterrows():
         qty, brate, dm = row["Qty"], row["Unit Rate"], (1 - (row["Discount"]/100))
         total_kg += row["KG"]; h_wk1_gear += (qty * row["Base_Hire"])
@@ -378,7 +377,6 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     st.markdown("")  
     action_col_1, action_col_2 = st.columns(2)
     
-    # SYSTEM UPGRADE v47.5: Evaluates database write states directly out of the consolidated master session state array
     if action_col_1.button("💾 CLOUD DATA COMPILATION - SAVE/UPDATE", use_container_width=True):
         if conn is not None and st.session_state.df is not None and not st.session_state.df.empty:
             try:
@@ -419,4 +417,4 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     l_maths = [f"Damage Waiver: ${h_wk1_gear:,.2f} x 0.07 = ${wav:,.2f}", f"Cartage: {trks} Trucks x {safe_km}km x 4 x $3.50 = ${crt:,.2f}"]
     items_for_pdf = st.session_state.df.to_dict('records')
     pdf_b = create_calculation_pdf(st.session_state.proj, h_tot_c, lab, wav, crt, h_tot_c+lab+wav+crt, weeks, start_d, end_d, items_for_pdf, l_maths, st.session_state.status)
-    action_col_2.download_button("📥 DOWNLOAD DETAILED AUDIT PDF", pdf_b, file_name=f"{st.session_state.proj}_Analysis.pdf", use_container_width=True)
+    st.download_button("📥 DOWNLOAD DETAILED AUDIT PDF", pdf_b, file_name=f"{st.session_state.proj}_Analysis.pdf", use_container_width=True)
