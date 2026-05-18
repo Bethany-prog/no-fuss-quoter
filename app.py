@@ -185,7 +185,7 @@ vault_jobs = pull_vault_archive_list()
 
 # Sidebar Archive Actions
 st.sidebar.title("📁 PROJECT ARCHIVE")
-st.sidebar.markdown("---") # Added visual line marker for clarity
+st.sidebar.markdown("---")
 
 if st.sidebar.button("➕ START NEW", use_container_width=True):
     st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Total", "Min_Lab", "Raw_Lab", "KG", "Is_Marquee", "Discount", "Lab_Math", "Lab_Per_Unit", "Base_Hire", "Anchoring"])
@@ -385,7 +385,13 @@ if st.session_state.df is not None and not st.session_state.df.empty:
         else:
             st.error("Cannot sync data tables because workspace is empty.")
             
+    # VISUAL LABEL FILTER SWITCH: Overrides formatting descriptors inside the text proof loop based on active tab variables
+    cleaned_pdf_items = st.session_state.df.to_dict('records')
+    if labour_mode in ["Free", "Include in Hire"]:
+        for item in cleaned_pdf_items:
+            if item.get('Lab_Math'):
+                item['Lab_Math'] += f" -> [WAIVED / EFFECTIVE RATE REDUCED TO $0.00 VIA LABOUR TOGGLE]"
+                
     l_maths = [f"Damage Waiver: ${h_wk1_gear:,.2f} x 0.07 = ${wav:,.2f}", f"Cartage: {trks} Trucks x {safe_km}km x 4 x $3.50 = ${crt:,.2f}"]
-    items_for_pdf = st.session_state.df.to_dict('records')
-    pdf_b = create_calculation_pdf(st.session_state.proj, h_tot_c, lab, wav, crt, h_tot_c+lab+wav+crt, weeks, start_d, end_d, items_for_pdf, l_maths, st.session_state.status)
+    pdf_b = create_calculation_pdf(st.session_state.proj, h_tot_c, lab, wav, crt, h_tot_c+lab+wav+crt, weeks, start_d, end_d, cleaned_pdf_items, l_maths, st.session_state.status)
     action_col_2.download_button("📥 DOWNLOAD DETAILED AUDIT PDF", pdf_b, file_name=f"{st.session_state.proj}_Analysis.pdf", use_container_width=True)
