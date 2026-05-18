@@ -61,7 +61,7 @@ def get_gs_per_seat_labour(seats):
     return 0, ""
 
 # ==============================================================================
-# 3. PDF AUDIT ENGINE (EXPLICIT WORKING OUT ONLY)
+# 3. PDF AUDIT ENGINE (STRUCTURAL TABLE TIERS)
 # ==============================================================================
 def clean_text(txt):
     if not txt: return ""
@@ -80,40 +80,59 @@ def create_calculation_pdf(name, subtotal, labour, waiver, cartage, grand, weeks
     pdf.set_font("Arial", "B", 10)
     pdf.cell(0, 7, clean_text(f"PROJECT: {name} | STATUS: {status.upper()}"), ln=True, align="C")
     pdf.cell(0, 7, f"PERIOD: {start.strftime('%d/%m/%Y')} to {end.strftime('%d/%m/%Y')} ({weeks} Week(s))", ln=True, align="C")
-    pdf.ln(10)
+    pdf.ln(8)
 
-    pdf.set_fill_color(26, 29, 45); pdf.set_text_color(255, 255, 255); pdf.set_font("Arial", "B", 12)
-    pdf.cell(0, 10, " 1. HIRE CALCULATIONS (WORKING OUT)", 0, 1, "L", True)
-    pdf.set_text_color(0, 0, 0); pdf.set_font("Arial", "", 10)
+    # Section 1 Header & Columns
+    pdf.set_fill_color(26, 29, 45); pdf.set_text_color(255, 255, 255); pdf.set_font("Arial", "B", 11)
+    pdf.cell(0, 10, " 1. HIRE CALCULATIONS SCHEDULE", 0, 1, "L", True)
+    
+    pdf.set_fill_color(240, 242, 245); pdf.set_text_color(50, 50, 50); pdf.set_font("Arial", "B", 9)
+    col_w = [85, 20, 28, 22, 35]
+    
+    pdf.cell(col_w[0], 8, " Item Description", 1, 0, "L", True)
+    pdf.cell(col_w[1], 8, "Qty", 1, 0, "C", True)
+    pdf.cell(col_w[2], 8, "Unit Rate", 1, 0, "R", True)
+    pdf.cell(col_w[3], 8, "Disc %", 1, 0, "C", True)
+    pdf.cell(col_w[4], 8, "Weekly Total", 1, 1, "R", True)
+    
+    pdf.set_text_color(0, 0, 0); pdf.set_font("Arial", "", 9)
     
     for item in items_list:
-        w1_total = (item['Qty'] * item['Unit Rate']) * (1 - (item['Discount']/100))
+        dm = (1 - (item['Discount']/100))
+        w1_total = (item['Qty'] * item['Unit Rate']) * dm
         prod_label = item['Product']
         if 'Anchoring' in item and item['Anchoring']:
             prod_label += f" ({item['Anchoring']})"
             
-        math_str = f"{prod_label} (Wk 1): {item['Qty']:,.0f} x ${item['Base_Hire']:,.2f} [-{item['Discount']}% Disc]"
-        pdf.cell(140, 8, clean_text(math_str), border="B")
-        pdf.cell(50, 8, f"${w1_total:,.2f}", border="B", ln=True, align="R")
+        pdf.cell(col_w[0], 8, clean_text(f" {prod_label} (Wk 1 Base)"), 1, 0, "L")
+        pdf.cell(col_w[1], 8, f"{item['Qty']:,.0f}", 1, 0, "C")
+        pdf.cell(col_w[2], 8, f"${item['Base_Hire']:,.2f}", 1, 0, "R")
+        pdf.cell(col_w[3], 8, f"{item['Discount']:.1f}%", 1, 0, "C")
+        pdf.cell(col_w[4], 8, f"${w1_total:,.2f}", 1, 1, "R")
         
         if weeks > 1:
             r_rate = item['Base_Hire'] * 0.5 if item['Is_Marquee'] else item['Base_Hire']
-            r_total = (item['Qty'] * r_rate * (weeks-1)) * (1 - (item['Discount']/100))
-            r_math = f"  └ Recurring Hire: {item['Qty']:,.0f} x ${r_rate:,.2f} x {weeks-1} wks"
-            pdf.cell(140, 8, clean_text(r_math), border="B")
-            pdf.cell(50, 8, f"${r_total:,.2f}", border="B", ln=True, align="R")
+            r_total = (item['Qty'] * r_rate * (weeks-1)) * dm
+            
+            pdf.cell(col_w[0], 8, clean_text(f"   └ Recurring Hire (x{weeks-1} wks)"), 1, 0, "L")
+            pdf.cell(col_w[1], 8, f"{item['Qty']:,.0f}", 1, 0, "C")
+            pdf.cell(col_w[2], 8, f"${r_rate:,.2f}", 1, 0, "R")
+            pdf.cell(col_w[3], 8, f"{item['Discount']:.1f}%", 1, 0, "C")
+            pdf.cell(col_w[4], 8, f"${r_total:,.2f}", 1, 1, "R")
 
-    pdf.ln(5); pdf.set_fill_color(26, 29, 45); pdf.set_text_color(255, 255, 255); pdf.set_font("Arial", "B", 12)
+    # Section 2: Logistics Breakdown Output
+    pdf.ln(5); pdf.set_fill_color(26, 29, 45); pdf.set_text_color(255, 255, 255); pdf.set_font("Arial", "B", 11)
     pdf.cell(0, 10, " 2. LABOUR & LOGISTICS PROOFS", 0, 1, "L", True)
-    pdf.set_text_color(0, 0, 0); pdf.set_font("Arial", "", 10)
+    pdf.set_text_color(0, 0, 0); pdf.set_font("Arial", "", 9)
+    
     for item in items_list:
-        if item['Lab_Math']: 
+        if item.get('Lab_Math') and item['Lab_Math'].strip() != "": 
             pdf.cell(0, 8, clean_text(f" {item['Lab_Math']}"), border="B", ln=True)
     for m in log_maths: 
         pdf.cell(0, 8, clean_text(f" {m}"), border="B", ln=True)
 
-    pdf.ln(10); pdf.set_fill_color(0, 230, 118); pdf.set_text_color(26, 29, 45); pdf.set_font("Arial", "B", 14)
-    pdf.cell(0, 15, f" GRAND TOTAL (EX GST): ${grand:,.2f} ", 0, 1, "R", True)
+    pdf.ln(8); pdf.set_fill_color(0, 230, 118); pdf.set_text_color(26, 29, 45); pdf.set_font("Arial", "B", 13)
+    pdf.cell(0, 14, f" GRAND TOTAL (EX GST): ${grand:,.2f} ", 0, 1, "R", True)
     return bytes(pdf.output())
 
 # ==============================================================================
@@ -294,11 +313,19 @@ with col2:
 # ==============================================================================
 if st.session_state.df is not None and not st.session_state.df.empty:
     st.divider(); st.subheader("📝 QUOTE SUMMARY")
-    h_tot_c, h_wk1_gear, total_kg = 0.0, 0.0, 0.0
+    h_tot_c, h_wk1_gear, total_kg, itrac_sqm = 0.0, 0.0, 0.0, 0.0
+    has_itrac = False
     
     for idx, row in st.session_state.df.iterrows():
         qty, brate, dm = row["Qty"], row["Unit Rate"], (1 - (row["Discount"]/100))
-        total_kg += row["KG"]; h_wk1_gear += (qty * row["Base_Hire"])
+        total_kg += row["KG"]
+        h_wk1_gear += (qty * row["Base_Hire"])
+        
+        # Isolated I-Trac checker
+        if row["Product"] == "I-Trac®":
+            itrac_sqm += qty
+            has_itrac = True
+            
         wk1_t = (qty * brate + row["Raw_Lab"]) * dm if labour_mode == "Include in Hire" else (qty * brate) * dm
         h_tot_c += wk1_t
         
@@ -335,7 +362,13 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     col_left, col_right = st.columns(2)
     with col_left:
         st.markdown("### 🚛 Logistics Override")
-        min_trucks = math.ceil(total_kg / 6000) or 1
+        
+        # REMOVED SAFETY NET v48.9: Stripped out mixing ratios. I-Trac drives layout strictly by volume.
+        if has_itrac:
+            min_trucks = math.ceil(itrac_sqm / 288) or 1
+        else:
+            min_trucks = math.ceil(total_kg / 6000) or 1
+        
         trks = st.number_input("Manually Set Truck Count", min_value=min_trucks, value=max(min_trucks, st.session_state.truck_override))
         st.session_state.truck_override = trks
 
@@ -385,12 +418,11 @@ if st.session_state.df is not None and not st.session_state.df.empty:
         else:
             st.error("Cannot sync data tables because workspace is empty.")
             
-    # VISUAL LABEL FILTERS (v48.4): Silences product-level breakdowns if Labour is toggled Free
     cleaned_pdf_items = st.session_state.df.to_dict('records')
     if labour_mode in ["Free", "Include in Hire"]:
         for item in cleaned_pdf_items:
             if item.get('Lab_Math'):
-                item['Lab_Math'] = "" # Strips the product-level duplicate row entirely
+                item['Lab_Math'] = ""
                 
     l_maths = []
     if waiver_mode == "Free":
@@ -401,7 +433,10 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     if cartage_mode == "Free":
         l_maths.append("Cartage: Free")
     else:
-        l_maths.append(f"Cartage: {trks} Trucks x {safe_km}km x 4 x $3.50 = ${crt:,.2f}")
+        if has_itrac:
+            l_maths.append(f"Cartage: {trks} Trucks x {safe_km}km x 4 x $3.50 = ${crt:,.2f} (Strict I-Trac 288SQM Volumetric Space Parameter)")
+        else:
+            l_maths.append(f"Cartage: {trks} Trucks x {safe_km}km x 4 x $3.50 = ${crt:,.2f}")
         
     if labour_mode == "Free":
         l_maths.append("Labour: Free")
