@@ -61,7 +61,7 @@ def get_gs_per_seat_labour(seats):
     return 0, ""
 
 # ==============================================================================
-# 3. PDF AUDIT ENGINE (UPGRADED STRUCTURED INTERNAL PROOFS GRID)
+# 3. PDF AUDIT ENGINE (RESTORED ORIGINAL FLAT TEXT BREAKDOWNS)
 # ==============================================================================
 def clean_text(txt):
     if not txt: return ""
@@ -82,7 +82,7 @@ def create_calculation_pdf(name, subtotal, labour, waiver, cartage, grand, weeks
     pdf.cell(0, 7, f"PERIOD: {start.strftime('%d/%m/%Y')} to {end.strftime('%d/%m/%Y')} ({weeks} Week(s))", ln=True, align="C")
     pdf.ln(8)
 
-    # Section 1: Hire Calculations Schedule
+    # Section 1: Structured Hire Grid Schedule (Approved Layout)
     pdf.set_fill_color(26, 29, 45); pdf.set_text_color(255, 255, 255); pdf.set_font("Arial", "B", 11)
     pdf.cell(0, 10, " 1. HIRE CALCULATIONS SCHEDULE", 0, 1, "L", True)
     
@@ -99,7 +99,7 @@ def create_calculation_pdf(name, subtotal, labour, waiver, cartage, grand, weeks
     
     for item in items_list:
         dm = (1 - (item.get('Discount', 0.0)/100))
-        display_unit_rate = item.get('Override_Rate', 0.0) if item.get('Override_Rate', 0.0) > 0 else item['Base_Hire']
+        display_unit_rate = item.get('Override_Rate', 0.0) if item.get('Override_Rate', 0.0) > 0 else item['Unit Rate']
         w1_total = (item['Qty'] * display_unit_rate) * dm
         prod_label = item['Product']
         if 'Anchoring' in item and item['Anchoring']:
@@ -122,48 +122,18 @@ def create_calculation_pdf(name, subtotal, labour, waiver, cartage, grand, weeks
             pdf.cell(col_w[4], 8, f"${r_total:,.2f}", 1, 1, "R")
 
     # --------------------------------------------------------------------------
-    # TABLE UPGRADE v49.2: Structured Internal Proofs System Grid Layout
+    # RESTORED SECTION 2: 100% Original Simple Continuous String Layout
     # --------------------------------------------------------------------------
     pdf.ln(5); pdf.set_fill_color(26, 29, 45); pdf.set_text_color(255, 255, 255); pdf.set_font("Arial", "B", 11)
-    pdf.cell(0, 10, " 2. INTERNAL LABOUR & LOGISTICS PROOFS (EXPLICIT MATH WORKING OUT)", 0, 1, "L", True)
+    pdf.cell(0, 10, " 2. LABOUR & LOGISTICS PROOFS", 0, 1, "L", True)
+    pdf.set_text_color(0, 0, 0); pdf.set_font("Arial", "", 10)
     
-    pdf.set_fill_color(240, 242, 245); pdf.set_text_color(50, 50, 50); pdf.set_font("Arial", "B", 9)
-    col_w_s2 = [130, 25, 35] # Sums to exactly 190 total
-    
-    pdf.cell(col_w_s2[0], 8, " Operational Variable / Formula Parameters", 1, 0, "L", True)
-    pdf.cell(col_w_s2[1], 8, "Status Flag", 1, 0, "C", True)
-    pdf.cell(col_w_s2[2], 8, "Calculated Fee", 1, 1, "R", True)
-    
-    pdf.set_text_color(0, 0, 0); pdf.set_font("Arial", "", 9)
-    
-    # Render itemized rows cleanly formatted into matching data widths
+    # Outputs the continuous formula sentences cleanly down the page exactly as before
     for item in items_list:
         if item.get('Lab_Math') and item['Lab_Math'].strip() != "": 
-            # Parse components safely if present
-            raw_text = str(item['Lab_Math'])
-            val_split = raw_text.split("= $")
-            desc_part = val_split[0] if len(val_split) > 0 else raw_text
-            price_part = f"${val_split[1]}" if len(val_split) > 1 else "$0.00"
-            
-            pdf.cell(col_w_s2[0], 8, clean_text(f" {desc_part}"), 1, 0, "L")
-            pdf.cell(col_w_s2[1], 8, "Active", 1, 0, "C")
-            pdf.cell(col_w_s2[2], 8, price_part, 1, 1, "R")
-            
+            pdf.cell(0, 8, clean_text(f" {item['Lab_Math']}"), border="B", ln=True)
     for m in log_maths: 
-        raw_m = str(m)
-        val_split = raw_m.split("= $")
-        desc_part = val_split[0] if len(val_split) > 0 else raw_m
-        price_part = f"${val_split[1]}" if len(val_split) > 1 else "$0.00"
-        
-        # Check flag variations for toggle identification tags
-        flag_status = "Charged"
-        if "Free" in raw_m or "Included" in raw_m:
-            flag_status = "Waived"
-            price_part = "$0.00"
-            
-        pdf.cell(col_w_s2[0], 8, clean_text(f" {desc_part}"), 1, 0, "L")
-        pdf.cell(col_w_s2[1], 8, flag_status, 1, 0, "C")
-        pdf.cell(col_w_s2[2], 8, price_part, 1, 1, "R")
+        pdf.cell(0, 8, clean_text(f" {m}"), border="B", ln=True)
 
     pdf.ln(8); pdf.set_fill_color(0, 230, 118); pdf.set_text_color(26, 29, 45); pdf.set_font("Arial", "B", 13)
     pdf.cell(0, 14, f" GRAND TOTAL (EX GST): ${grand:,.2f} ", 0, 1, "R", True)
@@ -478,28 +448,32 @@ if st.session_state.df is not None and not st.session_state.df.empty:
             st.error("Cannot sync data tables because workspace is empty.")
             
     cleaned_pdf_items = st.session_state.df.to_dict('records')
-    
-    # RAW AUDIT RESTORATION: Retains the explicit math strings for pure internal verification
+    if labour_mode in ["Free", "Include in Hire"]:
+        for item in cleaned_pdf_items:
+            if item.get('Lab_Math'):
+                item['Lab_Math'] = ""
+                
+    # Restored direct, descriptive raw text list calculations strings 
     l_maths = []
     if waiver_mode == "Free":
-        l_maths.append(f"Damage Waiver: Waived Formula Charge Calculation = $0.00")
+        l_maths.append("Damage Waiver: Free")
     else:
         l_maths.append(f"Damage Waiver: ${h_wk1_gear:,.2f} x 0.07 = ${wav:,.2f}")
         
     if cartage_mode == "Free":
-        l_maths.append(f"Cartage Freight Logistics Matrix: Waived Formula Charge Calculation = $0.00")
+        l_maths.append("Cartage: Free")
     else:
         if has_itrac:
-            l_maths.append(f"Cartage: {trks} Trucks x {safe_km}km x 4 x $3.50 (I-Trac 288SQM Volumetric Load Parameter Check) = ${crt:,.2f}")
+            l_maths.append(f"Cartage: {trks} Trucks x {safe_km}km x 4 x $3.50 = ${crt:,.2f} (Strict I-Trac 288SQM Volumetric Space Parameter)")
         else:
-            l_maths.append(f"Cartage: {trks} Trucks x {safe_km}km x 4 x $3.50 (Standard Fleet Weight Parameter Check) = ${crt:,.2f}")
+            l_maths.append(f"Cartage: {trks} Trucks x {safe_km}km x 4 x $3.50 = ${crt:,.2f}")
         
     if labour_mode == "Free":
-        l_maths.append(f"Crew Site Installation Labour: Waived Formula Charge Calculation = $0.00")
+        l_maths.append("Labour: Free")
     elif labour_mode == "Include in Hire":
-        l_maths.append(f"Crew Site Installation Labour: Embedded Into Hire Compound Parameters = $0.00")
+        l_maths.append("Labour: Included in Hire Rate")
     else:
-        l_maths.append(f"Labour Minimum Limit Pass: Evaluated Crew Base Threshold Pool = ${lab:,.2f}")
+        l_maths.append(f"Labour: Minimum base fee threshold check passed -> ${lab:,.2f}")
 
     pdf_b = create_calculation_pdf(st.session_state.proj, h_tot_c, lab, wav, crt, h_tot_c+lab+wav+crt, weeks, start_d, end_d, cleaned_pdf_items, l_maths, st.session_state.status)
     action_col_2.download_button("📥 DOWNLOAD DETAILED AUDIT PDF", pdf_b, file_name=f"{st.session_state.proj}_Analysis.pdf", use_container_width=True)
