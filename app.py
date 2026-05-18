@@ -123,14 +123,12 @@ def create_calculation_pdf(name, subtotal, labour, waiver, cartage, grand, weeks
             pdf.cell(col_w[3], 8, f"{item.get('Discount', 0.0):.1f}%", 1, 0, "C")
             pdf.cell(col_w[4], 8, f"${r_total:,.2f}", 1, 1, "R")
 
-    # Section 2 Layout
+    # Section 2: Logistics Flat Text Breakdown Layout
     pdf.ln(5); pdf.set_fill_color(26, 29, 45); pdf.set_text_color(255, 255, 255); pdf.set_font("Arial", "B", 11)
     pdf.cell(0, 10, " 2. LABOUR & LOGISTICS PROOFS", 0, 1, "L", True)
     pdf.set_text_color(0, 0, 0); pdf.set_font("Arial", "", 10)
     
-    for item in items_list:
-        if item.get('Lab_Math') and item['Lab_Math'].strip() != "": 
-            pdf.cell(0, 8, clean_text(f" {item['Lab_Math']}"), border="B", ln=True)
+    # Render all lines straight out of the optimized array matrix cleanly
     for m in log_maths: 
         pdf.cell(0, 8, clean_text(f" {m}"), border="B", ln=True)
 
@@ -157,7 +155,7 @@ STAGES = ["Quoted", "Accepted", "Paid", "On Hire", "Returned", "Cancelled"]
 STAGE_COLORS = {"Quoted": "#FF9100", "Accepted": "#00E676", "Paid": "#00B8D4", "On Hire": "#D500F9", "Returned": "#757575", "Cancelled": "#263238"}
 
 # ==============================================================================
-# 5. STREAMLIT INTERNAL STORAGE PERSISTENCE (TOGGLE DEFAULTS LOAD HOOKS WIRED)
+# 5. STREAMLIT INTERNAL STORAGE PERSISTENCE
 # ==============================================================================
 if 'df' not in st.session_state: 
     st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Total", "Min_Lab", "Raw_Lab", "KG", "Is_Marquee", "Discount", "Lab_Math", "Lab_Per_Unit", "Base_Hire", "Anchoring", "Override_Rate"])
@@ -170,7 +168,6 @@ if 'reset_key_seed' not in st.session_state: st.session_state.reset_key_seed = 0
 if 'active_filename' not in st.session_state: st.session_state.active_filename = ""
 if 'rename_mode' not in st.session_state: st.session_state.rename_mode = False
 
-# Toggle internal storage caches to guarantee seamless reloads
 if 'saved_cartage_mode' not in st.session_state: st.session_state.saved_cartage_mode = "Charge"
 if 'saved_labour_mode' not in st.session_state: st.session_state.saved_labour_mode = "Separate"
 if 'saved_waiver_mode' not in st.session_state: st.session_state.saved_waiver_mode = "Charge"
@@ -193,7 +190,6 @@ def load_project_from_vault(label_name):
             st.session_state.km = float(d.get("km", 0.0))
             st.session_state.truck_override = int(d.get("truck_override", 0))
             
-            # CORE FIX: Restores specific toggle parameters out of database file seamlessly
             st.session_state.saved_cartage_mode = d.get("cartage_mode", "Charge")
             st.session_state.saved_labour_mode = d.get("labour_mode", "Separate")
             st.session_state.saved_waiver_mode = d.get("waiver_mode", "Charge")
@@ -349,7 +345,7 @@ weeks = math.ceil(((end_d - start_d).days) / 7) or 1
 
 st.info(f"**Calculated Hire Duration:** {weeks} Week(s)")
 
-# Multi-Segment Toggle Rules - Now utilizing persistent state indices
+# Multi-Segment Toggle Rules
 l1, l2, l3 = st.columns(3)
 
 c_opts = ["Charge", "Free"]
@@ -519,7 +515,11 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     safe_km = st.session_state.km if st.session_state.km else 0
     wav = h_wk1_gear * 0.07 if waiver_mode == "Charge" else 0
     crt = trks * safe_km * 4 * 3.50 if cartage_mode == "Charge" else 0
-    lab = max(st.session_state.df["Raw_Lab"].sum(), 350) if labour_mode == "Separate" else 0
+    
+    # Threshold Baseline Determinator Variables
+    raw_lab_pool = st.session_state.df["Raw_Lab"].sum()
+    lab = max(raw_lab_pool, 350) if labour_mode == "Separate" else 0
+    is_floor_active = (raw_lab_pool < 350 and labour_mode == "Separate")
     
     m = st.columns(6)
     m[0].metric("HIRE COST", f"${round(h_tot_c, 2):,}")
@@ -531,6 +531,39 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     
     st.markdown(f"<div class='gt-banner'>GRAND TOTAL (EX GST): ${h_tot_c + lab + wav + crt:,.2f}</div>", unsafe_allow_html=True)
     
+    # ------------------------------------------------------------------------------
+    # INTERACTION ARRAY PROOF COMPILER BLOCK
+    # ------------------------------------------------------------------------------
+    l_maths = []
+    if waiver_mode == "Free":
+        l_maths.append("Damage Waiver: Free")
+    else:
+        l_maths.append(f"Damage Waiver: ${h_wk1_gear:,.2f} x 0.07 = ${wav:,.2f}")
+        
+    if cartage_mode == "Free":
+        l_maths.append("Cartage: Free")
+    else:
+        l_maths.append(f"Cartage: {trks} Trucks x {safe_km}km x 4 x $3.50 = ${crt:,.2f}")
+        
+    # UPGRADE v50.7 OPTION 1: Conditional Status Tag Formatting Generator Loop
+    if labour_mode == "Free":
+        l_maths.append("Labour: Free")
+    elif labour_mode == "Include in Hire":
+        l_maths.append("Labour: Included in Hire Rate")
+    else:
+        # Evaluate individual items relative to the global floor matrix context
+        for idx, row in st.session_state.df.iterrows():
+            if row.get('Lab_Math') and row['Lab_Math'].strip() != "":
+                if is_floor_active:
+                    l_maths.append(f"{row['Lab_Math']} [⚠️ UNDER THRESHOLD - INFRASTRUCTURE COVERED BY MIN FLOOR]")
+                else:
+                    l_maths.append(f"{row['Lab_Math']} [✅ ACTIVE CHARGE]")
+                    
+        if is_floor_active:
+            l_maths.append(f"Labour Minimum Limit: Raw Job Cost (${raw_lab_pool:,.2f}) failed floor check -> Flat Floor Applied = ${lab:,.2f}")
+        else:
+            l_maths.append(f"Labour Minimum Limit: Raw Job Cost (${raw_lab_pool:,.2f}) passed floor check -> Actual Applied = ${lab:,.2f}")
+
     # SAVE & DOWNLOAD INTERACTION ZONE
     st.markdown("")  
     action_col_1, action_col_2 = st.columns(2)
@@ -543,7 +576,6 @@ if st.session_state.df is not None and not st.session_state.df.empty:
                 else:
                     target_label = st.session_state.proj.strip() if st.session_state.proj else f"Draft_{datetime.now().strftime('%Y%m%d_%H%M')}"
                 
-                # UPGRADE v50.6: Now securely archiving segment control variables inside JSON structures
                 payload = {
                     "proj": target_label,
                     "status": st.session_state.status,
@@ -570,28 +602,5 @@ if st.session_state.df is not None and not st.session_state.df.empty:
             st.error("Cannot sync data tables because workspace is empty.")
             
     cleaned_pdf_items = st.session_state.df.to_dict('records')
-    if labour_mode in ["Free", "Include in Hire"]:
-        for item in cleaned_pdf_items:
-            if item.get('Lab_Math'):
-                item['Lab_Math'] = ""
-                
-    l_maths = []
-    if waiver_mode == "Free":
-        l_maths.append("Damage Waiver: Free")
-    else:
-        l_maths.append(f"Damage Waiver: ${h_wk1_gear:,.2f} x 0.07 = ${wav:,.2f}")
-        
-    if cartage_mode == "Free":
-        l_maths.append("Cartage: Free")
-    else:
-        l_maths.append(f"Cartage: {trks} Trucks x {safe_km}km x 4 x $3.50 = ${crt:,.2f}")
-        
-    if labour_mode == "Free":
-        l_maths.append("Labour: Free")
-    elif labour_mode == "Include in Hire":
-        l_maths.append("Labour: Included in Hire Rate")
-    else:
-        l_maths.append(f"Labour: Minimum base fee threshold check passed -> ${lab:,.2f}")
-
     pdf_b = create_calculation_pdf(st.session_state.proj, h_tot_c, lab, wav, crt, h_tot_c+lab+wav+crt, weeks, start_d, end_d, cleaned_pdf_items, l_maths, st.session_state.status)
     action_col_2.download_button("📥 DOWNLOAD DETAILED AUDIT PDF", pdf_b, file_name=f"{st.session_state.proj}_Analysis.pdf", use_container_width=True)
