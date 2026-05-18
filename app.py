@@ -374,9 +374,10 @@ with col1:
             sqm = span*length; hire_rate = logic['s_rate'] if (length/3) <= 1 else logic['m_rate']
             brate = sqm * hire_rate; lab_cost = brate * logic['s_lab']
             
+            # Save raw structural dimensions into dataframe context securely
             new_struct_df = pd.DataFrame([{
                 "Qty": m_q, "Product": f"Structure {span}x{length}m", "Unit Rate": brate, "Min_Lab": 350, 
-                "Raw_Lab": lab_cost, "Lab_Math": f"Structure {span}x{length} ({anchoring_type}): ${lab_cost:,.2f}", "KG": (sqm*15)*m_q, 
+                "Raw_Lab": lab_cost, "Lab_Math": f"Structure {span}x{length} ({anchoring_type}): ${brate:,.2f} x {logic['s_lab']:.2f}", "KG": (sqm*15)*m_q, 
                 "Is_Marquee": True, "Discount": 0.0, "Lab_Per_Unit": 0, "Base_Hire": brate, "Anchoring": anchoring_type, "Override_Rate": 0.0
             }])
             st.session_state.df = pd.concat([st.session_state.df, new_struct_df], ignore_index=True)
@@ -394,10 +395,11 @@ with col1:
                 else: weights_per_leg = 10
                     
                 calculated_weights = total_legs * weights_per_leg
+                w_lab_cost = calculated_weights * 1.65
                 
                 new_weight_df = pd.DataFrame([{
                     "Qty": calculated_weights, "Product": "30kg Weights", "Unit Rate": 6.60, "Min_Lab": 0, 
-                    "Raw_Lab": calculated_weights * 1.65, "Lab_Math": f"30kg Weights: {calculated_weights:,.0f} units x $1.65 = ${calculated_weights * 1.65:,.2f}", 
+                    "Raw_Lab": w_lab_cost, "Lab_Math": f"30kg Weights: {calculated_weights:,.0f} units x $1.65", 
                     "KG": calculated_weights * 30.0, "Is_Marquee": False, "Discount": 0.0, "Lab_Per_Unit": 1.65, "Base_Hire": 6.60, "Anchoring": "", "Override_Rate": 0.0
                 }])
                 st.session_state.df = pd.concat([st.session_state.df, new_weight_df], ignore_index=True)
@@ -416,7 +418,7 @@ with col2:
             lab_per_unit, lab_desc = get_gs_per_seat_labour(f_qty)
             unit_rate = base_h + lab_per_unit
         else:
-            unit_rate = base_h; raw_lab_pool = f_qty * data.get('lab_fix', 0); lab_desc = f"{p_sel}: ${raw_lab_pool:,.2f}"
+            unit_rate = base_h; raw_lab_pool = f_qty * data.get('lab_fix', 0); lab_desc = f"{p_sel}: {f_qty:,.0f} units x ${data.get('lab_fix', 0):,.2f}"
         eff_qty = (math.ceil(f_qty / data["sheet_sqm"]) * data["sheet_sqm"]) if "sheet_sqm" in data else f_qty
         
         new_item_df = pd.DataFrame([{
@@ -530,7 +532,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     st.markdown(f"<div class='gt-banner'>GRAND TOTAL (EX GST): ${h_tot_c + lab + wav + crt:,.2f}</div>", unsafe_allow_html=True)
     
     # ------------------------------------------------------------------------------
-    # INTERACTION ARRAY PROOF COMPILER BLOCK (CONCISE v50.8 TEXT LAYOUT)
+    # INTERACTION ARRAY PROOF COMPILER BLOCK (UPGRADED v50.9 CONCISE COMPRESSION)
     # ------------------------------------------------------------------------------
     l_maths = []
     if waiver_mode == "Free":
@@ -548,18 +550,23 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     elif labour_mode == "Include in Hire":
         l_maths.append("Labour: Included in Hire Rate")
     else:
-        # Loop over table entries and append highly compressed threshold identifiers
+        # Loop over table entries and append highly compressed threshold math chains
         for idx, row in st.session_state.df.iterrows():
             if row.get('Lab_Math') and row['Lab_Math'].strip() != "":
+                raw_item_cost = row['Raw_Lab']
                 if is_floor_active:
-                    l_maths.append(f"{row['Lab_Math']} [Bypassed - Covered by Min Floor]")
+                    # Calculate itemized top-up allocation variable relative to pool distribution weight
+                    item_share_ratio = raw_item_cost / raw_lab_pool if raw_lab_pool > 0 else 1.0
+                    top_up_amount = (350.00 - raw_lab_pool) * item_share_ratio
+                    final_target = raw_item_cost + top_up_amount
+                    l_maths.append(f"{row['Lab_Math']} = ${raw_item_cost:,.2f} + ${top_up_amount:,.2f}* = ${final_target:,.2f}")
                 else:
-                    l_maths.append(f"{row['Lab_Math']} [Active Charge]")
+                    l_maths.append(f"{row['Lab_Math']} = ${raw_item_cost:,.2f} [Active Charge]")
                     
         if is_floor_active:
-            l_maths.append(f"Labour: Min Floor Triggered (Calculated Raw Total: ${raw_lab_pool:,.2f}) -> Fee Applied = ${lab:,.2f}")
+            l_maths.append(f"*to meet minimum labour floor total of ${lab:,.2f}")
         else:
-            l_maths.append(f"Labour: Passed Floor Threshold -> Actual Total Applied = ${lab:,.2f}")
+            l_maths.append(f"Labour Total: passed floor threshold check -> Final Applied = ${lab:,.2f}")
 
     # SAVE & DOWNLOAD INTERACTION ZONE
     st.markdown("")  
