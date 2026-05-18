@@ -128,7 +128,6 @@ def create_calculation_pdf(name, subtotal, labour, waiver, cartage, grand, weeks
     pdf.cell(0, 10, " 2. LABOUR & LOGISTICS PROOFS", 0, 1, "L", True)
     pdf.set_text_color(0, 0, 0); pdf.set_font("Arial", "", 10)
     
-    # Render all lines straight out of the optimized array matrix cleanly
     for m in log_maths: 
         pdf.cell(0, 8, clean_text(f" {m}"), border="B", ln=True)
 
@@ -516,7 +515,6 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     wav = h_wk1_gear * 0.07 if waiver_mode == "Charge" else 0
     crt = trks * safe_km * 4 * 3.50 if cartage_mode == "Charge" else 0
     
-    # Threshold Baseline Determinator Variables
     raw_lab_pool = st.session_state.df["Raw_Lab"].sum()
     lab = max(raw_lab_pool, 350) if labour_mode == "Separate" else 0
     is_floor_active = (raw_lab_pool < 350 and labour_mode == "Separate")
@@ -532,7 +530,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     st.markdown(f"<div class='gt-banner'>GRAND TOTAL (EX GST): ${h_tot_c + lab + wav + crt:,.2f}</div>", unsafe_allow_html=True)
     
     # ------------------------------------------------------------------------------
-    # INTERACTION ARRAY PROOF COMPILER BLOCK
+    # INTERACTION ARRAY PROOF COMPILER BLOCK (CONCISE v50.8 TEXT LAYOUT)
     # ------------------------------------------------------------------------------
     l_maths = []
     if waiver_mode == "Free":
@@ -545,24 +543,23 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     else:
         l_maths.append(f"Cartage: {trks} Trucks x {safe_km}km x 4 x $3.50 = ${crt:,.2f}")
         
-    # UPGRADE v50.7 OPTION 1: Conditional Status Tag Formatting Generator Loop
     if labour_mode == "Free":
         l_maths.append("Labour: Free")
     elif labour_mode == "Include in Hire":
         l_maths.append("Labour: Included in Hire Rate")
     else:
-        # Evaluate individual items relative to the global floor matrix context
+        # Loop over table entries and append highly compressed threshold identifiers
         for idx, row in st.session_state.df.iterrows():
             if row.get('Lab_Math') and row['Lab_Math'].strip() != "":
                 if is_floor_active:
-                    l_maths.append(f"{row['Lab_Math']} [⚠️ UNDER THRESHOLD - INFRASTRUCTURE COVERED BY MIN FLOOR]")
+                    l_maths.append(f"{row['Lab_Math']} [Bypassed - Covered by Min Floor]")
                 else:
-                    l_maths.append(f"{row['Lab_Math']} [✅ ACTIVE CHARGE]")
+                    l_maths.append(f"{row['Lab_Math']} [Active Charge]")
                     
         if is_floor_active:
-            l_maths.append(f"Labour Minimum Limit: Raw Job Cost (${raw_lab_pool:,.2f}) failed floor check -> Flat Floor Applied = ${lab:,.2f}")
+            l_maths.append(f"Labour: Min Floor Triggered (Calculated Raw Total: ${raw_lab_pool:,.2f}) -> Fee Applied = ${lab:,.2f}")
         else:
-            l_maths.append(f"Labour Minimum Limit: Raw Job Cost (${raw_lab_pool:,.2f}) passed floor check -> Actual Applied = ${lab:,.2f}")
+            l_maths.append(f"Labour: Passed Floor Threshold -> Actual Total Applied = ${lab:,.2f}")
 
     # SAVE & DOWNLOAD INTERACTION ZONE
     st.markdown("")  
@@ -571,10 +568,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     if action_col_1.button("💾 SAVE PROJECT TO CLOUD", use_container_width=True):
         if st.session_state.df is not None and not st.session_state.df.empty:
             try:
-                if st.session_state.active_filename and st.session_state.active_filename.strip() != "":
-                    target_label = st.session_state.active_filename.strip()
-                else:
-                    target_label = st.session_state.proj.strip() if st.session_state.proj else f"Draft_{datetime.now().strftime('%Y%m%d_%H%M')}"
+                target_label = st.session_state.active_filename.strip() if st.session_state.active_filename else st.session_state.proj.strip()
                 
                 payload = {
                     "proj": target_label,
