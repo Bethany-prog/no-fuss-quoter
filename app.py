@@ -173,6 +173,7 @@ def pull_vault_archive_list():
     except:
         return []
 
+# UPGRADE v49.8: Bulletproof loading with fallback defaults to prevent crash exceptions
 def load_project_from_vault(label_name):
     try:
         with open(f"{VAULT_DIR}/{label_name}.json", "r") as f:
@@ -180,19 +181,28 @@ def load_project_from_vault(label_name):
             st.session_state.status = d.get("status", "Quoted")
             st.session_state.proj = d.get("proj", label_name)
             st.session_state.km = float(d.get("km", 0.0))
+            st.session_state.truck_override = int(d.get("truck_override", 0))
             
-            if "start_date" in d:
-                st.session_state.start_date_val = datetime.strptime(d["start_date"], "%Y-%m-%d").date()
+            # Safe historical date parsing
+            if "start_date" in d and d["start_date"]:
+                try:
+                    st.session_state.start_date_val = datetime.strptime(d["start_date"], "%Y-%m-%d").date()
+                except:
+                    st.session_state.start_date_val = date.today()
+            else:
+                st.session_state.start_date_val = date.today()
             
             items_list = d.get("items", [])
             for item in items_list:
                 if "Override_Rate" not in item:
                     item["Override_Rate"] = 0.0
+                if "Discount" not in item:
+                    item["Discount"] = 0.0
                     
             st.session_state.df = pd.DataFrame(items_list)
             st.rerun()
-    except:
-        st.error("Vault read clearance timeout.")
+    except Exception as e:
+        st.error(f"Vault Read Clearance Bypass Failed: {str(e)}")
 
 # ==============================================================================
 # 6. VISUAL CSS LOOK & FEEL (FRONT-OF-HOUSE)
@@ -216,7 +226,7 @@ st.title("⚡ Louis Master Quoter")
 vault_jobs = pull_vault_archive_list()
 
 # ------------------------------------------------------------------------------
-# ULTIMATE BULLETPROOF GLOBAL SCANNER (FIXED BULLETIN CARD AT TOP)
+# THE CONTROL TOWER DEED MATRIX: Top Bulletin Dashboard Alert Scanner
 # ------------------------------------------------------------------------------
 global_warnings = []
 if vault_jobs:
@@ -224,9 +234,10 @@ if vault_jobs:
         try:
             with open(f"{VAULT_DIR}/{job}.json", "r") as f:
                 job_data = json.load(f)
-                # Loose scan: catch anything that isn't confirmed or finalized yet
-                if job_data.get("status") in ["Quoted", None, ""]:
-                    if "start_date" in job_data:
+                # Catch quotes with missing or legacy state fields
+                j_status = job_data.get("status", "Quoted")
+                if j_status in ["Quoted", None, "", "quoted"]:
+                    if "start_date" in job_data and job_data["start_date"]:
                         j_start = datetime.strptime(job_data["start_date"], "%Y-%m-%d").date()
                         days_remaining = (j_start - date.today()).days
                         if days_remaining <= 14:
@@ -249,7 +260,7 @@ if global_warnings:
     st.markdown("<div style='font-size: 13px; color: #555; margin-top: 15px; font-style:italic;'>Action Required: Re-validate booking confirmations or adjust the project stage fields in the selector workspace below to clear these flags.</div><hr style='border:1px solid #FFCDD2;'>", unsafe_allow_html=True)
 
 # ------------------------------------------------------------------------------
-# SIDEBAR ACTIONS (HARD RESET MECHANISM ADDED)
+# SIDEBAR NAVIGATION PANEL
 # ------------------------------------------------------------------------------
 st.sidebar.title("📁 PROJECT ARCHIVE")
 st.sidebar.markdown("---")
@@ -261,12 +272,10 @@ if st.sidebar.button("➕ START NEW", use_container_width=True):
     st.session_state.status = "Quoted"
     st.session_state.start_date_val = date.today()
     st.session_state.truck_override = 0
-    # HARD RESET: Changing the seed value forces all form fields to break their cached state instantly
     st.session_state.reset_key_seed += 1
     st.rerun()
 
 st.sidebar.markdown("---")
-# Linked key ensures name box clears instantly on reset
 st.session_state.proj = st.sidebar.text_input("Project Label", st.session_state.proj, key=f"pname_box_{st.session_state.reset_key_seed}")
 
 if vault_jobs:
@@ -293,7 +302,7 @@ else:
     st.sidebar.info("No Projects Saved In Cloud Yet")
 
 # ------------------------------------------------------------------------------
-# CORE DATA INPUTS (SEED ATTACHED TO GUARANTEE BLANK SLATES ON NEW CLICK)
+# CORE DATA INPUTS
 # ------------------------------------------------------------------------------
 st.markdown(f"### 📍 Active Workspace: {st.session_state.proj}")
 st.session_state.status = st.selectbox("Stage", STAGES, index=STAGES.index(st.session_state.status) if st.session_state.status in STAGES else 0, key=f"stage_select_{st.session_state.reset_key_seed}")
@@ -462,7 +471,6 @@ if st.session_state.df is not None and not st.session_state.df.empty:
         else:
             min_trucks = math.ceil(total_kg / 6000) or 1
         
-        # Override field linked safely to seed parameters
         val_trucks = max(min_trucks, st.session_state.truck_override) if st.session_state.truck_override > 0 else min_trucks
         trks = st.number_input("Manually Set Truck Count", min_value=min_trucks, value=int(val_trucks), key=f"trk_field_{st.session_state.reset_key_seed}")
         st.session_state.truck_override = trks
@@ -500,6 +508,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
                     "proj": target_label,
                     "status": st.session_state.status,
                     "km": st.session_state.km,
+                    "truck_override": st.session_state.truck_override,
                     "start_date": st.session_state.start_date_val.strftime("%Y-%m-%d"),
                     "items": st.session_state.df.to_dict(orient="records")
                 }
