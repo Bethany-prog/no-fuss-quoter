@@ -98,26 +98,27 @@ def create_calculation_pdf(name, subtotal, labour, waiver, cartage, grand, weeks
     pdf.set_text_color(0, 0, 0); pdf.set_font("Arial", "", 9)
     
     for item in items_list:
-        dm = (1 - (item['Discount']/100))
-        w1_total = (item['Qty'] * item['Unit Rate']) * dm
+        dm = (1 - (item.get('Discount', 0.0)/100))
+        display_unit_rate = item.get('Override_Rate', 0.0) if item.get('Override_Rate', 0.0) > 0 else item['Base_Hire']
+        w1_total = (item['Qty'] * display_unit_rate) * dm
         prod_label = item['Product']
         if 'Anchoring' in item and item['Anchoring']:
             prod_label += f" ({item['Anchoring']})"
             
         pdf.cell(col_w[0], 8, clean_text(f" {prod_label} (Wk 1 Base)"), 1, 0, "L")
         pdf.cell(col_w[1], 8, f"{item['Qty']:,.0f}", 1, 0, "C")
-        pdf.cell(col_w[2], 8, f"${item['Base_Hire']:,.2f}", 1, 0, "R")
-        pdf.cell(col_w[3], 8, f"{item['Discount']:.1f}%", 1, 0, "C")
+        pdf.cell(col_w[2], 8, f"${display_unit_rate:,.2f}", 1, 0, "R")
+        pdf.cell(col_w[3], 8, f"{item.get('Discount', 0.0):.1f}%", 1, 0, "C")
         pdf.cell(col_w[4], 8, f"${w1_total:,.2f}", 1, 1, "R")
         
         if weeks > 1:
-            r_rate = item['Base_Hire'] * 0.5 if item['Is_Marquee'] else item['Base_Hire']
+            r_rate = display_unit_rate * 0.5 if item['Is_Marquee'] else display_unit_rate
             r_total = (item['Qty'] * r_rate * (weeks-1)) * dm
             
             pdf.cell(col_w[0], 8, clean_text(f"   └ Recurring Hire (x{weeks-1} wks)"), 1, 0, "L")
             pdf.cell(col_w[1], 8, f"{item['Qty']:,.0f}", 1, 0, "C")
             pdf.cell(col_w[2], 8, f"${r_rate:,.2f}", 1, 0, "R")
-            pdf.cell(col_w[3], 8, f"{item['Discount']:.1f}%", 1, 0, "C")
+            pdf.cell(col_w[3], 8, f"{item.get('Discount', 0.0):.1f}%", 1, 0, "C")
             pdf.cell(col_w[4], 8, f"${r_total:,.2f}", 1, 1, "R")
 
     # Section 2: Logistics Breakdown Output
@@ -157,7 +158,7 @@ STAGE_COLORS = {"Quoted": "#FF9100", "Accepted": "#00E676", "Paid": "#00B8D4", "
 # 5. STREAMLIT INTERNAL STORAGE PERSISTENCE
 # ==============================================================================
 if 'df' not in st.session_state: 
-    st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Total", "Min_Lab", "Raw_Lab", "KG", "Is_Marquee", "Discount", "Lab_Math", "Lab_Per_Unit", "Base_Hire", "Anchoring"])
+    st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Total", "Min_Lab", "Raw_Lab", "KG", "Is_Marquee", "Discount", "Lab_Math", "Lab_Per_Unit", "Base_Hire", "Anchoring", "Override_Rate"])
 if 'status' not in st.session_state: st.session_state.status = "Quoted"
 if 'proj' not in st.session_state: st.session_state.proj = "New Project"
 if 'km' not in st.session_state: st.session_state.km = 0.0
@@ -177,7 +178,14 @@ def load_project_from_vault(label_name):
             st.session_state.status = d.get("status", "Quoted")
             st.session_state.proj = d.get("proj", label_name)
             st.session_state.km = float(d.get("km", 0.0))
-            st.session_state.df = pd.DataFrame(d.get("items", []))
+            
+            # Legacy conversion handling to avoid format structure breaks
+            items_list = d.get("items", [])
+            for item in items_list:
+                if "Override_Rate" not in item:
+                    item["Override_Rate"] = 0.0
+                    
+            st.session_state.df = pd.DataFrame(items_list)
             st.rerun()
     except:
         st.error("Vault read clearance timeout.")
@@ -207,7 +215,7 @@ st.sidebar.title("📁 PROJECT ARCHIVE")
 st.sidebar.markdown("---")
 
 if st.sidebar.button("➕ START NEW", use_container_width=True):
-    st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Total", "Min_Lab", "Raw_Lab", "KG", "Is_Marquee", "Discount", "Lab_Math", "Lab_Per_Unit", "Base_Hire", "Anchoring"])
+    st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Total", "Min_Lab", "Raw_Lab", "KG", "Is_Marquee", "Discount", "Lab_Math", "Lab_Per_Unit", "Base_Hire", "Anchoring", "Override_Rate"])
     st.session_state.km = 0.0
     st.session_state.proj = "New Project"
     st.rerun()
@@ -258,7 +266,7 @@ with col1:
             new_struct_df = pd.DataFrame([{
                 "Qty": m_q, "Product": f"Structure {span}x{length}m", "Unit Rate": brate, "Min_Lab": 350, 
                 "Raw_Lab": lab_cost, "Lab_Math": f"Structure {span}x{length} ({anchoring_type}): ${lab_cost:,.2f}", "KG": (sqm*15)*m_q, 
-                "Is_Marquee": True, "Discount": 0.0, "Lab_Per_Unit": 0, "Base_Hire": brate, "Anchoring": anchoring_type
+                "Is_Marquee": True, "Discount": 0.0, "Lab_Per_Unit": 0, "Base_Hire": brate, "Anchoring": anchoring_type, "Override_Rate": 0.0
             }])
             st.session_state.df = pd.concat([st.session_state.df, new_struct_df], ignore_index=True)
             
@@ -279,7 +287,7 @@ with col1:
                 new_weight_df = pd.DataFrame([{
                     "Qty": calculated_weights, "Product": "30kg Weights", "Unit Rate": 6.60, "Min_Lab": 0, 
                     "Raw_Lab": calculated_weights * 1.65, "Lab_Math": f"30kg Weights: {calculated_weights:,.0f} units x $1.65 = ${calculated_weights * 1.65:,.2f}", 
-                    "KG": calculated_weights * 30.0, "Is_Marquee": False, "Discount": 0.0, "Lab_Per_Unit": 1.65, "Base_Hire": 6.60, "Anchoring": ""
+                    "KG": calculated_weights * 30.0, "Is_Marquee": False, "Discount": 0.0, "Lab_Per_Unit": 1.65, "Base_Hire": 6.60, "Anchoring": "", "Override_Rate": 0.0
                 }])
                 st.session_state.df = pd.concat([st.session_state.df, new_weight_df], ignore_index=True)
             st.rerun()
@@ -303,7 +311,7 @@ with col2:
         new_item_df = pd.DataFrame([{
             "Qty": f_qty, "Product": p_sel, "Unit Rate": unit_rate, "Min_Lab": 0, "Raw_Lab": raw_lab_pool, 
             "Lab_Math": lab_desc, "KG": eff_qty * data['kg'], "Is_Marquee": False, "Discount": 0.0, 
-            "Lab_Per_Unit": lab_per_unit, "Base_Hire": base_h, "Anchoring": ""
+            "Lab_Per_Unit": lab_per_unit, "Base_Hire": base_h, "Anchoring": "", "Override_Rate": 0.0
         }])
         st.session_state.df = pd.concat([st.session_state.df, new_item_df], ignore_index=True)
         st.rerun()
@@ -317,11 +325,15 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     has_itrac = False
     
     for idx, row in st.session_state.df.iterrows():
-        qty, brate, dm = row["Qty"], row["Unit Rate"], (1 - (row["Discount"]/100))
-        total_kg += row["KG"]
-        h_wk1_gear += (qty * row["Base_Hire"])
+        # DYNAMIC PRIORITY LOGIC: Evaluates whether an override rate variable is active
+        override = row.get("Override_Rate", 0.0)
+        active_base = override if override > 0 else row["Unit Rate"]
+        active_hire_base = override if override > 0 else row["Base_Hire"]
         
-        # Isolated I-Trac checker
+        qty, brate, dm = row["Qty"], active_base, (1 - (row["Discount"]/100))
+        total_kg += row["KG"]
+        h_wk1_gear += (qty * active_hire_base)
+        
         if row["Product"] == "I-Trac®":
             itrac_sqm += qty
             has_itrac = True
@@ -329,7 +341,8 @@ if st.session_state.df is not None and not st.session_state.df.empty:
         wk1_t = (qty * brate + row["Raw_Lab"]) * dm if labour_mode == "Include in Hire" else (qty * brate) * dm
         h_tot_c += wk1_t
         
-        c0, c1, c2, c3, c4, c5 = st.columns([0.4, 4.0, 0.8, 1.2, 1.0, 1.4])
+        # Grid Column Restructuring to accommodate the new input box cleanly
+        c0, c1, c2, c3, c4, c4b, c5 = st.columns([0.4, 3.2, 0.8, 1.2, 1.2, 1.2, 1.4])
         if c0.button("🗑️", key=f"sdel_{idx}"):
             st.session_state.df.drop(idx, inplace=True)
             st.session_state.df.reset_index(drop=True, inplace=True)
@@ -342,28 +355,33 @@ if st.session_state.df is not None and not st.session_state.df.empty:
         c1.markdown(f"<div class='item-text'>{prod_display} - Wk 1</div>", unsafe_allow_html=True)
         c2.write(f"{qty:,.0f}"); c3.write(f"${wk1_t/qty:,.2f}")
         
-        new_disc = c4.number_input("", 0.0, 100.0, float(row["Discount"]), 1.0, key=f"sd_{idx}", label_visibility="collapsed")
+        # Box 1: Percentage Input
+        new_disc = c4.number_input("Disc %", 0.0, 100.0, float(row["Discount"]), 1.0, key=f"sd_{idx}")
         if new_disc != row["Discount"]:
             st.session_state.df.at[idx, "Discount"] = new_disc
+            st.rerun()
+            
+        # Box 2: NEW Custom Rate Manual Override Field 
+        new_override = c4b.number_input("Rate Override", 0.0, 5000.0, float(row.get("Override_Rate", 0.0)), 0.5, key=f"so_{idx}")
+        if new_override != row.get("Override_Rate", 0.0):
+            st.session_state.df.at[idx, "Override_Rate"] = new_override
             st.rerun()
             
         c5.write(f"${wk1_t:,.2f}")
         
         if weeks > 1:
-            base_r = row["Base_Hire"]
-            r_rate, r_tot = (base_r * 0.5 if row["Is_Marquee"] else base_r), qty * (base_r * 0.5 if row["Is_Marquee"] else base_r) * (weeks-1) * dm
+            r_rate = (active_hire_base * 0.5 if row["Is_Marquee"] else active_hire_base)
+            r_tot = qty * r_rate * (weeks-1) * dm
             h_tot_c += r_tot
-            cb = st.columns([0.4, 4.0, 0.8, 1.2, 1.0, 1.4])
+            cb = st.columns([0.4, 3.2, 0.8, 1.2, 1.2, 1.2, 1.4])
             cb[1].markdown(f"<div style='color:grey; font-style:italic; font-size:18px;'>└ Recurring (x{weeks-1} wks)</div>", unsafe_allow_html=True)
-            cb[2].write(f"{qty:,.0f}"); cb[3].write(f"${r_rate*dm:,.2f}"); cb[5].write(f"${r_tot:,.2f}")
+            cb[2].write(f"{qty:,.0f}"); cb[3].write(f"${r_rate*dm:,.2f}"); cb[6].write(f"${r_tot:,.2f}")
 
     # Aligned High-Appeal Form Control
     st.divider()
     col_left, col_right = st.columns(2)
     with col_left:
         st.markdown("### 🚛 Logistics Override")
-        
-        # REMOVED SAFETY NET v48.9: Stripped out mixing ratios. I-Trac drives layout strictly by volume.
         if has_itrac:
             min_trucks = math.ceil(itrac_sqm / 288) or 1
         else:
