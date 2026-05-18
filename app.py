@@ -183,7 +183,7 @@ def load_project_from_vault(label_name):
         with open(f"{VAULT_DIR}/{label_name}.json", "r") as f:
             d = json.load(f)
             st.session_state.status = d.get("status", "Quoted")
-            st.session_state.proj = d.get("proj", label_name)
+            st.session_state.proj = str(d.get("proj", label_name)).strip()
             st.session_state.km = float(d.get("km", 0.0))
             st.session_state.truck_override = int(d.get("truck_override", 0))
             
@@ -204,7 +204,7 @@ def load_project_from_vault(label_name):
                     
             st.session_state.df = pd.DataFrame(items_list)
             
-            # CORE FIX v50.0: Shifts the on-screen form seed IDs so loaded variable strings mirror onto layouts immediately
+            # Key step rotation triggers total form re-sync
             st.session_state.reset_key_seed += 1
             st.rerun()
     except Exception as e:
@@ -262,7 +262,7 @@ if global_warnings:
         st.markdown(f"<div style='padding-left:15px; font-weight:700; color:#B71C1C; font-family:sans-serif; margin-bottom:4px;'>{warn}</div>", unsafe_allow_html=True)
     st.markdown("<div style='font-size: 13px; color: #555; margin-top: 15px; font-style:italic;'>Action Required: Re-validate booking confirmations or adjust the project stage fields in the selector workspace below to clear these flags.</div><hr style='border:1px solid #FFCDD2;'>", unsafe_allow_html=True)
 
-# SIDEBAR PANEL
+# SIDEBAR NAVIGATION PANEL
 st.sidebar.title("📁 PROJECT ARCHIVE")
 st.sidebar.markdown("---")
 
@@ -277,8 +277,9 @@ if st.sidebar.button("➕ START NEW", use_container_width=True):
     st.rerun()
 
 st.sidebar.markdown("---")
-# CORE INTEGRATION: Text field value tracking bound to seed mutations so it updates flawlessly on loads
-st.session_state.proj = st.sidebar.text_input("Project Label", st.session_state.proj, key=f"pname_box_{st.session_state.reset_key_seed}")
+# BOUND TRACKING CONTROL VALUE: Overwrites text entry fields completely to loaded name configurations
+ui_proj_name = st.sidebar.text_input("Project Label", value=st.session_state.proj, key=f"pname_box_{st.session_state.reset_key_seed}")
+st.session_state.proj = ui_proj_name.strip()
 
 if vault_jobs:
     load_choice = st.sidebar.selectbox("Cloud Retrieval Menus", ["-- Choose Project --"] + vault_jobs)
@@ -491,16 +492,13 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     
     st.markdown(f"<div class='gt-banner'>GRAND TOTAL (EX GST): ${h_tot_c + lab + wav + crt:,.2f}</div>", unsafe_allow_html=True)
     
-    # ------------------------------------------------------------------------------
     # SAVE & DOWNLOAD INTERACTION ZONE
-    # ------------------------------------------------------------------------------
     st.markdown("")  
     action_col_1, action_col_2 = st.columns(2)
     
     if action_col_1.button("💾 SAVE PROJECT TO CLOUD", use_container_width=True):
         if st.session_state.df is not None and not st.session_state.df.empty:
             try:
-                # CORE FIX: Dynamically captures whatever string is currently inside the Label entry box
                 target_label = st.session_state.proj.strip() if st.session_state.proj else f"Draft_{datetime.now().strftime('%Y%m%d_%H%M')}"
                 
                 payload = {
