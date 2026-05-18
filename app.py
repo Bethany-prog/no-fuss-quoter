@@ -151,7 +151,7 @@ CATALOG = {
 }
 STRUCT_LOGIC = {span: {"bay": (5 if span >= 10 else 3), "s_rate": 23.0, "m_rate": 18.20, "s_lab": 0.40} for span in [3, 4, 6, 9, 10, 12, 15, 20]}
 STAGES = ["Quoted", "Accepted", "Paid", "On Hire", "Returned", "Cancelled"]
-STAGE_COLORS = {"Quoted": "#FF9100", "Accepted": "#00E676", "Paid": "#00B8D4", "On Hire": "#D500F9", "Returned": "#757575", "Cancelled": "#263238"}
+STAGE_COLORS = {"Quoted": "#FF9100", "Accepted": "#00E676", "Paid": "#00B8D4", "On Hire", "#D500F9", "Returned": "#757575", "Cancelled": "#263238"}
 
 # ==============================================================================
 # 5. STREAMLIT INTERNAL STORAGE PERSISTENCE
@@ -374,7 +374,7 @@ with col1:
             sqm = span*length; hire_rate = logic['s_rate'] if (length/3) <= 1 else logic['m_rate']
             brate = sqm * hire_rate; lab_cost = brate * logic['s_lab']
             
-            # Save raw structural dimensions into dataframe context securely
+            # Save raw base configuration labels into the tracking array context flawlessly
             new_struct_df = pd.DataFrame([{
                 "Qty": m_q, "Product": f"Structure {span}x{length}m", "Unit Rate": brate, "Min_Lab": 350, 
                 "Raw_Lab": lab_cost, "Lab_Math": f"Structure {span}x{length} ({anchoring_type}): ${brate:,.2f} x {logic['s_lab']:.2f}", "KG": (sqm*15)*m_q, 
@@ -532,7 +532,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     st.markdown(f"<div class='gt-banner'>GRAND TOTAL (EX GST): ${h_tot_c + lab + wav + crt:,.2f}</div>", unsafe_allow_html=True)
     
     # ------------------------------------------------------------------------------
-    # INTERACTION ARRAY PROOF COMPILER BLOCK (UPGRADED v50.9 CONCISE COMPRESSION)
+    # INTERACTION ARRAY PROOF COMPILER BLOCK (UPGRADED PRECISE MATHEMATICS MATHS CHAIN)
     # ------------------------------------------------------------------------------
     l_maths = []
     if waiver_mode == "Free":
@@ -550,18 +550,24 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     elif labour_mode == "Include in Hire":
         l_maths.append("Labour: Included in Hire Rate")
     else:
-        # Loop over table entries and append highly compressed threshold math chains
         for idx, row in st.session_state.df.iterrows():
             if row.get('Lab_Math') and row['Lab_Math'].strip() != "":
                 raw_item_cost = row['Raw_Lab']
+                
+                # REPAIRED v51.0: Strips raw words and renders continuous clear working math before the top up parameter chains
+                clean_lbl = str(row['Product'])
+                if 'Anchoring' in row and row['Anchoring'] and row['Anchoring'] != "":
+                    clean_lbl += f" ({row['Anchoring']})"
+                    
                 if is_floor_active:
-                    # Calculate itemized top-up allocation variable relative to pool distribution weight
                     item_share_ratio = raw_item_cost / raw_lab_pool if raw_lab_pool > 0 else 1.0
                     top_up_amount = (350.00 - raw_lab_pool) * item_share_ratio
                     final_target = raw_item_cost + top_up_amount
-                    l_maths.append(f"{row['Lab_Math']} = ${raw_item_cost:,.2f} + ${top_up_amount:,.2f}* = ${final_target:,.2f}")
+                    
+                    # Generates: Structure 6x3 (Pegged): $414.00 x 0.40 = $165.60 + $184.40* = $350.00
+                    l_maths.append(f"{clean_lbl}: {row['Lab_Math'].split(': ')[1]} = ${raw_item_cost:,.2f} + ${top_up_amount:,.2f}* = ${final_target:,.2f}")
                 else:
-                    l_maths.append(f"{row['Lab_Math']} = ${raw_item_cost:,.2f} [Active Charge]")
+                    l_maths.append(f"{clean_lbl}: {row['Lab_Math'].split(': ')[1]} = ${raw_item_cost:,.2f} [Active Charge]")
                     
         if is_floor_active:
             l_maths.append(f"*to meet minimum labour floor total of ${lab:,.2f}")
