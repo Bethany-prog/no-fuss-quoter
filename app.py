@@ -385,12 +385,12 @@ if st.session_state.df is not None and not st.session_state.df.empty:
         else:
             st.error("Cannot sync data tables because workspace is empty.")
             
-    # VISUAL LABEL FILTERS (v48.3): Overwrites math equations completely with "Free" layout strings
+    # VISUAL LABEL FILTERS (v48.4): Silences product-level breakdowns if Labour is toggled Free
     cleaned_pdf_items = st.session_state.df.to_dict('records')
     if labour_mode in ["Free", "Include in Hire"]:
         for item in cleaned_pdf_items:
             if item.get('Lab_Math'):
-                item['Lab_Math'] = f"{item['Product'].split(':')[0]} Labour: Free"
+                item['Lab_Math'] = "" # Strips the product-level duplicate row entirely
                 
     l_maths = []
     if waiver_mode == "Free":
@@ -407,6 +407,8 @@ if st.session_state.df is not None and not st.session_state.df.empty:
         l_maths.append("Labour: Free")
     elif labour_mode == "Include in Hire":
         l_maths.append("Labour: Included in Hire Rate")
+    else:
+        l_maths.append(f"Labour: Minimum base fee threshold check passed -> ${lab:,.2f}")
 
     pdf_b = create_calculation_pdf(st.session_state.proj, h_tot_c, lab, wav, crt, h_tot_c+lab+wav+crt, weeks, start_d, end_d, cleaned_pdf_items, l_maths, st.session_state.status)
     action_col_2.download_button("📥 DOWNLOAD DETAILED AUDIT PDF", pdf_b, file_name=f"{st.session_state.proj}_Analysis.pdf", use_container_width=True)
