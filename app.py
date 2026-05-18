@@ -6,6 +6,8 @@ from fpdf import FPDF
 import re
 import json
 import os
+from geopy.geocoders import Nominatim
+from geopy.distance import geodesic
 
 # ==============================================================================
 # 0. INITIAL GLOBAL CONFIG & LOCAL CLOUD VAULT ARCHITECTURE
@@ -15,6 +17,10 @@ st.set_page_config(page_title="Louis Master Quoter", layout="wide")
 VAULT_DIR = "cloud_vault"
 if not os.path.exists(VAULT_DIR):
     os.makedirs(VAULT_DIR)
+
+# UPDATED SOURCE FACTORY DEPOT LOCK: 9 Battery Crt, Cranbourne West VIC 3977
+DEPOT_LAT = -38.1171
+DEPOT_LON = 145.2442
 
 # ==============================================================================
 # 1. ACCESS CONTROL TOWER (SECURITY GATE)
@@ -166,6 +172,7 @@ if 'start_date_val' not in st.session_state: st.session_state.start_date_val = d
 if 'reset_key_seed' not in st.session_state: st.session_state.reset_key_seed = 0
 if 'active_filename' not in st.session_state: st.session_state.active_filename = ""
 if 'rename_mode' not in st.session_state: st.session_state.rename_mode = False
+if 'site_address_str' not in st.session_state: st.session_state.site_address_str = ""
 
 if 'saved_cartage_mode' not in st.session_state: st.session_state.saved_cartage_mode = "Charge"
 if 'saved_labour_mode' not in st.session_state: st.session_state.saved_labour_mode = "Separate"
@@ -188,6 +195,7 @@ def load_project_from_vault(label_name):
             st.session_state.rename_mode = False
             st.session_state.km = float(d.get("km", 0.0))
             st.session_state.truck_override = int(d.get("truck_override", 0))
+            st.session_state.site_address_str = d.get("site_address", "")
             
             st.session_state.saved_cartage_mode = d.get("cartage_mode", "Charge")
             st.session_state.saved_labour_mode = d.get("labour_mode", "Separate")
@@ -279,6 +287,7 @@ if st.sidebar.button("➕ START NEW", use_container_width=True):
     st.session_state.status = "Quoted"
     st.session_state.start_date_val = date.today()
     st.session_state.truck_override = 0
+    st.session_state.site_address_str = ""
     st.session_state.saved_cartage_mode = "Charge"
     st.session_state.saved_labour_mode = "Separate"
     st.session_state.saved_waiver_mode = "Charge"
@@ -321,6 +330,7 @@ if vault_jobs:
                 st.session_state.status = "Quoted"
                 st.session_state.start_date_val = date.today()
                 st.session_state.truck_override = 0
+                st.session_state.site_address_str = ""
                 st.session_state.saved_cartage_mode = "Charge"
                 st.session_state.saved_labour_mode = "Separate"
                 st.session_state.saved_waiver_mode = "Charge"
@@ -338,11 +348,32 @@ c1, c2, c3 = st.columns(3)
 start_d = c1.date_input("Start Date", value=st.session_state.start_date_val, key=f"sd_pick_{st.session_state.reset_key_seed}")
 st.session_state.start_date_val = start_d
 end_d = c2.date_input("End Date", value=start_d, key=f"ed_pick_{st.session_state.reset_key_seed}")
-km_val = st.session_state.km if (st.session_state.km and st.session_state.km > 0) else None
-st.session_state.km = c3.number_input("One-Way KM", value=km_val, placeholder="KM...", key=f"km_num_{st.session_state.reset_key_seed}")
 weeks = math.ceil(((end_d - start_d).days) / 7) or 1
 
-st.info(f"**Calculated Hire Duration:** {weeks} Week(s)")
+input_addr = c3.text_input("🏠 Delivery Site Address", value=st.session_state.site_address_str, placeholder="Type full address or suburb...", key=f"addr_field_{st.session_state.reset_key_seed}")
+
+if input_addr.strip() != st.session_state.site_address_str:
+    st.session_state.site_address_str = input_addr.strip()
+    if input_addr.strip() != "":
+        try:
+            geolocator = Nominatim(user_agent="louis_quoter_engine_v51")
+            loc_data = geolocator.geocode(input_addr.strip() + ", Victoria, Australia")
+            
+            if loc_data:
+                target_coords = (loc_data.latitude, loc_data.longitude)
+                depot_coords = (DEPOT_LAT, DEPOT_LON)
+                
+                calculated_raw_km = geodesic(depot_coords, target_coords).kilometers
+                final_buffered_km = round(calculated_raw_km * 1.15, 1)
+                
+                st.session_state.km = final_buffered_km
+                st.toast(f"📍 Location verified: {loc_data.address[:45]}... Linked as {final_buffered_km} KM", icon="✅")
+            else:
+                st.sidebar.error("Address not found. Please clarify suburb identifiers.")
+        except Exception as maps_err:
+            st.sidebar.warning(f"Geocoding map ping offline: {str(maps_err)}")
+
+st.info(f"**Calculated Hire Duration:** {weeks} Week(s)  |  **Active Delivery Routing Distance:** {st.session_state.km} One-Way KM (Origin: Cranbourne West)")
 
 # Multi-Segment Toggle Rules
 l1, l2, l3 = st.columns(3)
@@ -374,7 +405,6 @@ with col1:
             sqm = span*length; hire_rate = logic['s_rate'] if (length/3) <= 1 else logic['m_rate']
             brate = sqm * hire_rate; lab_cost = brate * logic['s_lab']
             
-            # Encapsulates raw algebra tracking hooks securely
             new_struct_df = pd.DataFrame([{
                 "Qty": m_q, "Product": f"Structure {span}x{length}m", "Unit Rate": brate, "Min_Lab": 350, 
                 "Raw_Lab": lab_cost, "Lab_Math": f"Structure {span}x{length} ({anchoring_type}): ${brate:,.2f} x {logic['s_lab']:.2f}", "KG": (sqm*15)*m_q, 
@@ -532,7 +562,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     st.markdown(f"<div class='gt-banner'>GRAND TOTAL (EX GST): ${h_tot_c + lab + wav + crt:,.2f}</div>", unsafe_allow_html=True)
     
     # ------------------------------------------------------------------------------
-    # INTERACTION ARRAY PROOF COMPILER BLOCK (UPGRADED PERCISE PRE-ALGEBRA WORKING OUT)
+    # INTERACTION ARRAY PROOF COMPILER BLOCK
     # ------------------------------------------------------------------------------
     l_maths = []
     if waiver_mode == "Free":
@@ -558,7 +588,6 @@ if st.session_state.df is not None and not st.session_state.df.empty:
                 if 'Anchoring' in row and row['Anchoring'] and row['Anchoring'] != "":
                     clean_lbl += f" ({row['Anchoring']})"
                 
-                # Extract formula components ($414.00 x 0.40) straight from split maps
                 formula_part = row['Lab_Math'].split(': ')[1]
                     
                 if is_floor_active:
@@ -566,7 +595,6 @@ if st.session_state.df is not None and not st.session_state.df.empty:
                     top_up_amount = (350.00 - raw_lab_pool) * item_share_ratio
                     final_target = raw_item_cost + top_up_amount
                     
-                    # UPGRADE v51.2: Structure 6x3m (Pegged): $414.00 x 0.40 = $165.60 + $184.40* = $350.00
                     l_maths.append(f"{clean_lbl}: {formula_part} = ${raw_item_cost:,.2f} + ${top_up_amount:,.2f}* = ${final_target:,.2f}")
                 else:
                     l_maths.append(f"{clean_lbl}: {formula_part} = ${raw_item_cost:,.2f} [Active Charge]")
@@ -594,6 +622,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
                     "cartage_mode": cartage_mode,
                     "labour_mode": labour_mode,
                     "waiver_mode": waiver_mode,
+                    "site_address": st.session_state.site_address_str,
                     "items": st.session_state.df.to_dict(orient="records")
                 }
                 
