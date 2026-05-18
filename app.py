@@ -1,7 +1,7 @@
 import streamlit as st
 import math
 import pandas as pd
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from fpdf import FPDF
 import re
 import json
@@ -163,6 +163,7 @@ if 'status' not in st.session_state: st.session_state.status = "Quoted"
 if 'proj' not in st.session_state: st.session_state.proj = "New Project"
 if 'km' not in st.session_state: st.session_state.km = 0.0
 if 'truck_override' not in st.session_state: st.session_state.truck_override = 0
+if 'start_date_val' not in st.session_state: st.session_state.start_date_val = date.today()
 
 def pull_vault_archive_list():
     try:
@@ -178,6 +179,10 @@ def load_project_from_vault(label_name):
             st.session_state.status = d.get("status", "Quoted")
             st.session_state.proj = d.get("proj", label_name)
             st.session_state.km = float(d.get("km", 0.0))
+            
+            # Load stored dates safely
+            if "start_date" in d:
+                st.session_state.start_date_val = datetime.strptime(d["start_date"], "%Y-%m-%d").date()
             
             items_list = d.get("items", [])
             for item in items_list:
@@ -218,6 +223,7 @@ if st.sidebar.button("➕ START NEW", use_container_width=True):
     st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Total", "Min_Lab", "Raw_Lab", "KG", "Is_Marquee", "Discount", "Lab_Math", "Lab_Per_Unit", "Base_Hire", "Anchoring", "Override_Rate"])
     st.session_state.km = 0.0
     st.session_state.proj = "New Project"
+    st.session_state.start_date_val = date.today()
     st.rerun()
 
 st.sidebar.markdown("---")
@@ -236,11 +242,19 @@ st.session_state.status = st.selectbox("Stage", STAGES, index=STAGES.index(st.se
 st.markdown(f"<div style='height: 14px; background-color: {STAGE_COLORS[st.session_state.status]}; border-radius: 6px; margin-bottom: 20px;'></div>", unsafe_allow_html=True)
 
 c1, c2, c3 = st.columns(3)
-start_d = c1.date_input("Start", value=date.today())
-end_d = c2.date_input("End", value=date.today())
+start_d = c1.date_input("Start", value=st.session_state.start_date_val)
+st.session_state.start_date_val = start_d
+end_d = c2.date_input("End", value=start_d)
 km_val = st.session_state.km if (st.session_state.km and st.session_state.km > 0) else None
 st.session_state.km = c3.number_input("One-Way KM", value=km_val, placeholder="KM...")
 weeks = math.ceil(((end_d - start_d).days) / 7) or 1
+
+# CONTROL TOWER EXECUTION CHECK: Real-time 2-week timeline threshold pipeline scanner
+if st.session_state.status == "Quoted":
+    days_to_start = (start_d - date.today()).days
+    if days_to_start <= 14:
+        st.warning(f"⚠️ **CONTROL TOWER ALERT:** This project is still marked as **'Quoted'** but is scheduled to start in **{days_to_start} days** (less than 2 weeks)! Check validation or confirmation status immediately.")
+
 st.info(f"**Hire Duration:** {weeks} Week(s)")
 
 # Multi-Segment Toggle Rules
@@ -431,6 +445,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
                     "proj": target_label,
                     "status": st.session_state.status,
                     "km": st.session_state.km,
+                    "start_date": st.session_state.start_date_val.strftime("%Y-%m-%d"),
                     "items": st.session_state.df.to_dict(orient="records")
                 }
                 
@@ -450,7 +465,6 @@ if st.session_state.df is not None and not st.session_state.df.empty:
             if item.get('Lab_Math'):
                 item['Lab_Math'] = ""
                 
-    # UPGRADE v49.3: Removed the bracketed text flag parameter note string completely
     l_maths = []
     if waiver_mode == "Free":
         l_maths.append("Damage Waiver: Free")
