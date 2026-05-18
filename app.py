@@ -61,7 +61,7 @@ def get_gs_per_seat_labour(seats):
     return 0, ""
 
 # ==============================================================================
-# 3. PDF AUDIT ENGINE (RESTORED ORIGINAL FLAT TEXT BREAKDOWNS)
+# 3. PDF AUDIT ENGINE (STRUCTURAL TABLE TIERS)
 # ==============================================================================
 def clean_text(txt):
     if not txt: return ""
@@ -82,7 +82,7 @@ def create_calculation_pdf(name, subtotal, labour, waiver, cartage, grand, weeks
     pdf.cell(0, 7, f"PERIOD: {start.strftime('%d/%m/%Y')} to {end.strftime('%d/%m/%Y')} ({weeks} Week(s))", ln=True, align="C")
     pdf.ln(8)
 
-    # Section 1: Structured Hire Grid Schedule (Approved Layout)
+    # Section 1: Structured Hire Grid Schedule
     pdf.set_fill_color(26, 29, 45); pdf.set_text_color(255, 255, 255); pdf.set_font("Arial", "B", 11)
     pdf.cell(0, 10, " 1. HIRE CALCULATIONS SCHEDULE", 0, 1, "L", True)
     
@@ -121,14 +121,11 @@ def create_calculation_pdf(name, subtotal, labour, waiver, cartage, grand, weeks
             pdf.cell(col_w[3], 8, f"{item.get('Discount', 0.0):.1f}%", 1, 0, "C")
             pdf.cell(col_w[4], 8, f"${r_total:,.2f}", 1, 1, "R")
 
-    # --------------------------------------------------------------------------
-    # RESTORED SECTION 2: 100% Original Simple Continuous String Layout
-    # --------------------------------------------------------------------------
+    # Section 2: Logistics Flat Text Breakdown Layout
     pdf.ln(5); pdf.set_fill_color(26, 29, 45); pdf.set_text_color(255, 255, 255); pdf.set_font("Arial", "B", 11)
     pdf.cell(0, 10, " 2. LABOUR & LOGISTICS PROOFS", 0, 1, "L", True)
     pdf.set_text_color(0, 0, 0); pdf.set_font("Arial", "", 10)
     
-    # Outputs the continuous formula sentences cleanly down the page exactly as before
     for item in items_list:
         if item.get('Lab_Math') and item['Lab_Math'].strip() != "": 
             pdf.cell(0, 8, clean_text(f" {item['Lab_Math']}"), border="B", ln=True)
@@ -453,7 +450,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
             if item.get('Lab_Math'):
                 item['Lab_Math'] = ""
                 
-    # Restored direct, descriptive raw text list calculations strings 
+    # UPGRADE v49.3: Removed the bracketed text flag parameter note string completely
     l_maths = []
     if waiver_mode == "Free":
         l_maths.append("Damage Waiver: Free")
@@ -463,10 +460,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     if cartage_mode == "Free":
         l_maths.append("Cartage: Free")
     else:
-        if has_itrac:
-            l_maths.append(f"Cartage: {trks} Trucks x {safe_km}km x 4 x $3.50 = ${crt:,.2f} (Strict I-Trac 288SQM Volumetric Space Parameter)")
-        else:
-            l_maths.append(f"Cartage: {trks} Trucks x {safe_km}km x 4 x $3.50 = ${crt:,.2f}")
+        l_maths.append(f"Cartage: {trks} Trucks x {safe_km}km x 4 x $3.50 = ${crt:,.2f}")
         
     if labour_mode == "Free":
         l_maths.append("Labour: Free")
