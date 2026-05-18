@@ -186,7 +186,6 @@ def load_project_from_vault(label_name):
             st.session_state.status = d.get("status", "Quoted")
             st.session_state.proj = str(d.get("proj", label_name)).strip()
             
-            # CRITICAL FIX: Lock the permanent filename state directly here
             st.session_state.active_filename = str(d.get("proj", label_name)).strip()
             
             st.session_state.km = float(d.get("km", 0.0))
@@ -281,8 +280,6 @@ if st.sidebar.button("➕ START NEW", use_container_width=True):
     st.rerun()
 
 st.sidebar.markdown("---")
-
-# Text box is purely an on-screen display tool now—no longer shapes the save target directly
 ui_proj_name = st.sidebar.text_input("Project Label", value=st.session_state.proj, key=f"pname_box_{st.session_state.reset_key_seed}")
 st.session_state.proj = ui_proj_name.strip()
 
@@ -509,7 +506,6 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     if action_col_1.button("💾 SAVE PROJECT TO CLOUD", use_container_width=True):
         if st.session_state.df is not None and not st.session_state.df.empty:
             try:
-                # UNBREAKABLE BOUNDARY v50.3: Targets the locked memory identifier if open, bypassing input cache completely
                 if st.session_state.active_filename and st.session_state.active_filename.strip() != "":
                     target_label = st.session_state.active_filename.strip()
                 else:
@@ -529,7 +525,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
                     
                 st.session_state.active_filename = target_label
                 st.session_state.proj = target_label
-                st.success(f"🎉 Target overwrite check passed. Successfully updated project: '{target_label}' inside cloud storage!")
+                st.success(f"🎉 Successfully saved and updated target: '{target_label}' inside cloud storage!")
                 st.rerun()
             except Exception as e:
                 st.error(f"Internal file sync error: {str(e)}")
@@ -558,4 +554,8 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     elif labour_mode == "Include in Hire":
         l_maths.append("Labour: Included in Hire Rate")
     else:
-        l_maths.append(f"Labour: Minimum base fee threshold check passed -> ${lab:,.2f
+        # SYNTAX ERROR PERMANENTLY FIXED HERE (LINE 561)
+        l_maths.append(f"Labour: Minimum base fee threshold check passed -> ${lab:,.2f}")
+
+    pdf_b = create_calculation_pdf(st.session_state.proj, h_tot_c, lab, wav, crt, h_tot_c+lab+wav+crt, weeks, start_d, end_d, cleaned_pdf_items, l_maths, st.session_state.status)
+    action_col_2.download_button("📥 DOWNLOAD DETAILED AUDIT PDF", pdf_b, file_name=f"{st.session_state.proj}_Analysis.pdf", use_container_width=True)
