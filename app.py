@@ -385,13 +385,28 @@ if st.session_state.df is not None and not st.session_state.df.empty:
         else:
             st.error("Cannot sync data tables because workspace is empty.")
             
-    # VISUAL LABEL FILTER SWITCH: Overrides formatting descriptors inside the text proof loop based on active tab variables
+    # VISUAL LABEL FILTERS (v48.3): Overwrites math equations completely with "Free" layout strings
     cleaned_pdf_items = st.session_state.df.to_dict('records')
     if labour_mode in ["Free", "Include in Hire"]:
         for item in cleaned_pdf_items:
             if item.get('Lab_Math'):
-                item['Lab_Math'] += f" -> [WAIVED / EFFECTIVE RATE REDUCED TO $0.00 VIA LABOUR TOGGLE]"
+                item['Lab_Math'] = f"{item['Product'].split(':')[0]} Labour: Free"
                 
-    l_maths = [f"Damage Waiver: ${h_wk1_gear:,.2f} x 0.07 = ${wav:,.2f}", f"Cartage: {trks} Trucks x {safe_km}km x 4 x $3.50 = ${crt:,.2f}"]
+    l_maths = []
+    if waiver_mode == "Free":
+        l_maths.append("Damage Waiver: Free")
+    else:
+        l_maths.append(f"Damage Waiver: ${h_wk1_gear:,.2f} x 0.07 = ${wav:,.2f}")
+        
+    if cartage_mode == "Free":
+        l_maths.append("Cartage: Free")
+    else:
+        l_maths.append(f"Cartage: {trks} Trucks x {safe_km}km x 4 x $3.50 = ${crt:,.2f}")
+        
+    if labour_mode == "Free":
+        l_maths.append("Labour: Free")
+    elif labour_mode == "Include in Hire":
+        l_maths.append("Labour: Included in Hire Rate")
+
     pdf_b = create_calculation_pdf(st.session_state.proj, h_tot_c, lab, wav, crt, h_tot_c+lab+wav+crt, weeks, start_d, end_d, cleaned_pdf_items, l_maths, st.session_state.status)
     action_col_2.download_button("📥 DOWNLOAD DETAILED AUDIT PDF", pdf_b, file_name=f"{st.session_state.proj}_Analysis.pdf", use_container_width=True)
