@@ -101,13 +101,11 @@ def create_calculation_pdf(name, subtotal, labour, waiver, cartage, grand, weeks
         dm = (1 - (item.get('Discount', 0.0)/100))
         override_val = item.get('Override_Rate', 0.0)
         
-        # Determine active billing baseline rate
         display_unit_rate = override_val if override_val > 0 else item['Unit Rate']
         w1_total = (item['Qty'] * display_unit_rate) * dm
         
         prod_label = item['Product']
         if override_val > 0:
-            # Mark clearly on internal PDF that standard rate was bypassed
             prod_label += f" [Book Price: ${item['Unit Rate']:,.2f}]"
         if 'Anchoring' in item and item['Anchoring']:
             prod_label += f" ({item['Anchoring']})"
@@ -205,6 +203,9 @@ def load_project_from_vault(label_name):
                     item["Discount"] = 0.0
                     
             st.session_state.df = pd.DataFrame(items_list)
+            
+            # CORE FIX v50.0: Shifts the on-screen form seed IDs so loaded variable strings mirror onto layouts immediately
+            st.session_state.reset_key_seed += 1
             st.rerun()
     except Exception as e:
         st.error(f"Vault Read Clearance Bypass Failed: {str(e)}")
@@ -261,7 +262,7 @@ if global_warnings:
         st.markdown(f"<div style='padding-left:15px; font-weight:700; color:#B71C1C; font-family:sans-serif; margin-bottom:4px;'>{warn}</div>", unsafe_allow_html=True)
     st.markdown("<div style='font-size: 13px; color: #555; margin-top: 15px; font-style:italic;'>Action Required: Re-validate booking confirmations or adjust the project stage fields in the selector workspace below to clear these flags.</div><hr style='border:1px solid #FFCDD2;'>", unsafe_allow_html=True)
 
-# SIDEBAR NAVIGATION PANEL
+# SIDEBAR PANEL
 st.sidebar.title("📁 PROJECT ARCHIVE")
 st.sidebar.markdown("---")
 
@@ -276,6 +277,7 @@ if st.sidebar.button("➕ START NEW", use_container_width=True):
     st.rerun()
 
 st.sidebar.markdown("---")
+# CORE INTEGRATION: Text field value tracking bound to seed mutations so it updates flawlessly on loads
 st.session_state.proj = st.sidebar.text_input("Project Label", st.session_state.proj, key=f"pname_box_{st.session_state.reset_key_seed}")
 
 if vault_jobs:
@@ -409,8 +411,6 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     
     for idx, row in st.session_state.df.iterrows():
         override = row.get("Override_Rate", 0.0)
-        
-        # UPGRADE v49.9: Pinned Comparison Architecture - active pricing follows override priority
         active_base = override if override > 0 else row["Unit Rate"]
         active_hire_base = override if override > 0 else row["Base_Hire"]
         
@@ -437,8 +437,6 @@ if st.session_state.df is not None and not st.session_state.df.empty:
             
         c1.markdown(f"<div class='item-text'>{prod_display} - Wk 1</div>", unsafe_allow_html=True)
         c2.write(f"{qty:,.0f}")
-        
-        # Gross Unit is now permanently pinned to the standard book rate for clear comparison
         c3.write(f"${row['Unit Rate']:,.2f}")
         
         new_disc = c4.number_input("Disc %", 0.0, 100.0, float(row["Discount"]), 1.0, key=f"sd_{idx}", label_visibility="collapsed")
@@ -460,12 +458,11 @@ if st.session_state.df is not None and not st.session_state.df.empty:
             cb = st.columns([0.4, 3.2, 0.8, 1.2, 1.2, 1.2, 1.4])
             cb[1].markdown(f"<div style='color:grey; font-style:italic; font-size:18px;'>└ Recurring (x{weeks-1} wks)</div>", unsafe_allow_html=True)
             cb[2].write(f"{qty:,.0f}")
-            # Pinned Recurring Standard Base Rate for historical trace continuity
             standard_r_rate = (row["Base_Hire"] * 0.5 if row["Is_Marquee"] else row["Base_Hire"])
             cb[3].write(f"${standard_r_rate:,.2f}")
             cb[6].markdown(f"<div style='text-align: right; color: grey; font-style: italic;'>${r_tot:,.2f}</div>", unsafe_allow_html=True)
 
-    # Aligned High-Appeal Form Control
+    # Logistics calculations
     st.divider()
     col_left, col_right = st.columns(2)
     with col_left:
@@ -479,13 +476,11 @@ if st.session_state.df is not None and not st.session_state.df.empty:
         trks = st.number_input("Manually Set Truck Count", min_value=min_trucks, value=int(val_trucks), key=f"trk_field_{st.session_state.reset_key_seed}")
         st.session_state.truck_override = trks
 
-    # Run Equations
     safe_km = st.session_state.km if st.session_state.km else 0
     wav = h_wk1_gear * 0.07 if waiver_mode == "Charge" else 0
     crt = trks * safe_km * 4 * 3.50 if cartage_mode == "Charge" else 0
     lab = max(st.session_state.df["Raw_Lab"].sum(), 350) if labour_mode == "Separate" else 0
     
-    # Render Output Metrics
     m = st.columns(6)
     m[0].metric("HIRE COST", f"${round(h_tot_c, 2):,}")
     m[1].metric("LABOUR", f"${round(lab, 2):,}")
@@ -494,19 +489,19 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     m[4].metric("WEIGHT", f"{round(total_kg, 0):,}kg")
     m[5].metric("TRUCKS", f"{trks}")
     
-    # Grand Output Elements
     st.markdown(f"<div class='gt-banner'>GRAND TOTAL (EX GST): ${h_tot_c + lab + wav + crt:,.2f}</div>", unsafe_allow_html=True)
     
-    # ==============================================================================
-    # 9. INTEGRATED MAIN VOLUME SAVE & PDF DOWNLOAD GRID
-    # ==============================================================================
+    # ------------------------------------------------------------------------------
+    # SAVE & DOWNLOAD INTERACTION ZONE
+    # ------------------------------------------------------------------------------
     st.markdown("")  
     action_col_1, action_col_2 = st.columns(2)
     
     if action_col_1.button("💾 SAVE PROJECT TO CLOUD", use_container_width=True):
         if st.session_state.df is not None and not st.session_state.df.empty:
             try:
-                target_label = st.session_state.proj if st.session_state.proj != "New Project" else f"Draft_{datetime.now().strftime('%Y%m%d_%H%M')}"
+                # CORE FIX: Dynamically captures whatever string is currently inside the Label entry box
+                target_label = st.session_state.proj.strip() if st.session_state.proj else f"Draft_{datetime.now().strftime('%Y%m%d_%H%M')}"
                 
                 payload = {
                     "proj": target_label,
@@ -520,7 +515,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
                 with open(f"{VAULT_DIR}/{target_label}.json", "w") as f:
                     json.dump(payload, f)
                     
-                st.success(f"🎉 Successfully locked and saved: '{target_label}' to the cloud archive!")
+                st.success(f"🎉 Successfully saved and updated target: '{target_label}' inside cloud storage!")
                 st.rerun()
             except Exception as e:
                 st.error(f"Internal file sync error: {str(e)}")
