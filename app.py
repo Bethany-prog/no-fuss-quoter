@@ -164,6 +164,7 @@ if 'proj' not in st.session_state: st.session_state.proj = "New Project"
 if 'km' not in st.session_state: st.session_state.km = 0.0
 if 'truck_override' not in st.session_state: st.session_state.truck_override = 0
 if 'start_date_val' not in st.session_state: st.session_state.start_date_val = date.today()
+if 'reset_key_seed' not in st.session_state: st.session_state.reset_key_seed = 0
 
 def pull_vault_archive_list():
     try:
@@ -212,11 +213,10 @@ st.markdown("""<style>
 # ==============================================================================
 st.title("⚡ Louis Master Quoter")
 
-# Initialize and pull archive arrays
 vault_jobs = pull_vault_archive_list()
 
 # ------------------------------------------------------------------------------
-# THE CONTROL TOWER DEED MATRIX: Priority processing block locked at the top
+# ULTIMATE BULLETPROOF GLOBAL SCANNER (FIXED BULLETIN CARD AT TOP)
 # ------------------------------------------------------------------------------
 global_warnings = []
 if vault_jobs:
@@ -224,31 +224,32 @@ if vault_jobs:
         try:
             with open(f"{VAULT_DIR}/{job}.json", "r") as f:
                 job_data = json.load(f)
-                if job_data.get("status") == "Quoted" and "start_date" in job_data:
-                    j_start = datetime.strptime(job_data["start_date"], "%Y-%m-%d").date()
-                    days_remaining = (j_start - date.today()).days
-                    if days_remaining <= 14:
-                        global_warnings.append(f"• **'{job_data.get('proj', job)}'** starts in **{days_remaining} days** (Scheduled Setup: {j_start.strftime('%d/%m/%Y')})")
+                # Loose scan: catch anything that isn't confirmed or finalized yet
+                if job_data.get("status") in ["Quoted", None, ""]:
+                    if "start_date" in job_data:
+                        j_start = datetime.strptime(job_data["start_date"], "%Y-%m-%d").date()
+                        days_remaining = (j_start - date.today()).days
+                        if days_remaining <= 14:
+                            global_warnings.append(f"• **'{job_data.get('proj', job)}'** starts in **{days_remaining} days** (Setup Date: {j_start.strftime('%d/%m/%Y')})")
         except:
             pass
 
 if global_warnings:
-    with st.container():
-        st.markdown(
-            """
-            <div style="background-color: #FFEBEE; border-left: 8px solid #D50000; padding: 20px; border-radius: 8px; margin-bottom: 25px;">
-                <h4 style="color: #D50000; margin-top:0; font-weight:800;">🚨 CONTROL TOWER: TIME-SENSITIVE PIPELINE ALERT</h4>
-                <p style="color: #1A1D2D; font-size:15px; font-weight:600; margin-bottom:10px;">The following stored projects are still marked as 'Quoted' but are starting inside your critical 2-week deadline window:</p>
-            </div>
-            """, 
-            unsafe_allow_html=True
-        )
-        for warn in global_warnings:
-            st.markdown(f"<div style='padding-left:15px; font-weight:700; color:#B71C1C;'>{warn}</div>", unsafe_allow_html=True)
-        st.markdown("<div style='font-size: 13px; color: #555; margin-top: 15px; font-style:italic;'>Action Required: Re-validate booking confirmations or adjust the project stage fields in the selector workspace below to clear these flags.</div><hr style='border:1px solid #FFCDD2;'>", unsafe_allow_html=True)
+    st.markdown(
+        """
+        <div style="background-color: #FFEBEE; border-left: 8px solid #D50000; padding: 20px; border-radius: 8px; margin-bottom: 25px;">
+            <h4 style="color: #D50000; margin-top:0; font-weight:800; font-family:sans-serif;">🚨 CONTROL TOWER: TIME-SENSITIVE PIPELINE ALERT</h4>
+            <p style="color: #1A1D2D; font-size:15px; font-weight:600; margin-bottom:10px;">The following stored projects are still marked as 'Quoted' but are starting inside your critical 2-week deadline window:</p>
+        </div>
+        """, 
+        unsafe_allow_html=True
+    )
+    for warn in global_warnings:
+        st.markdown(f"<div style='padding-left:15px; font-weight:700; color:#B71C1C; font-family:sans-serif; margin-bottom:4px;'>{warn}</div>", unsafe_allow_html=True)
+    st.markdown("<div style='font-size: 13px; color: #555; margin-top: 15px; font-style:italic;'>Action Required: Re-validate booking confirmations or adjust the project stage fields in the selector workspace below to clear these flags.</div><hr style='border:1px solid #FFCDD2;'>", unsafe_allow_html=True)
 
 # ------------------------------------------------------------------------------
-# SIDEBAR NAVIGATION & MANAGEMENT DECK
+# SIDEBAR ACTIONS (HARD RESET MECHANISM ADDED)
 # ------------------------------------------------------------------------------
 st.sidebar.title("📁 PROJECT ARCHIVE")
 st.sidebar.markdown("---")
@@ -257,11 +258,16 @@ if st.sidebar.button("➕ START NEW", use_container_width=True):
     st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Total", "Min_Lab", "Raw_Lab", "KG", "Is_Marquee", "Discount", "Lab_Math", "Lab_Per_Unit", "Base_Hire", "Anchoring", "Override_Rate"])
     st.session_state.km = 0.0
     st.session_state.proj = "New Project"
+    st.session_state.status = "Quoted"
     st.session_state.start_date_val = date.today()
+    st.session_state.truck_override = 0
+    # HARD RESET: Changing the seed value forces all form fields to break their cached state instantly
+    st.session_state.reset_key_seed += 1
     st.rerun()
 
 st.sidebar.markdown("---")
-st.session_state.proj = st.sidebar.text_input("Project Label", st.session_state.proj)
+# Linked key ensures name box clears instantly on reset
+st.session_state.proj = st.sidebar.text_input("Project Label", st.session_state.proj, key=f"pname_box_{st.session_state.reset_key_seed}")
 
 if vault_jobs:
     load_choice = st.sidebar.selectbox("Cloud Retrieval Menus", ["-- Choose Project --"] + vault_jobs)
@@ -278,39 +284,43 @@ if vault_jobs:
                 st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Total", "Min_Lab", "Raw_Lab", "KG", "Is_Marquee", "Discount", "Lab_Math", "Lab_Per_Unit", "Base_Hire", "Anchoring", "Override_Rate"])
                 st.session_state.km = 0.0
                 st.session_state.proj = "New Project"
+                st.session_state.status = "Quoted"
                 st.session_state.start_date_val = date.today()
+                st.session_state.truck_override = 0
+                st.session_state.reset_key_seed += 1
                 st.rerun()
 else:
     st.sidebar.info("No Projects Saved In Cloud Yet")
 
 # ------------------------------------------------------------------------------
-# ACTIVE CONFIGURATION FIELD DECKS
+# CORE DATA INPUTS (SEED ATTACHED TO GUARANTEE BLANK SLATES ON NEW CLICK)
 # ------------------------------------------------------------------------------
 st.markdown(f"### 📍 Active Workspace: {st.session_state.proj}")
-st.session_state.status = st.selectbox("Stage", STAGES, index=STAGES.index(st.session_state.status) if st.session_state.status in STAGES else 0)
+st.session_state.status = st.selectbox("Stage", STAGES, index=STAGES.index(st.session_state.status) if st.session_state.status in STAGES else 0, key=f"stage_select_{st.session_state.reset_key_seed}")
 st.markdown(f"<div style='height: 14px; background-color: {STAGE_COLORS[st.session_state.status]}; border-radius: 6px; margin-bottom: 20px;'></div>", unsafe_allow_html=True)
 
 c1, c2, c3 = st.columns(3)
-start_d = c1.date_input("Start Date", value=st.session_state.start_date_val)
+start_d = c1.date_input("Start Date", value=st.session_state.start_date_val, key=f"sd_pick_{st.session_state.reset_key_seed}")
 st.session_state.start_date_val = start_d
-end_d = c2.date_input("End Date", value=start_d)
+end_d = c2.date_input("End Date", value=start_d, key=f"ed_pick_{st.session_state.reset_key_seed}")
 km_val = st.session_state.km if (st.session_state.km and st.session_state.km > 0) else None
-st.session_state.km = c3.number_input("One-Way KM", value=km_val, placeholder="KM...")
+st.session_state.km = c3.number_input("One-Way KM", value=km_val, placeholder="KM...", key=f"km_num_{st.session_state.reset_key_seed}")
 weeks = math.ceil(((end_d - start_d).days) / 7) or 1
 
 st.info(f"**Calculated Hire Duration:** {weeks} Week(s)")
 
 # Multi-Segment Toggle Rules
 l1, l2, l3 = st.columns(3)
-cartage_mode = l1.segmented_control("Cartage Math", ["Charge", "Free"], default="Charge")
-labour_mode = l2.segmented_control("Labour Math", ["Separate", "Include in Hire", "Free"], default="Separate")
-waiver_mode = l3.segmented_control("Damage Waiver", ["Charge", "Free"], default="Charge")
+cartage_mode = l1.segmented_control("Cartage Math", ["Charge", "Free"], default="Charge", key=f"cart_toggle_{st.session_state.reset_key_seed}")
+labour_mode = l2.segmented_control("Labour Math", ["Separate", "Include in Hire", "Free"], default="Separate", key=f"lab_toggle_{st.session_state.reset_key_seed}")
+waiver_mode = l3.segmented_control("Damage Waiver", ["Charge", "Free"], default="Charge", key=f"waiv_toggle_{st.session_state.reset_key_seed}")
 
 st.divider(); col1, col2 = st.columns(2)
 with col1:
     st.markdown("### ⚡ Structures")
-    m_in, m_q = st.text_input("Size (e.g. 10x15)"), st.number_input("Qty", min_value=1, value=None, key="mq_in")
-    anchoring_type = st.segmented_control("Anchoring Method", ["Pegged", "Weighted"], default="Pegged")
+    m_in = st.text_input("Size (e.g. 10x15)", key=f"str_sz_{st.session_state.reset_key_seed}")
+    m_q = st.number_input("Qty", min_value=1, value=None, key=f"str_qty_{st.session_state.reset_key_seed}")
+    anchoring_type = st.segmented_control("Anchoring Method", ["Pegged", "Weighted"], default="Pegged", key=f"anch_tog_{st.session_state.reset_key_seed}")
     
     if st.button("Add Structure") and m_in and m_q:
         nums = re.findall(r'\d+', m_in)
@@ -351,9 +361,9 @@ with col1:
 
 with col2:
     st.markdown("### 🪵 Catalog Items")
-    cat_sel = st.selectbox("Category", list(CATALOG.keys()))
-    p_sel = st.selectbox("Product", list(CATALOG[cat_sel].keys()))
-    f_qty = st.number_input("Quantity / Count", min_value=0.0, value=None, key="p_qty")
+    cat_sel = st.selectbox("Category", list(CATALOG.keys()), key=f"cat_pick_{st.session_state.reset_key_seed}")
+    p_sel = st.selectbox("Product", list(CATALOG[cat_sel].keys()), key=f"prod_pick_{st.session_state.reset_key_seed}")
+    f_qty = st.number_input("Quantity / Count", min_value=0.0, value=None, key=f"p_qty_{st.session_state.reset_key_seed}")
     if st.button("Add Item") and f_qty:
         data = CATALOG[cat_sel][p_sel]
         base_h = (data['block']/4) if (weeks >= 4 and 'block' in data) else data['rate']
@@ -446,13 +456,15 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     st.divider()
     col_left, col_right = st.columns(2)
     with col_left:
-        st.markdown("### ### 🚛 Logistics Override")
+        st.markdown("### 🚛 Logistics Override")
         if has_itrac:
             min_trucks = math.ceil(itrac_sqm / 288) or 1
         else:
             min_trucks = math.ceil(total_kg / 6000) or 1
         
-        trks = st.number_input("Manually Set Truck Count", min_value=min_trucks, value=max(min_trucks, st.session_state.truck_override))
+        # Override field linked safely to seed parameters
+        val_trucks = max(min_trucks, st.session_state.truck_override) if st.session_state.truck_override > 0 else min_trucks
+        trks = st.number_input("Manually Set Truck Count", min_value=min_trucks, value=int(val_trucks), key=f"trk_field_{st.session_state.reset_key_seed}")
         st.session_state.truck_override = trks
 
     # Run Equations
