@@ -61,7 +61,7 @@ def get_gs_per_seat_labour(seats):
     return 0, ""
 
 # ==============================================================================
-# 3. PDF AUDIT ENGINE (STRUCTURAL TABLE TIERS WITH COMPARISON RATES)
+# 3. PDF AUDIT ENGINE (STRUCTURAL TABLE TIERS)
 # ==============================================================================
 def clean_text(txt):
     if not txt: return ""
@@ -82,7 +82,7 @@ def create_calculation_pdf(name, subtotal, labour, waiver, cartage, grand, weeks
     pdf.cell(0, 7, f"PERIOD: {start.strftime('%d/%m/%Y')} to {end.strftime('%d/%m/%Y')} ({weeks} Week(s))", ln=True, align="C")
     pdf.ln(8)
 
-    # Section 1: Structured Hire Grid Schedule
+    # Section 1 Schedule
     pdf.set_fill_color(26, 29, 45); pdf.set_text_color(255, 255, 255); pdf.set_font("Arial", "B", 11)
     pdf.cell(0, 10, " 1. HIRE CALCULATIONS SCHEDULE", 0, 1, "L", True)
     
@@ -99,13 +99,10 @@ def create_calculation_pdf(name, subtotal, labour, waiver, cartage, grand, weeks
     
     for item in items_list:
         dm = (1 - (item.get('Discount', 0.0)/100))
-        override_val = item.get('Override_Rate', 0.0)
-        
-        display_unit_rate = override_val if override_val > 0 else item['Unit Rate']
+        display_unit_rate = item.get('Override_Rate', 0.0) if item.get('Override_Rate', 0.0) > 0 else item['Unit Rate']
         w1_total = (item['Qty'] * display_unit_rate) * dm
-        
         prod_label = item['Product']
-        if override_val > 0:
+        if item.get('Override_Rate', 0.0) > 0:
             prod_label += f" [Book Price: ${item['Unit Rate']:,.2f}]"
         if 'Anchoring' in item and item['Anchoring']:
             prod_label += f" ({item['Anchoring']})"
@@ -126,7 +123,7 @@ def create_calculation_pdf(name, subtotal, labour, waiver, cartage, grand, weeks
             pdf.cell(col_w[3], 8, f"{item.get('Discount', 0.0):.1f}%", 1, 0, "C")
             pdf.cell(col_w[4], 8, f"${r_total:,.2f}", 1, 1, "R")
 
-    # Section 2: Logistics Flat Text Breakdown Layout
+    # Section 2 Layout
     pdf.ln(5); pdf.set_fill_color(26, 29, 45); pdf.set_text_color(255, 255, 255); pdf.set_font("Arial", "B", 11)
     pdf.cell(0, 10, " 2. LABOUR & LOGISTICS PROOFS", 0, 1, "L", True)
     pdf.set_text_color(0, 0, 0); pdf.set_font("Arial", "", 10)
@@ -171,6 +168,7 @@ if 'truck_override' not in st.session_state: st.session_state.truck_override = 0
 if 'start_date_val' not in st.session_state: st.session_state.start_date_val = date.today()
 if 'reset_key_seed' not in st.session_state: st.session_state.reset_key_seed = 0
 if 'active_filename' not in st.session_state: st.session_state.active_filename = ""
+if 'rename_mode' not in st.session_state: st.session_state.rename_mode = False
 
 def pull_vault_archive_list():
     try:
@@ -185,9 +183,8 @@ def load_project_from_vault(label_name):
             d = json.load(f)
             st.session_state.status = d.get("status", "Quoted")
             st.session_state.proj = str(d.get("proj", label_name)).strip()
-            
             st.session_state.active_filename = str(d.get("proj", label_name)).strip()
-            
+            st.session_state.rename_mode = False
             st.session_state.km = float(d.get("km", 0.0))
             st.session_state.truck_override = int(d.get("truck_override", 0))
             
@@ -210,7 +207,7 @@ def load_project_from_vault(label_name):
             st.session_state.reset_key_seed += 1
             st.rerun()
     except Exception as e:
-        st.error(f"Vault Read Clearance Bypass Failed: {str(e)}")
+        st.error(f"Vault Load Bypass Error: {str(e)}")
 
 # ==============================================================================
 # 6. VISUAL CSS LOOK & FEEL (FRONT-OF-HOUSE)
@@ -273,6 +270,7 @@ if st.sidebar.button("➕ START NEW", use_container_width=True):
     st.session_state.km = 0.0
     st.session_state.proj = "New Project"
     st.session_state.active_filename = ""
+    st.session_state.rename_mode = False
     st.session_state.status = "Quoted"
     st.session_state.start_date_val = date.today()
     st.session_state.truck_override = 0
@@ -280,15 +278,24 @@ if st.sidebar.button("➕ START NEW", use_container_width=True):
     st.rerun()
 
 st.sidebar.markdown("---")
-ui_proj_name = st.sidebar.text_input("Project Label", value=st.session_state.proj, key=f"pname_box_{st.session_state.reset_key_seed}")
-st.session_state.proj = ui_proj_name.strip()
+
+# HARD CRITICAL FIX v50.5: Hides text-input widget entirely if file tracking lock state is currently active
+if st.session_state.active_filename and not st.session_state.rename_mode:
+    st.sidebar.markdown(f"**📌 File Target:** `{st.session_state.active_filename}`")
+    if st.sidebar.button("✏️ Rename / Duplicate Project", use_container_width=True):
+        st.session_state.rename_mode = True
+        st.rerun()
+else:
+    ui_proj_name = st.sidebar.text_input("Project Label", value=st.session_state.proj, key=f"pname_box_{st.session_state.reset_key_seed}")
+    st.session_state.proj = ui_proj_name.strip()
+    if st.session_state.active_filename and st.session_state.rename_mode:
+        if st.sidebar.button("🔒 Keep Current Name", use_container_width=True):
+            st.session_state.rename_mode = False
+            st.session_state.proj = st.session_state.active_filename
+            st.rerun()
 
 if vault_jobs:
-    sel_index = 0
-    if st.session_state.active_filename in vault_jobs:
-        sel_index = vault_jobs.index(st.session_state.active_filename) + 1
-        
-    load_choice = st.sidebar.selectbox("Cloud Retrieval Menus", ["-- Choose Project --"] + vault_jobs, index=sel_index)
+    load_choice = st.sidebar.selectbox("Cloud Retrieval Menus", ["-- Choose Project --"] + vault_jobs)
     if st.sidebar.button("📂 LOAD PROJECT") and load_choice != "-- Choose Project --":
         load_project_from_vault(load_choice)
         
@@ -303,6 +310,7 @@ if vault_jobs:
                 st.session_state.km = 0.0
                 st.session_state.proj = "New Project"
                 st.session_state.active_filename = ""
+                st.session_state.rename_mode = False
                 st.session_state.status = "Quoted"
                 st.session_state.start_date_val = date.today()
                 st.session_state.truck_override = 0
@@ -506,6 +514,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     if action_col_1.button("💾 SAVE PROJECT TO CLOUD", use_container_width=True):
         if st.session_state.df is not None and not st.session_state.df.empty:
             try:
+                # UNBREAKABLE ANCHOR: Uses the locked structural tracker or falls back to the text entry string safely
                 if st.session_state.active_filename and st.session_state.active_filename.strip() != "":
                     target_label = st.session_state.active_filename.strip()
                 else:
@@ -525,7 +534,8 @@ if st.session_state.df is not None and not st.session_state.df.empty:
                     
                 st.session_state.active_filename = target_label
                 st.session_state.proj = target_label
-                st.success(f"🎉 Successfully saved and updated target: '{target_label}' inside cloud storage!")
+                st.session_state.rename_mode = False
+                st.success(f"🎉 Core Update Locked. Successfully overwrote and updated file: '{target_label}' inside cloud vault storage!")
                 st.rerun()
             except Exception as e:
                 st.error(f"Internal file sync error: {str(e)}")
@@ -554,7 +564,6 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     elif labour_mode == "Include in Hire":
         l_maths.append("Labour: Included in Hire Rate")
     else:
-        # SYNTAX ERROR PERMANENTLY FIXED HERE (LINE 561)
         l_maths.append(f"Labour: Minimum base fee threshold check passed -> ${lab:,.2f}")
 
     pdf_b = create_calculation_pdf(st.session_state.proj, h_tot_c, lab, wav, crt, h_tot_c+lab+wav+crt, weeks, start_d, end_d, cleaned_pdf_items, l_maths, st.session_state.status)
