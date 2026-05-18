@@ -61,7 +61,7 @@ def get_gs_per_seat_labour(seats):
     return 0, ""
 
 # ==============================================================================
-# 3. PDF AUDIT ENGINE (STRUCTURAL TABLE TIERS)
+# 3. PDF AUDIT ENGINE (STRUCTURAL TABLE TIERS WITH COMPARISON RATES)
 # ==============================================================================
 def clean_text(txt):
     if not txt: return ""
@@ -91,7 +91,7 @@ def create_calculation_pdf(name, subtotal, labour, waiver, cartage, grand, weeks
     
     pdf.cell(col_w[0], 8, " Item Description", 1, 0, "L", True)
     pdf.cell(col_w[1], 8, "Qty", 1, 0, "C", True)
-    pdf.cell(col_w[2], 8, "Unit Rate", 1, 0, "R", True)
+    pdf.cell(col_w[2], 8, "Unit Rate Used", 1, 0, "R", True)
     pdf.cell(col_w[3], 8, "Disc %", 1, 0, "C", True)
     pdf.cell(col_w[4], 8, "Weekly Total", 1, 1, "R", True)
     
@@ -99,9 +99,16 @@ def create_calculation_pdf(name, subtotal, labour, waiver, cartage, grand, weeks
     
     for item in items_list:
         dm = (1 - (item.get('Discount', 0.0)/100))
-        display_unit_rate = item.get('Override_Rate', 0.0) if item.get('Override_Rate', 0.0) > 0 else item['Unit Rate']
+        override_val = item.get('Override_Rate', 0.0)
+        
+        # Determine active billing baseline rate
+        display_unit_rate = override_val if override_val > 0 else item['Unit Rate']
         w1_total = (item['Qty'] * display_unit_rate) * dm
+        
         prod_label = item['Product']
+        if override_val > 0:
+            # Mark clearly on internal PDF that standard rate was bypassed
+            prod_label += f" [Book Price: ${item['Unit Rate']:,.2f}]"
         if 'Anchoring' in item and item['Anchoring']:
             prod_label += f" ({item['Anchoring']})"
             
@@ -173,7 +180,6 @@ def pull_vault_archive_list():
     except:
         return []
 
-# UPGRADE v49.8: Bulletproof loading with fallback defaults to prevent crash exceptions
 def load_project_from_vault(label_name):
     try:
         with open(f"{VAULT_DIR}/{label_name}.json", "r") as f:
@@ -183,7 +189,6 @@ def load_project_from_vault(label_name):
             st.session_state.km = float(d.get("km", 0.0))
             st.session_state.truck_override = int(d.get("truck_override", 0))
             
-            # Safe historical date parsing
             if "start_date" in d and d["start_date"]:
                 try:
                     st.session_state.start_date_val = datetime.strptime(d["start_date"], "%Y-%m-%d").date()
@@ -225,16 +230,13 @@ st.title("⚡ Louis Master Quoter")
 
 vault_jobs = pull_vault_archive_list()
 
-# ------------------------------------------------------------------------------
 # THE CONTROL TOWER DEED MATRIX: Top Bulletin Dashboard Alert Scanner
-# ------------------------------------------------------------------------------
 global_warnings = []
 if vault_jobs:
     for job in vault_jobs:
         try:
             with open(f"{VAULT_DIR}/{job}.json", "r") as f:
                 job_data = json.load(f)
-                # Catch quotes with missing or legacy state fields
                 j_status = job_data.get("status", "Quoted")
                 if j_status in ["Quoted", None, "", "quoted"]:
                     if "start_date" in job_data and job_data["start_date"]:
@@ -259,9 +261,7 @@ if global_warnings:
         st.markdown(f"<div style='padding-left:15px; font-weight:700; color:#B71C1C; font-family:sans-serif; margin-bottom:4px;'>{warn}</div>", unsafe_allow_html=True)
     st.markdown("<div style='font-size: 13px; color: #555; margin-top: 15px; font-style:italic;'>Action Required: Re-validate booking confirmations or adjust the project stage fields in the selector workspace below to clear these flags.</div><hr style='border:1px solid #FFCDD2;'>", unsafe_allow_html=True)
 
-# ------------------------------------------------------------------------------
 # SIDEBAR NAVIGATION PANEL
-# ------------------------------------------------------------------------------
 st.sidebar.title("📁 PROJECT ARCHIVE")
 st.sidebar.markdown("---")
 
@@ -301,9 +301,7 @@ if vault_jobs:
 else:
     st.sidebar.info("No Projects Saved In Cloud Yet")
 
-# ------------------------------------------------------------------------------
 # CORE DATA INPUTS
-# ------------------------------------------------------------------------------
 st.markdown(f"### 📍 Active Workspace: {st.session_state.proj}")
 st.session_state.status = st.selectbox("Stage", STAGES, index=STAGES.index(st.session_state.status) if st.session_state.status in STAGES else 0, key=f"stage_select_{st.session_state.reset_key_seed}")
 st.markdown(f"<div style='height: 14px; background-color: {STAGE_COLORS[st.session_state.status]}; border-radius: 6px; margin-bottom: 20px;'></div>", unsafe_allow_html=True)
@@ -411,6 +409,8 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     
     for idx, row in st.session_state.df.iterrows():
         override = row.get("Override_Rate", 0.0)
+        
+        # UPGRADE v49.9: Pinned Comparison Architecture - active pricing follows override priority
         active_base = override if override > 0 else row["Unit Rate"]
         active_hire_base = override if override > 0 else row["Base_Hire"]
         
@@ -437,7 +437,9 @@ if st.session_state.df is not None and not st.session_state.df.empty:
             
         c1.markdown(f"<div class='item-text'>{prod_display} - Wk 1</div>", unsafe_allow_html=True)
         c2.write(f"{qty:,.0f}")
-        c3.write(f"${wk1_t/qty:,.2f}")
+        
+        # Gross Unit is now permanently pinned to the standard book rate for clear comparison
+        c3.write(f"${row['Unit Rate']:,.2f}")
         
         new_disc = c4.number_input("Disc %", 0.0, 100.0, float(row["Discount"]), 1.0, key=f"sd_{idx}", label_visibility="collapsed")
         if new_disc != row["Discount"]:
@@ -458,7 +460,9 @@ if st.session_state.df is not None and not st.session_state.df.empty:
             cb = st.columns([0.4, 3.2, 0.8, 1.2, 1.2, 1.2, 1.4])
             cb[1].markdown(f"<div style='color:grey; font-style:italic; font-size:18px;'>└ Recurring (x{weeks-1} wks)</div>", unsafe_allow_html=True)
             cb[2].write(f"{qty:,.0f}")
-            cb[3].write(f"${r_rate*dm:,.2f}")
+            # Pinned Recurring Standard Base Rate for historical trace continuity
+            standard_r_rate = (row["Base_Hire"] * 0.5 if row["Is_Marquee"] else row["Base_Hire"])
+            cb[3].write(f"${standard_r_rate:,.2f}")
             cb[6].markdown(f"<div style='text-align: right; color: grey; font-style: italic;'>${r_tot:,.2f}</div>", unsafe_allow_html=True)
 
     # Aligned High-Appeal Form Control
