@@ -170,6 +170,7 @@ if 'km' not in st.session_state: st.session_state.km = 0.0
 if 'truck_override' not in st.session_state: st.session_state.truck_override = 0
 if 'start_date_val' not in st.session_state: st.session_state.start_date_val = date.today()
 if 'reset_key_seed' not in st.session_state: st.session_state.reset_key_seed = 0
+if 'active_vault_file_lock' not in st.session_state: st.session_state.active_vault_file_lock = ""
 
 def pull_vault_archive_list():
     try:
@@ -184,6 +185,10 @@ def load_project_from_vault(label_name):
             d = json.load(f)
             st.session_state.status = d.get("status", "Quoted")
             st.session_state.proj = str(d.get("proj", label_name)).strip()
+            
+            # CRITICAL FIX: Lock the source identifier into session state memory explicitly
+            st.session_state.active_vault_file_lock = str(d.get("proj", label_name)).strip()
+            
             st.session_state.km = float(d.get("km", 0.0))
             st.session_state.truck_override = int(d.get("truck_override", 0))
             
@@ -203,8 +208,6 @@ def load_project_from_vault(label_name):
                     item["Discount"] = 0.0
                     
             st.session_state.df = pd.DataFrame(items_list)
-            
-            # Key step rotation triggers total form re-sync
             st.session_state.reset_key_seed += 1
             st.rerun()
     except Exception as e:
@@ -262,7 +265,7 @@ if global_warnings:
         st.markdown(f"<div style='padding-left:15px; font-weight:700; color:#B71C1C; font-family:sans-serif; margin-bottom:4px;'>{warn}</div>", unsafe_allow_html=True)
     st.markdown("<div style='font-size: 13px; color: #555; margin-top: 15px; font-style:italic;'>Action Required: Re-validate booking confirmations or adjust the project stage fields in the selector workspace below to clear these flags.</div><hr style='border:1px solid #FFCDD2;'>", unsafe_allow_html=True)
 
-# SIDEBAR NAVIGATION PANEL
+# SIDEBAR PANEL
 st.sidebar.title("📁 PROJECT ARCHIVE")
 st.sidebar.markdown("---")
 
@@ -270,6 +273,7 @@ if st.sidebar.button("➕ START NEW", use_container_width=True):
     st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Total", "Min_Lab", "Raw_Lab", "KG", "Is_Marquee", "Discount", "Lab_Math", "Lab_Per_Unit", "Base_Hire", "Anchoring", "Override_Rate"])
     st.session_state.km = 0.0
     st.session_state.proj = "New Project"
+    st.session_state.active_vault_file_lock = ""
     st.session_state.status = "Quoted"
     st.session_state.start_date_val = date.today()
     st.session_state.truck_override = 0
@@ -277,12 +281,16 @@ if st.sidebar.button("➕ START NEW", use_container_width=True):
     st.rerun()
 
 st.sidebar.markdown("---")
-# BOUND TRACKING CONTROL VALUE: Overwrites text entry fields completely to loaded name configurations
 ui_proj_name = st.sidebar.text_input("Project Label", value=st.session_state.proj, key=f"pname_box_{st.session_state.reset_key_seed}")
 st.session_state.proj = ui_proj_name.strip()
 
 if vault_jobs:
-    load_choice = st.sidebar.selectbox("Cloud Retrieval Menus", ["-- Choose Project --"] + vault_jobs)
+    # Handle baseline selection tracking array matching seamlessly
+    sel_index = 0
+    if st.session_state.active_vault_file_lock in vault_jobs:
+        sel_index = vault_jobs.index(st.session_state.active_vault_file_lock) + 1
+        
+    load_choice = st.sidebar.selectbox("Cloud Retrieval Menus", ["-- Choose Project --"] + vault_jobs, index=sel_index)
     if st.sidebar.button("📂 LOAD PROJECT") and load_choice != "-- Choose Project --":
         load_project_from_vault(load_choice)
         
@@ -296,6 +304,7 @@ if vault_jobs:
                 st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Total", "Min_Lab", "Raw_Lab", "KG", "Is_Marquee", "Discount", "Lab_Math", "Lab_Per_Unit", "Base_Hire", "Anchoring", "Override_Rate"])
                 st.session_state.km = 0.0
                 st.session_state.proj = "New Project"
+                st.session_state.active_vault_file_lock = ""
                 st.session_state.status = "Quoted"
                 st.session_state.start_date_val = date.today()
                 st.session_state.truck_override = 0
@@ -499,6 +508,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     if action_col_1.button("💾 SAVE PROJECT TO CLOUD", use_container_width=True):
         if st.session_state.df is not None and not st.session_state.df.empty:
             try:
+                # Force standard text label string assignment rules directly
                 target_label = st.session_state.proj.strip() if st.session_state.proj else f"Draft_{datetime.now().strftime('%Y%m%d_%H%M')}"
                 
                 payload = {
@@ -513,6 +523,8 @@ if st.session_state.df is not None and not st.session_state.df.empty:
                 with open(f"{VAULT_DIR}/{target_label}.json", "w") as f:
                     json.dump(payload, f)
                     
+                # Force memory lock tracker states to align instantly on click saves
+                st.session_state.active_vault_file_lock = target_label
                 st.success(f"🎉 Successfully saved and updated target: '{target_label}' inside cloud storage!")
                 st.rerun()
             except Exception as e:
