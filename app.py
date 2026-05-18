@@ -179,7 +179,6 @@ def load_project_from_vault(label_name):
             st.session_state.proj = d.get("proj", label_name)
             st.session_state.km = float(d.get("km", 0.0))
             
-            # Legacy conversion handling to avoid format structure breaks
             items_list = d.get("items", [])
             for item in items_list:
                 if "Override_Rate" not in item:
@@ -201,6 +200,7 @@ st.markdown("""<style>
     div[data-testid="stMetricValue"] { color: #3D5AFE !important; font-size: 30px !important; font-weight: 800 !important; }
     .item-text { font-size: 20px !important; font-weight: 700 !important; color: #1A1D2D; margin-top: 10px; }
     .gt-banner { background: #1A1D2D; color: #00E676; padding: 40px; border-radius: 20px; text-align: right; font-size: 44px !important; font-weight: 900; margin-top: 30px; border: 6px solid #00E676; box-shadow: 0 10px 20px rgba(0,0,0,0.2); }
+    .summary-hdr { font-weight: 800 !important; color: #1A1D2D !important; font-size: 15px !important; text-transform: uppercase !important; border-bottom: 2px solid #1A1D2D; padding-bottom: 5px; }
 </style>""", unsafe_allow_html=True)
 
 # ==============================================================================
@@ -321,11 +321,20 @@ with col2:
 # ==============================================================================
 if st.session_state.df is not None and not st.session_state.df.empty:
     st.divider(); st.subheader("📝 QUOTE SUMMARY")
+    
+    # HARDCODED ALIGNED GRID HEADER ROW v49.1
+    h_col0, h_col1, h_col2, h_col3, h_col4, h_col4b, h_col5 = st.columns([0.4, 3.2, 0.8, 1.2, 1.2, 1.2, 1.4])
+    h_col1.markdown("<div class='summary-hdr'>Item Description</div>", unsafe_allow_html=True)
+    h_col2.markdown("<div class='summary-hdr'>Qty</div>", unsafe_allow_html=True)
+    h_col3.markdown("<div class='summary-hdr'>Gross Unit</div>", unsafe_allow_html=True)
+    h_col4.markdown("<div class='summary-hdr'>Disc %</div>", unsafe_allow_html=True)
+    h_col4b.markdown("<div class='summary-hdr'>Override Rate</div>", unsafe_allow_html=True)
+    h_col5.markdown("<div class='summary-hdr' style='text-align: right;'>Subtotal</div>", unsafe_allow_html=True)
+    
     h_tot_c, h_wk1_gear, total_kg, itrac_sqm = 0.0, 0.0, 0.0, 0.0
     has_itrac = False
     
     for idx, row in st.session_state.df.iterrows():
-        # DYNAMIC PRIORITY LOGIC: Evaluates whether an override rate variable is active
         override = row.get("Override_Rate", 0.0)
         active_base = override if override > 0 else row["Unit Rate"]
         active_hire_base = override if override > 0 else row["Base_Hire"]
@@ -341,7 +350,6 @@ if st.session_state.df is not None and not st.session_state.df.empty:
         wk1_t = (qty * brate + row["Raw_Lab"]) * dm if labour_mode == "Include in Hire" else (qty * brate) * dm
         h_tot_c += wk1_t
         
-        # Grid Column Restructuring to accommodate the new input box cleanly
         c0, c1, c2, c3, c4, c4b, c5 = st.columns([0.4, 3.2, 0.8, 1.2, 1.2, 1.2, 1.4])
         if c0.button("🗑️", key=f"sdel_{idx}"):
             st.session_state.df.drop(idx, inplace=True)
@@ -353,21 +361,20 @@ if st.session_state.df is not None and not st.session_state.df.empty:
             prod_display += f" ({row['Anchoring']})"
             
         c1.markdown(f"<div class='item-text'>{prod_display} - Wk 1</div>", unsafe_allow_html=True)
-        c2.write(f"{qty:,.0f}"); c3.write(f"${wk1_t/qty:,.2f}")
+        c2.write(f"{qty:,.0f}")
+        c3.write(f"${wk1_t/qty:,.2f}")
         
-        # Box 1: Percentage Input
-        new_disc = c4.number_input("Disc %", 0.0, 100.0, float(row["Discount"]), 1.0, key=f"sd_{idx}")
+        new_disc = c4.number_input("Disc %", 0.0, 100.0, float(row["Discount"]), 1.0, key=f"sd_{idx}", label_visibility="collapsed")
         if new_disc != row["Discount"]:
             st.session_state.df.at[idx, "Discount"] = new_disc
             st.rerun()
             
-        # Box 2: NEW Custom Rate Manual Override Field 
-        new_override = c4b.number_input("Rate Override", 0.0, 5000.0, float(row.get("Override_Rate", 0.0)), 0.5, key=f"so_{idx}")
+        new_override = c4b.number_input("Rate Override", 0.0, 5000.0, float(row.get("Override_Rate", 0.0)), 0.5, key=f"so_{idx}", label_visibility="collapsed")
         if new_override != row.get("Override_Rate", 0.0):
             st.session_state.df.at[idx, "Override_Rate"] = new_override
             st.rerun()
             
-        c5.write(f"${wk1_t:,.2f}")
+        c5.markdown(f"<div style='text-align: right; font-size: 20px; font-weight: 700; color: #1A1D2D; margin-top: 10px;'>${wk1_t:,.2f}</div>", unsafe_allow_html=True)
         
         if weeks > 1:
             r_rate = (active_hire_base * 0.5 if row["Is_Marquee"] else active_hire_base)
@@ -375,7 +382,9 @@ if st.session_state.df is not None and not st.session_state.df.empty:
             h_tot_c += r_tot
             cb = st.columns([0.4, 3.2, 0.8, 1.2, 1.2, 1.2, 1.4])
             cb[1].markdown(f"<div style='color:grey; font-style:italic; font-size:18px;'>└ Recurring (x{weeks-1} wks)</div>", unsafe_allow_html=True)
-            cb[2].write(f"{qty:,.0f}"); cb[3].write(f"${r_rate*dm:,.2f}"); cb[6].write(f"${r_tot:,.2f}")
+            cb[2].write(f"{qty:,.0f}")
+            cb[3].write(f"${r_rate*dm:,.2f}")
+            cb[6].markdown(f"<div style='text-align: right; color: grey; font-style: italic;'>${r_tot:,.2f}</div>", unsafe_allow_html=True)
 
     # Aligned High-Appeal Form Control
     st.divider()
