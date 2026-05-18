@@ -17,7 +17,7 @@ if not os.path.exists(VAULT_DIR):
     os.makedirs(VAULT_DIR)
 
 # ==============================================================================
-# 1. ACCESS CONTROL TOWER (SECURITY ENTRY PORTAL)
+# 1. ACCESS CONTROL TOWER (SECURITY GATE)
 # ==============================================================================
 def check_password():
     if "password_correct" not in st.session_state:
@@ -208,14 +208,47 @@ st.markdown("""<style>
 </style>""", unsafe_allow_html=True)
 
 # ==============================================================================
-# 7. MAIN INTERFACE WORKSPACE
+# 7. MAIN INTERFACE WORKSPACE MOUNTING MATRIX
 # ==============================================================================
 st.title("⚡ Louis Master Quoter")
 
+# Initialize and pull archive arrays
 vault_jobs = pull_vault_archive_list()
 
 # ------------------------------------------------------------------------------
-# SIDEBAR ACTIONS PANEL
+# THE CONTROL TOWER DEED MATRIX: Priority processing block locked at the top
+# ------------------------------------------------------------------------------
+global_warnings = []
+if vault_jobs:
+    for job in vault_jobs:
+        try:
+            with open(f"{VAULT_DIR}/{job}.json", "r") as f:
+                job_data = json.load(f)
+                if job_data.get("status") == "Quoted" and "start_date" in job_data:
+                    j_start = datetime.strptime(job_data["start_date"], "%Y-%m-%d").date()
+                    days_remaining = (j_start - date.today()).days
+                    if days_remaining <= 14:
+                        global_warnings.append(f"• **'{job_data.get('proj', job)}'** starts in **{days_remaining} days** (Scheduled Setup: {j_start.strftime('%d/%m/%Y')})")
+        except:
+            pass
+
+if global_warnings:
+    with st.container():
+        st.markdown(
+            """
+            <div style="background-color: #FFEBEE; border-left: 8px solid #D50000; padding: 20px; border-radius: 8px; margin-bottom: 25px;">
+                <h4 style="color: #D50000; margin-top:0; font-weight:800;">🚨 CONTROL TOWER: TIME-SENSITIVE PIPELINE ALERT</h4>
+                <p style="color: #1A1D2D; font-size:15px; font-weight:600; margin-bottom:10px;">The following stored projects are still marked as 'Quoted' but are starting inside your critical 2-week deadline window:</p>
+            </div>
+            """, 
+            unsafe_allow_html=True
+        )
+        for warn in global_warnings:
+            st.markdown(f"<div style='padding-left:15px; font-weight:700; color:#B71C1C;'>{warn}</div>", unsafe_allow_html=True)
+        st.markdown("<div style='font-size: 13px; color: #555; margin-top: 15px; font-style:italic;'>Action Required: Re-validate booking confirmations or adjust the project stage fields in the selector workspace below to clear these flags.</div><hr style='border:1px solid #FFCDD2;'>", unsafe_allow_html=True)
+
+# ------------------------------------------------------------------------------
+# SIDEBAR NAVIGATION & MANAGEMENT DECK
 # ------------------------------------------------------------------------------
 st.sidebar.title("📁 PROJECT ARCHIVE")
 st.sidebar.markdown("---")
@@ -236,14 +269,12 @@ if vault_jobs:
         load_project_from_vault(load_choice)
         
     st.sidebar.markdown("---")
-    # UPGRADE 1: Built-in cloud archive purger/deletion function matrix block
     if st.sidebar.button("❌ DELETE SELECTED PROJECT", use_container_width=True):
         if load_choice != "-- Choose Project --":
             target_path = f"{VAULT_DIR}/{load_choice}.json"
             if os.path.exists(target_path):
                 os.remove(target_path)
                 st.sidebar.success(f"Deleted '{load_choice}' completely.")
-                # Reset workspace status
                 st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Total", "Min_Lab", "Raw_Lab", "KG", "Is_Marquee", "Discount", "Lab_Math", "Lab_Per_Unit", "Base_Hire", "Anchoring", "Override_Rate"])
                 st.session_state.km = 0.0
                 st.session_state.proj = "New Project"
@@ -253,45 +284,21 @@ else:
     st.sidebar.info("No Projects Saved In Cloud Yet")
 
 # ------------------------------------------------------------------------------
-# UPGRADE 2: GLOBAL CONTROL TOWER DIRECTORY DEED SCANNER (AT THE TOP)
+# ACTIVE CONFIGURATION FIELD DECKS
 # ------------------------------------------------------------------------------
-global_warnings = []
-if vault_jobs:
-    for job in vault_jobs:
-        try:
-            with open(f"{VAULT_DIR}/{job}.json", "r") as f:
-                job_data = json.load(f)
-                if job_data.get("status") == "Quoted" and "start_date" in job_data:
-                    j_start = datetime.strptime(job_data["start_date"], "%Y-%m-%d").date()
-                    days_remaining = (j_start - date.today()).days
-                    if days_remaining <= 14:
-                        global_warnings.append(f"• **'{job_data.get('proj', job)}'** starts in **{days_remaining} days** (Scheduled: {j_start.strftime('%d/%m/%Y')})")
-        except:
-            pass
-
-if global_warnings:
-    with st.expander("🚨 CONTROL TOWER: PIPELINE TIME SENSITIVE WARNINGS", expanded=True):
-        st.markdown("<div style='color: #D50000; font-weight: 700; font-size: 16px; margin-bottom: 10px;'>The following saved projects are still marked as 'Quoted' but are starting within the 2-week validation threshold:</div>", unsafe_allow_html=True)
-        for warn in global_warnings:
-            st.markdown(warn)
-        st.markdown("<div style='font-size: 13px; color: grey; margin-top: 5px;'>Please confirm confirmation metrics or manually adjust project stage parameters to clear alerts.</div>", unsafe_allow_html=True)
-
-# ------------------------------------------------------------------------------
-# MAIN INTERFACE WORKSPACE LAYOUT
-# ------------------------------------------------------------------------------
-st.markdown(f"### 📍 Project: {st.session_state.proj}")
+st.markdown(f"### 📍 Active Workspace: {st.session_state.proj}")
 st.session_state.status = st.selectbox("Stage", STAGES, index=STAGES.index(st.session_state.status) if st.session_state.status in STAGES else 0)
 st.markdown(f"<div style='height: 14px; background-color: {STAGE_COLORS[st.session_state.status]}; border-radius: 6px; margin-bottom: 20px;'></div>", unsafe_allow_html=True)
 
 c1, c2, c3 = st.columns(3)
-start_d = c1.date_input("Start", value=st.session_state.start_date_val)
+start_d = c1.date_input("Start Date", value=st.session_state.start_date_val)
 st.session_state.start_date_val = start_d
-end_d = c2.date_input("End", value=start_d)
+end_d = c2.date_input("End Date", value=start_d)
 km_val = st.session_state.km if (st.session_state.km and st.session_state.km > 0) else None
 st.session_state.km = c3.number_input("One-Way KM", value=km_val, placeholder="KM...")
 weeks = math.ceil(((end_d - start_d).days) / 7) or 1
 
-st.info(f"**Hire Duration:** {weeks} Week(s)")
+st.info(f"**Calculated Hire Duration:** {weeks} Week(s)")
 
 # Multi-Segment Toggle Rules
 l1, l2, l3 = st.columns(3)
@@ -439,7 +446,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     st.divider()
     col_left, col_right = st.columns(2)
     with col_left:
-        st.markdown("### 🚛 Logistics Override")
+        st.markdown("### ### 🚛 Logistics Override")
         if has_itrac:
             min_trucks = math.ceil(itrac_sqm / 288) or 1
         else:
