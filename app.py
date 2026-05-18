@@ -61,7 +61,7 @@ def get_gs_per_seat_labour(seats):
     return 0, ""
 
 # ==============================================================================
-# 3. PDF AUDIT ENGINE (STRUCTURAL TABLE TIERS)
+# 3. PDF AUDIT ENGINE (STRUCTURAL TABLE TIERS WITH COMPARISON RATES)
 # ==============================================================================
 def clean_text(txt):
     if not txt: return ""
@@ -82,7 +82,7 @@ def create_calculation_pdf(name, subtotal, labour, waiver, cartage, grand, weeks
     pdf.cell(0, 7, f"PERIOD: {start.strftime('%d/%m/%Y')} to {end.strftime('%d/%m/%Y')} ({weeks} Week(s))", ln=True, align="C")
     pdf.ln(8)
 
-    # Section 1 Schedule
+    # Section 1: Structured Hire Grid Schedule
     pdf.set_fill_color(26, 29, 45); pdf.set_text_color(255, 255, 255); pdf.set_font("Arial", "B", 11)
     pdf.cell(0, 10, " 1. HIRE CALCULATIONS SCHEDULE", 0, 1, "L", True)
     
@@ -157,7 +157,7 @@ STAGES = ["Quoted", "Accepted", "Paid", "On Hire", "Returned", "Cancelled"]
 STAGE_COLORS = {"Quoted": "#FF9100", "Accepted": "#00E676", "Paid": "#00B8D4", "On Hire": "#D500F9", "Returned": "#757575", "Cancelled": "#263238"}
 
 # ==============================================================================
-# 5. STREAMLIT INTERNAL STORAGE PERSISTENCE
+# 5. STREAMLIT INTERNAL STORAGE PERSISTENCE (TOGGLE DEFAULTS LOAD HOOKS WIRED)
 # ==============================================================================
 if 'df' not in st.session_state: 
     st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Total", "Min_Lab", "Raw_Lab", "KG", "Is_Marquee", "Discount", "Lab_Math", "Lab_Per_Unit", "Base_Hire", "Anchoring", "Override_Rate"])
@@ -169,6 +169,11 @@ if 'start_date_val' not in st.session_state: st.session_state.start_date_val = d
 if 'reset_key_seed' not in st.session_state: st.session_state.reset_key_seed = 0
 if 'active_filename' not in st.session_state: st.session_state.active_filename = ""
 if 'rename_mode' not in st.session_state: st.session_state.rename_mode = False
+
+# Toggle internal storage caches to guarantee seamless reloads
+if 'saved_cartage_mode' not in st.session_state: st.session_state.saved_cartage_mode = "Charge"
+if 'saved_labour_mode' not in st.session_state: st.session_state.saved_labour_mode = "Separate"
+if 'saved_waiver_mode' not in st.session_state: st.session_state.saved_waiver_mode = "Charge"
 
 def pull_vault_archive_list():
     try:
@@ -187,6 +192,11 @@ def load_project_from_vault(label_name):
             st.session_state.rename_mode = False
             st.session_state.km = float(d.get("km", 0.0))
             st.session_state.truck_override = int(d.get("truck_override", 0))
+            
+            # CORE FIX: Restores specific toggle parameters out of database file seamlessly
+            st.session_state.saved_cartage_mode = d.get("cartage_mode", "Charge")
+            st.session_state.saved_labour_mode = d.get("labour_mode", "Separate")
+            st.session_state.saved_waiver_mode = d.get("waiver_mode", "Charge")
             
             if "start_date" in d and d["start_date"]:
                 try:
@@ -274,12 +284,14 @@ if st.sidebar.button("➕ START NEW", use_container_width=True):
     st.session_state.status = "Quoted"
     st.session_state.start_date_val = date.today()
     st.session_state.truck_override = 0
+    st.session_state.saved_cartage_mode = "Charge"
+    st.session_state.saved_labour_mode = "Separate"
+    st.session_state.saved_waiver_mode = "Charge"
     st.session_state.reset_key_seed += 1
     st.rerun()
 
 st.sidebar.markdown("---")
 
-# HARD CRITICAL FIX v50.5: Hides text-input widget entirely if file tracking lock state is currently active
 if st.session_state.active_filename and not st.session_state.rename_mode:
     st.sidebar.markdown(f"**📌 File Target:** `{st.session_state.active_filename}`")
     if st.sidebar.button("✏️ Rename / Duplicate Project", use_container_width=True):
@@ -314,6 +326,9 @@ if vault_jobs:
                 st.session_state.status = "Quoted"
                 st.session_state.start_date_val = date.today()
                 st.session_state.truck_override = 0
+                st.session_state.saved_cartage_mode = "Charge"
+                st.session_state.saved_labour_mode = "Separate"
+                st.session_state.saved_waiver_mode = "Charge"
                 st.session_state.reset_key_seed += 1
                 st.rerun()
 else:
@@ -334,11 +349,20 @@ weeks = math.ceil(((end_d - start_d).days) / 7) or 1
 
 st.info(f"**Calculated Hire Duration:** {weeks} Week(s)")
 
-# Multi-Segment Toggle Rules
+# Multi-Segment Toggle Rules - Now utilizing persistent state indices
 l1, l2, l3 = st.columns(3)
-cartage_mode = l1.segmented_control("Cartage Math", ["Charge", "Free"], default="Charge", key=f"cart_toggle_{st.session_state.reset_key_seed}")
-labour_mode = l2.segmented_control("Labour Math", ["Separate", "Include in Hire", "Free"], default="Separate", key=f"lab_toggle_{st.session_state.reset_key_seed}")
-waiver_mode = l3.segmented_control("Damage Waiver", ["Charge", "Free"], default="Charge", key=f"waiv_toggle_{st.session_state.reset_key_seed}")
+
+c_opts = ["Charge", "Free"]
+cartage_mode = l1.segmented_control("Cartage Math", c_opts, default=st.session_state.saved_cartage_mode, key=f"cart_toggle_{st.session_state.reset_key_seed}")
+st.session_state.saved_cartage_mode = cartage_mode
+
+lab_opts = ["Separate", "Include in Hire", "Free"]
+labour_mode = l2.segmented_control("Labour Math", lab_opts, default=st.session_state.saved_labour_mode, key=f"lab_toggle_{st.session_state.reset_key_seed}")
+st.session_state.saved_labour_mode = labour_mode
+
+w_opts = ["Charge", "Free"]
+waiver_mode = l3.segmented_control("Damage Waiver", w_opts, default=st.session_state.saved_waiver_mode, key=f"waiv_toggle_{st.session_state.reset_key_seed}")
+st.session_state.saved_waiver_mode = waiver_mode
 
 st.divider(); col1, col2 = st.columns(2)
 with col1:
@@ -514,18 +538,21 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     if action_col_1.button("💾 SAVE PROJECT TO CLOUD", use_container_width=True):
         if st.session_state.df is not None and not st.session_state.df.empty:
             try:
-                # UNBREAKABLE ANCHOR: Uses the locked structural tracker or falls back to the text entry string safely
                 if st.session_state.active_filename and st.session_state.active_filename.strip() != "":
                     target_label = st.session_state.active_filename.strip()
                 else:
                     target_label = st.session_state.proj.strip() if st.session_state.proj else f"Draft_{datetime.now().strftime('%Y%m%d_%H%M')}"
                 
+                # UPGRADE v50.6: Now securely archiving segment control variables inside JSON structures
                 payload = {
                     "proj": target_label,
                     "status": st.session_state.status,
                     "km": st.session_state.km,
                     "truck_override": st.session_state.truck_override,
                     "start_date": st.session_state.start_date_val.strftime("%Y-%m-%d"),
+                    "cartage_mode": cartage_mode,
+                    "labour_mode": labour_mode,
+                    "waiver_mode": waiver_mode,
                     "items": st.session_state.df.to_dict(orient="records")
                 }
                 
@@ -535,7 +562,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
                 st.session_state.active_filename = target_label
                 st.session_state.proj = target_label
                 st.session_state.rename_mode = False
-                st.success(f"🎉 Core Update Locked. Successfully overwrote and updated file: '{target_label}' inside cloud vault storage!")
+                st.success(f"🎉 Parameters Synchronized. Successfully updated project options file: '{target_label}' inside cloud storage!")
                 st.rerun()
             except Exception as e:
                 st.error(f"Internal file sync error: {str(e)}")
