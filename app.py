@@ -67,7 +67,7 @@ def get_gs_per_seat_labour(seats):
     return 0, ""
 
 # ==============================================================================
-# 3. PDF AUDIT ENGINE (FULLY FIXED FOOLPROOF BYTE COMPILER BUFFER ENGINE)
+# 3. PDF AUDIT ENGINE (STRUCTURAL TABLE TIERS WITH UNIVERSAL BYTE STREAM FIX)
 # ==============================================================================
 def clean_text(txt):
     if not txt: return ""
@@ -140,14 +140,13 @@ def create_calculation_pdf(name, subtotal, labour, waiver, cartage, grand, weeks
     pdf.ln(8); pdf.set_fill_color(0, 230, 118); pdf.set_text_color(26, 29, 45); pdf.set_font("Arial", "B", 13)
     pdf.cell(0, 14, f" GRAND TOTAL (EX GST): ${grand:,.2f} ", 0, 1, "R", True)
     
-    # UNBREAKABLE PATCH v51.6: Safely converts string bytes using universal latin-1 codecs to block blanks
+    # UNBREAKABLE MASTER BYTE REPAIR: Reads from internal buffers natively to ensure text pops up on page layouts
     try:
-        raw_pdf_str = pdf.output(dest='S')
-        if isinstance(raw_pdf_str, str):
-            return raw_pdf_str.encode('latin-1')
-        return bytes(raw_pdf_str)
-    except Exception as pdf_output_err:
-        # Final safety trap fallback to standard memory structures
+        raw_pdf_bytes = pdf.output()
+        if isinstance(raw_pdf_bytes, str):
+            return raw_pdf_bytes.encode('latin-1', 'replace')
+        return bytes(raw_pdf_bytes)
+    except:
         return bytes(pdf.output())
 
 # ==============================================================================
@@ -402,38 +401,40 @@ st.session_state.saved_waiver_mode = waiver_mode
 st.divider(); col1, col2 = st.columns(2)
 with col1:
     st.markdown("### ⚡ Structures")
-    m_in = st.text_input("Size (e.g. 10x15)", key=f"str_sz_{st.session_state.reset_key_seed}")
-    m_q = st.number_input("Qty", min_value=1, value=None, key=f"str_qty_{st.session_state.reset_key_seed}")
+    # UPGRADE v52.0: Added explicit product variant configuration lists
+    s_type = st.selectbox("Structure Type", ["Standard Frame Marquee", "WOW Marquee"], key=f"str_type_{st.session_state.reset_key_seed}")
+    
+    if s_type == "WOW Marquee":
+        st.caption("⚡ **Engine Alert:** WOW Marquee pricing rule active ($1,029.00 Base / Custom Labor Engine).")
+        m_in = "6x3" # Hardcoded structural frame size profile
+        m_q = st.number_input("Qty", min_value=1, value=1, key=f"str_qty_{st.session_state.reset_key_seed}")
+    else:
+        m_in = st.text_input("Size (e.g. 10x15)", key=f"str_sz_{st.session_state.reset_key_seed}")
+        m_q = st.number_input("Qty", min_value=1, value=None, key=f"str_qty_{st.session_state.reset_key_seed}")
+        
     anchoring_type = st.segmented_control("Anchoring Method", ["Pegged", "Weighted"], default="Pegged", key=f"anch_tog_{st.session_state.reset_key_seed}")
     
     if st.button("Add Structure") and m_in and m_q:
-        nums = re.findall(r'\d+', m_in)
-        if len(nums) >= 2:
-            span, length = int(nums[0]), int(nums[1])
-            logic = STRUCT_LOGIC.get(span, STRUCT_LOGIC[4])
-            sqm = span*length; hire_rate = logic['s_rate'] if (length/3) <= 1 else logic['m_rate']
-            brate = sqm * hire_rate; lab_cost = brate * logic['s_lab']
+        if s_type == "WOW Marquee":
+            # UPGRADE v52.0: WOW Marquee implementation logic
+            brate = 1029.00
+            span, length = 6, 3
+            # Baseline weight structure footprint defaults to marquee rules for standard scaling
+            logic = STRUCT_LOGIC[6] 
             
             new_struct_df = pd.DataFrame([{
-                "Qty": m_q, "Product": f"Structure {span}x{length}m", "Unit Rate": brate, "Min_Lab": 350, 
-                "Raw_Lab": lab_cost, "Lab_Math": f"Structure {span}x{length} ({anchoring_type}): ${brate:,.2f} x {logic['s_lab']:.2f}", "KG": (sqm*15)*m_q, 
+                "Qty": m_q, "Product": "WOW Marquee 6x3m", "Unit Rate": brate, "Min_Lab": 0, 
+                "Raw_Lab": 0.0, # Handled dynamically inside summary compiler layer below
+                "Lab_Math": "WOW Engine Logic Triggered", "KG": 450.0 * m_q, 
                 "Is_Marquee": True, "Discount": 0.0, "Lab_Per_Unit": 0, "Base_Hire": brate, "Anchoring": anchoring_type, "Override_Rate": 0.0
             }])
             st.session_state.df = pd.concat([st.session_state.df, new_struct_df], ignore_index=True)
             
             if anchoring_type == "Weighted":
-                bay_len = logic.get('bay', 3)
-                num_bays = math.ceil(length / bay_len)
-                legs_per_structure = (num_bays + 1) * 2
-                total_legs = legs_per_structure * m_q
-                
-                if span <= 6: weights_per_leg = 2
-                elif span <= 9: weights_per_leg = 4
-                elif span <= 12: weights_per_leg = 6
-                elif span <= 15: weights_per_leg = 8
-                else: weights_per_leg = 10
-                    
-                calculated_weights = total_legs * weights_per_leg
+                # High wind loads engineering rule: 500kg per leg when no pegging
+                legs_count = 4 * m_q # Standard single frame post configuration
+                total_ballast_needed = legs_count * 500.0 # 500kg per leg
+                calculated_weights = math.ceil(total_ballast_needed / 30.0) # Convert to standard 30kg blocks count
                 w_lab_cost = calculated_weights * 1.65
                 
                 new_weight_df = pd.DataFrame([{
@@ -443,6 +444,43 @@ with col1:
                 }])
                 st.session_state.df = pd.concat([st.session_state.df, new_weight_df], ignore_index=True)
             st.rerun()
+        else:
+            nums = re.findall(r'\d+', m_in)
+            if len(nums) >= 2:
+                span, length = int(nums[0]), int(nums[1])
+                logic = STRUCT_LOGIC.get(span, STRUCT_LOGIC[4])
+                sqm = span*length; hire_rate = logic['s_rate'] if (length/3) <= 1 else logic['m_rate']
+                brate = sqm * hire_rate; lab_cost = brate * logic['s_lab']
+                
+                new_struct_df = pd.DataFrame([{
+                    "Qty": m_q, "Product": f"Structure {span}x{length}m", "Unit Rate": brate, "Min_Lab": 350, 
+                    "Raw_Lab": lab_cost, "Lab_Math": f"Structure {span}x{length} ({anchoring_type}): ${brate:,.2f} x {logic['s_lab']:.2f}", "KG": (sqm*15)*m_q, 
+                    "Is_Marquee": True, "Discount": 0.0, "Lab_Per_Unit": 0, "Base_Hire": brate, "Anchoring": anchoring_type, "Override_Rate": 0.0
+                }])
+                st.session_state.df = pd.concat([st.session_state.df, new_struct_df], ignore_index=True)
+                
+                if anchoring_type == "Weighted":
+                    bay_len = logic.get('bay', 3)
+                    num_bays = math.ceil(length / bay_len)
+                    legs_per_structure = (num_bays + 1) * 2
+                    total_legs = legs_per_structure * m_q
+                    
+                    if span <= 6: weights_per_leg = 2
+                    elif span <= 9: weights_per_leg = 4
+                    elif span <= 12: weights_per_leg = 6
+                    elif span <= 15: weights_per_leg = 8
+                    else: weights_per_leg = 10
+                        
+                    calculated_weights = total_legs * weights_per_leg
+                    w_lab_cost = calculated_weights * 1.65
+                    
+                    new_weight_df = pd.DataFrame([{
+                        "Qty": calculated_weights, "Product": "30kg Weights", "Unit Rate": 6.60, "Min_Lab": 0, 
+                        "Raw_Lab": w_lab_cost, "Lab_Math": f"30kg Weights: {calculated_weights:,.0f} units x $1.65", 
+                        "KG": calculated_weights * 30.0, "Is_Marquee": False, "Discount": 0.0, "Lab_Per_Unit": 1.65, "Base_Hire": 6.60, "Anchoring": "", "Override_Rate": 0.0
+                    }])
+                    st.session_state.df = pd.concat([st.session_state.df, new_weight_df], ignore_index=True)
+                st.rerun()
 
 with col2:
     st.markdown("### 🪵 Catalog Items")
@@ -485,6 +523,27 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     h_tot_c, h_wk1_gear, total_kg, itrac_sqm = 0.0, 0.0, 0.0, 0.0
     has_itrac = False
     
+    # UPGRADE v52.0: Pre-compile table structure to evaluate multi-item conditions for WOW labor adjustments
+    other_products_count = 0
+    for idx, row in st.session_state.df.iterrows():
+        p_name = row["Product"]
+        if p_name != "30kg Weights" and "WOW Marquee" not in p_name:
+            other_products_count += 1
+            
+    # Inject active labor values to WOW line items dynamically based on setup scenario
+    for idx, row in st.session_state.df.iterrows():
+        if "WOW Marquee" in row["Product"]:
+            qty_scalar = row["Qty"]
+            if other_products_count > 0:
+                # Installed with other items on the quote -> $706 base
+                st.session_state.df.at[idx, "Raw_Lab"] = 706.00 * qty_scalar
+                st.session_state.df.at[idx, "Lab_Math"] = f"WOW Marquee 6x3m: Setup Efficiency Rate Applied = $706.00"
+            else:
+                # Installed completely by itself -> $1,411 base
+                st.session_state.df.at[idx, "Raw_Lab"] = 1411.00 * qty_scalar
+                st.session_state.df.at[idx, "Lab_Math"] = f"WOW Marquee 6x3m: Standalone Installation Base = $1,411.00"
+
+    # Execution Loop
     for idx, row in st.session_state.df.iterrows():
         override = row.get("Override_Rate", 0.0)
         active_base = override if override > 0 else row["Unit Rate"]
@@ -597,16 +656,20 @@ if st.session_state.df is not None and not st.session_state.df.empty:
                 if 'Anchoring' in row and row['Anchoring'] and row['Anchoring'] != "":
                     clean_lbl += f" ({row['Anchoring']})"
                 
-                formula_part = row['Lab_Math'].split(': ')[1]
+                if "WOW Marquee" in row['Product']:
+                    # Special short label for WOW itemised proofs
+                    formula_part = "Fixed Rate Matrix" if other_products_count > 0 else "Standalone Matrix"
+                else:
+                    formula_part = row['Lab_Math'].split(': ')[1]
                     
                 if is_floor_active:
                     item_share_ratio = raw_item_cost / raw_lab_pool if raw_lab_pool > 0 else 1.0
                     top_up_amount = (350.00 - raw_lab_pool) * item_share_ratio
                     final_target = raw_item_cost + top_up_amount
                     
-                    l_maths.append(f"{clean_lbl}: {formula_part} = ${raw_item_cost:,.2f} + ${top_up_amount:,.2f}* = ${final_target:,.2f}")
+                    l_maths.append(f"{clean_lbl} ({formula_part}) = ${raw_item_cost:,.2f} + ${top_up_amount:,.2f}* = ${final_target:,.2f}")
                 else:
-                    l_maths.append(f"{clean_lbl}: {formula_part} = ${raw_item_cost:,.2f} [Active Charge]")
+                    l_maths.append(f"{clean_lbl} ({formula_part}) = ${raw_item_cost:,.2f} [Active Charge]")
                     
         if is_floor_active:
             l_maths.append(f"*to meet minimum labour floor total of ${lab:,.2f}")
