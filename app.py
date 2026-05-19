@@ -325,7 +325,7 @@ else:
             st.rerun()
 
 if vault_jobs:
-    load_choice = st.selectbox("Cloud Retrieval Menus", ["-- Choose Project --"] + vault_jobs)
+    load_choice = st.sidebar.selectbox("Cloud Retrieval Menus", ["-- Choose Project --"] + vault_jobs)
     if st.sidebar.button("📂 LOAD PROJECT") and load_choice != "-- Choose Project --":
         load_project_from_vault(load_choice)
         
@@ -737,29 +737,39 @@ if st.session_state.df is not None and not st.session_state.df.empty:
                         if "data" in res_data and "create_item" in res_data["data"] and res_data["data"]["create_item"]:
                             new_item_id = int(res_data["data"]["create_item"]["id"])
                             
-                            # --- UPGRADE v52.5: UNBREAKABLE SINGLE VARIABLE MULTI-TARGET STREAMING CORE ---
+                            # --- UPGRADE v52.6: THE WORKING FILE UPLOAD BOUNDARY STRUCTURE ---
                             file_url = "https://api.monday.com/v2/file"
-                            file_headers = {"Authorization": MONDAY_API_TOKEN, "API-Version": "2023-10"}
+                            file_headers = {
+                                "Authorization": MONDAY_API_TOKEN,
+                                "API-Version": "2023-10"
+                            }
                             
-                            # Fallback array matrix targets both popular plural configurations 'file' and 'files'
                             target_column_ids = ["file", "files"]
                             
                             for target_col in target_column_ids:
-                                # Securely parameters query strings to avoid layout truncation drops
+                                # Safe GraphQL string query mapping variables precisely to the target columns
                                 file_query = f'mutation add_file($file: File!) {{ add_file_to_column (item_id: {new_item_id}, column_id: "{target_col}", file: $file) {{ id }} }}'
                                 
-                                file_upload_data = {"query": file_query, "variables": {"file": None}}
-                                file_map = {"file": ["variables.file"]}
+                                file_upload_data = {
+                                    "query": file_query,
+                                    "variables": {"file": None}
+                                }
+                                
+                                # CRITICAL CORRECTION: Monday requires the data variable boundary pointer key to name explicitly as "image"
+                                file_map = {
+                                    "image": ["variables.file"]
+                                }
                                 
                                 form_payload = {
                                     "operations": (None, json.dumps(file_upload_data), 'application/json'),
                                     "map": (None, json.dumps(file_map), 'application/json')
                                 }
+                                
+                                # Fixed: Mapped form file key strictly to "image" to complete the GraphQL map schema link
                                 form_files = {
-                                    "file": (f"{target_label}_Analysis.pdf", pdf_b, 'application/pdf')
+                                    "image": (f"{target_label}_Analysis.pdf", pdf_b, 'application/pdf')
                                 }
                                 
-                                # Fire stream post across target vectors synchronously
                                 requests.post(file_url, headers=file_headers, data=form_payload, files=form_files)
                                 
                             st.toast("🚀 Project synced and Audit PDF uploaded straight into your Monday board row!", icon="✨")
