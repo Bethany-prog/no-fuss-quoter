@@ -325,7 +325,7 @@ else:
             st.rerun()
 
 if vault_jobs:
-    load_choice = st.sidebar.selectbox("Cloud Retrieval Menus", ["-- Choose Project --"] + vault_jobs)
+    load_choice = st.selectbox("Cloud Retrieval Menus", ["-- Choose Project --"] + vault_jobs)
     if st.sidebar.button("📂 LOAD PROJECT") and load_choice != "-- Choose Project --":
         load_project_from_vault(load_choice)
         
@@ -737,7 +737,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
                         if "data" in res_data and "create_item" in res_data["data"] and res_data["data"]["create_item"]:
                             new_item_id = int(res_data["data"]["create_item"]["id"])
                             
-                            # --- UPGRADE v52.6: THE WORKING FILE UPLOAD BOUNDARY STRUCTURE ---
+                            # --- UPGRADE v52.7: FIXED GRAPHQL VARIABLE SPEC FOR MULTIPART UPLOADS ---
                             file_url = "https://api.monday.com/v2/file"
                             file_headers = {
                                 "Authorization": MONDAY_API_TOKEN,
@@ -747,15 +747,16 @@ if st.session_state.df is not None and not st.session_state.df.empty:
                             target_column_ids = ["file", "files"]
                             
                             for target_col in target_column_ids:
-                                # Safe GraphQL string query mapping variables precisely to the target columns
+                                # Monday expects structural queries with $file variables passed explicitly inside the query dictionary object
                                 file_query = f'mutation add_file($file: File!) {{ add_file_to_column (item_id: {new_item_id}, column_id: "{target_col}", file: $file) {{ id }} }}'
                                 
+                                # operations parameter MUST define the file variable as null initially to match form-data mapping protocols
                                 file_upload_data = {
                                     "query": file_query,
                                     "variables": {"file": None}
                                 }
                                 
-                                # CRITICAL CORRECTION: Monday requires the data variable boundary pointer key to name explicitly as "image"
+                                # Map ties the operations file variable to the key named "image" in form-files
                                 file_map = {
                                     "image": ["variables.file"]
                                 }
@@ -765,7 +766,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
                                     "map": (None, json.dumps(file_map), 'application/json')
                                 }
                                 
-                                # Fixed: Mapped form file key strictly to "image" to complete the GraphQL map schema link
+                                # Explicit form boundary attachment matching the map layout precisely
                                 form_files = {
                                     "image": (f"{target_label}_Analysis.pdf", pdf_b, 'application/pdf')
                                 }
