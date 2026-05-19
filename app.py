@@ -67,7 +67,7 @@ def get_gs_per_seat_labour(seats):
     return 0, ""
 
 # ==============================================================================
-# 3. PDF AUDIT ENGINE (STRUCTURAL TABLE TIERS WITH UNBREAKABLE STREAM WRITING)
+# 3. PDF AUDIT ENGINE (FULLY FIXED FOOLPROOF BYTE COMPILER BUFFER ENGINE)
 # ==============================================================================
 def clean_text(txt):
     if not txt: return ""
@@ -140,10 +140,14 @@ def create_calculation_pdf(name, subtotal, labour, waiver, cartage, grand, weeks
     pdf.ln(8); pdf.set_fill_color(0, 230, 118); pdf.set_text_color(26, 29, 45); pdf.set_font("Arial", "B", 13)
     pdf.cell(0, 14, f" GRAND TOTAL (EX GST): ${grand:,.2f} ", 0, 1, "R", True)
     
-    # CORE REPAIR v51.5: Explicitly passes 'dest=S' or falls back safely to byte string formatting outputs 
+    # UNBREAKABLE PATCH v51.6: Safely converts string bytes using universal latin-1 codecs to block blanks
     try:
-        return pdf.output(dest='S')
-    except:
+        raw_pdf_str = pdf.output(dest='S')
+        if isinstance(raw_pdf_str, str):
+            return raw_pdf_str.encode('latin-1')
+        return bytes(raw_pdf_str)
+    except Exception as pdf_output_err:
+        # Final safety trap fallback to standard memory structures
         return bytes(pdf.output())
 
 # ==============================================================================
