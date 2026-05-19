@@ -737,8 +737,10 @@ if st.session_state.df is not None and not st.session_state.df.empty:
                         if "data" in res_data and "create_item" in res_data["data"] and res_data["data"]["create_item"]:
                             new_item_id = int(res_data["data"]["create_item"]["id"])
                             
-                            # --- UPGRADE v52.7: FIXED GRAPHQL VARIABLE SPEC FOR MULTIPART UPLOADS ---
+                            # --- UPGRADE v52.8: THE FIXED MEMORY BOUNDARY MULTIPART UPLOADER ---
                             file_url = "https://api.monday.com/v2/file"
+                            
+                            # We completely strip out Content-Type text keys so boundary strings auto-calculate
                             file_headers = {
                                 "Authorization": MONDAY_API_TOKEN,
                                 "API-Version": "2023-10"
@@ -747,30 +749,25 @@ if st.session_state.df is not None and not st.session_state.df.empty:
                             target_column_ids = ["file", "files"]
                             
                             for target_col in target_column_ids:
-                                # Monday expects structural queries with $file variables passed explicitly inside the query dictionary object
-                                file_query = f'mutation add_file($file: File!) {{ add_file_to_column (item_id: {new_item_id}, column_id: "{target_col}", file: $file) {{ id }} }}'
+                                file_query = f'mutation ($file: File!) {{ add_file_to_column (item_id: {new_item_id}, column_id: "{target_col}", file: $file) {{ id }} }}'
                                 
-                                # operations parameter MUST define the file variable as null initially to match form-data mapping protocols
-                                file_upload_data = {
-                                    "query": file_query,
-                                    "variables": {"file": None}
-                                }
-                                
-                                # Map ties the operations file variable to the key named "image" in form-files
-                                file_map = {
-                                    "image": ["variables.file"]
-                                }
-                                
+                                # REPAIR: operations must be a plain dictionary string without None fields to execute correctly as text payload elements
                                 form_payload = {
-                                    "operations": (None, json.dumps(file_upload_data), 'application/json'),
-                                    "map": (None, json.dumps(file_map), 'application/json')
+                                    "operations": json.dumps({
+                                        "query": file_query,
+                                        "variables": {"file": None}
+                                    }),
+                                    "map": json.dumps({
+                                        "image": ["variables.file"]
+                                    })
                                 }
                                 
-                                # Explicit form boundary attachment matching the map layout precisely
+                                # Map the actual raw byte payload frame straight under the image index pointer
                                 form_files = {
                                     "image": (f"{target_label}_Analysis.pdf", pdf_b, 'application/pdf')
                                 }
                                 
+                                # Dispatches operational fields via data parameter to format cleanly as text multi-parts
                                 requests.post(file_url, headers=file_headers, data=form_payload, files=form_files)
                                 
                             st.toast("🚀 Project synced and Audit PDF uploaded straight into your Monday board row!", icon="✨")
