@@ -6,6 +6,7 @@ from fpdf import FPDF
 import re
 import json
 import os
+import requests  # Added for monday.com API communication
 from geopy.geocoders import Nominatim
 from geopy.distance import geodesic
 
@@ -21,6 +22,12 @@ if not os.path.exists(VAULT_DIR):
 # SOURCE FACTORY DEPOT LOCK: 9 Battery Crt, Cranbourne West VIC 3977
 DEPOT_LAT = -38.1171
 DEPOT_LON = 145.2442
+
+# --- MONDAY.COM INTEGRATION CONFIGURATION ---
+# Live parameters safely locked in place below
+MONDAY_API_TOKEN = "eyJhbGciOiJIUzI1NiJ9.eyJ0aWQiOjY2MDE0NTU3OSwiYWFpIjoxMSwidWlkIjoxMDM5MDY4MzIsImlhZCI6IjIwMjYtMDUtMTlUMDY6MDM6NDAuNDI1WiIsInBlciI6Im1lOndyaXRlIiwiYWN0aWQiOjM1MTk3NzkyLCJyZ24iOiJhcHNlMiJ9.WhU9v9lEvl02QFEWm760Q17I6T_RkNTgS4mW5tFw_vk"
+MONDAY_BOARD_ID = "5028633785"
+# ---------------------------------------------
 
 # ==============================================================================
 # 1. ACCESS CONTROL TOWER (SECURITY GATE)
@@ -123,7 +130,7 @@ def create_calculation_pdf(name, subtotal, labour, waiver, cartage, grand, weeks
             r_rate = display_unit_rate * 0.5 if item['Is_Marquee'] else display_unit_rate
             r_total = (item['Qty'] * r_rate * (weeks-1)) * dm
             
-            pdf.cell(col_w[0], 8, clean_text(f"   └ Recurring Hire (x{weeks-1} wks)"), 1, 0, "L")
+            pdf.cell(col_w[0], 8, clean_text(f"    └ Recurring Hire (x{weeks-1} wks)"), 1, 0, "L")
             pdf.cell(col_w[1], 8, f"{item['Qty']:,.0f}", 1, 0, "C")
             pdf.cell(col_w[2], 8, f"${r_rate:,.2f}", 1, 0, "R")
             pdf.cell(col_w[3], 8, f"{item.get('Discount', 0.0):.1f}%", 1, 0, "C")
@@ -140,7 +147,6 @@ def create_calculation_pdf(name, subtotal, labour, waiver, cartage, grand, weeks
     pdf.ln(8); pdf.set_fill_color(0, 230, 118); pdf.set_text_color(26, 29, 45); pdf.set_font("Arial", "B", 13)
     pdf.cell(0, 14, f" GRAND TOTAL (EX GST): ${grand:,.2f} ", 0, 1, "R", True)
     
-    # UNBREAKABLE MASTER BYTE REPAIR: Reads from internal buffers natively to ensure text pops up on page layouts
     try:
         raw_pdf_bytes = pdf.output()
         if isinstance(raw_pdf_bytes, str):
@@ -235,6 +241,7 @@ def load_project_from_vault(label_name):
 # ==============================================================================
 st.markdown("""<style>
     .main { background-color: #F4F7F9 !important; }
+    .stAppDeployButton { display:none !important; }
     h1 { color: #1A1D2D !important; font-size: 52px !important; font-weight: 900 !important; }
     h3 { color: #FFFFFF !important; border-left: 10px solid #00E676; padding: 40px; background-color: #1A1D2D; border-radius: 0 12px 12px 0; font-size: 24px !important; margin-bottom: 15px; }
     div.stMetric { background-color: #FFFFFF !important; padding: 15px !important; border-radius: 12px !important; border: 2px solid #3D5AFE !important; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
@@ -401,12 +408,11 @@ st.session_state.saved_waiver_mode = waiver_mode
 st.divider(); col1, col2 = st.columns(2)
 with col1:
     st.markdown("### ⚡ Structures")
-    # UPGRADE v52.0: Added explicit product variant configuration lists
     s_type = st.selectbox("Structure Type", ["Standard Frame Marquee", "WOW Marquee"], key=f"str_type_{st.session_state.reset_key_seed}")
     
     if s_type == "WOW Marquee":
         st.caption("⚡ **Engine Alert:** WOW Marquee pricing rule active ($1,029.00 Base / Custom Labor Engine).")
-        m_in = "6x3" # Hardcoded structural frame size profile
+        m_in = "6x3" 
         m_q = st.number_input("Qty", min_value=1, value=1, key=f"str_qty_{st.session_state.reset_key_seed}")
     else:
         m_in = st.text_input("Size (e.g. 10x15)", key=f"str_sz_{st.session_state.reset_key_seed}")
@@ -416,25 +422,22 @@ with col1:
     
     if st.button("Add Structure") and m_in and m_q:
         if s_type == "WOW Marquee":
-            # UPGRADE v52.0: WOW Marquee implementation logic
             brate = 1029.00
             span, length = 6, 3
-            # Baseline weight structure footprint defaults to marquee rules for standard scaling
             logic = STRUCT_LOGIC[6] 
             
             new_struct_df = pd.DataFrame([{
                 "Qty": m_q, "Product": "WOW Marquee 6x3m", "Unit Rate": brate, "Min_Lab": 0, 
-                "Raw_Lab": 0.0, # Handled dynamically inside summary compiler layer below
+                "Raw_Lab": 0.0, 
                 "Lab_Math": "WOW Engine Logic Triggered", "KG": 450.0 * m_q, 
                 "Is_Marquee": True, "Discount": 0.0, "Lab_Per_Unit": 0, "Base_Hire": brate, "Anchoring": anchoring_type, "Override_Rate": 0.0
             }])
             st.session_state.df = pd.concat([st.session_state.df, new_struct_df], ignore_index=True)
             
             if anchoring_type == "Weighted":
-                # High wind loads engineering rule: 500kg per leg when no pegging
-                legs_count = 4 * m_q # Standard single frame post configuration
-                total_ballast_needed = legs_count * 500.0 # 500kg per leg
-                calculated_weights = math.ceil(total_ballast_needed / 30.0) # Convert to standard 30kg blocks count
+                legs_count = 4 * m_q 
+                total_ballast_needed = legs_count * 500.0 
+                calculated_weights = math.ceil(total_ballast_needed / 30.0) 
                 w_lab_cost = calculated_weights * 1.65
                 
                 new_weight_df = pd.DataFrame([{
@@ -523,27 +526,22 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     h_tot_c, h_wk1_gear, total_kg, itrac_sqm = 0.0, 0.0, 0.0, 0.0
     has_itrac = False
     
-    # UPGRADE v52.0: Pre-compile table structure to evaluate multi-item conditions for WOW labor adjustments
     other_products_count = 0
     for idx, row in st.session_state.df.iterrows():
         p_name = row["Product"]
         if p_name != "30kg Weights" and "WOW Marquee" not in p_name:
             other_products_count += 1
             
-    # Inject active labor values to WOW line items dynamically based on setup scenario
     for idx, row in st.session_state.df.iterrows():
         if "WOW Marquee" in row["Product"]:
             qty_scalar = row["Qty"]
             if other_products_count > 0:
-                # Installed with other items on the quote -> $706 base
                 st.session_state.df.at[idx, "Raw_Lab"] = 706.00 * qty_scalar
                 st.session_state.df.at[idx, "Lab_Math"] = f"WOW Marquee 6x3m: Setup Efficiency Rate Applied = $706.00"
             else:
-                # Installed completely by itself -> $1,411 base
                 st.session_state.df.at[idx, "Raw_Lab"] = 1411.00 * qty_scalar
                 st.session_state.df.at[idx, "Lab_Math"] = f"WOW Marquee 6x3m: Standalone Installation Base = $1,411.00"
 
-    # Execution Loop
     for idx, row in st.session_state.df.iterrows():
         override = row.get("Override_Rate", 0.0)
         active_base = override if override > 0 else row["Unit Rate"]
@@ -627,11 +625,9 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     m[4].metric("WEIGHT", f"{round(total_kg, 0):,}kg")
     m[5].metric("TRUCKS", f"{trks}")
     
-    st.markdown(f"<div class='gt-banner'>GRAND TOTAL (EX GST): ${h_tot_c + lab + wav + crt:,.2f}</div>", unsafe_allow_html=True)
+    grand_total_calc = h_tot_c + lab + wav + crt
+    st.markdown(f"<div class='gt-banner'>GRAND TOTAL (EX GST): ${grand_total_calc:,.2f}</div>", unsafe_allow_html=True)
     
-    # ------------------------------------------------------------------------------
-    # INTERACTION ARRAY PROOF COMPILER BLOCK
-    # ------------------------------------------------------------------------------
     l_maths = []
     if waiver_mode == "Free":
         l_maths.append("Damage Waiver: Free")
@@ -651,13 +647,11 @@ if st.session_state.df is not None and not st.session_state.df.empty:
         for idx, row in st.session_state.df.iterrows():
             if row.get('Lab_Math') and row['Lab_Math'].strip() != "":
                 raw_item_cost = row['Raw_Lab']
-                
                 clean_lbl = str(row['Product'])
                 if 'Anchoring' in row and row['Anchoring'] and row['Anchoring'] != "":
                     clean_lbl += f" ({row['Anchoring']})"
                 
                 if "WOW Marquee" in row['Product']:
-                    # Special short label for WOW itemised proofs
                     formula_part = "Fixed Rate Matrix" if other_products_count > 0 else "Standalone Matrix"
                 else:
                     formula_part = row['Lab_Math'].split(': ')[1]
@@ -666,7 +660,6 @@ if st.session_state.df is not None and not st.session_state.df.empty:
                     item_share_ratio = raw_item_cost / raw_lab_pool if raw_lab_pool > 0 else 1.0
                     top_up_amount = (350.00 - raw_lab_pool) * item_share_ratio
                     final_target = raw_item_cost + top_up_amount
-                    
                     l_maths.append(f"{clean_lbl} ({formula_part}) = ${raw_item_cost:,.2f} + ${top_up_amount:,.2f}* = ${final_target:,.2f}")
                 else:
                     l_maths.append(f"{clean_lbl} ({formula_part}) = ${raw_item_cost:,.2f} [Active Charge]")
@@ -698,9 +691,50 @@ if st.session_state.df is not None and not st.session_state.df.empty:
                     "items": st.session_state.df.to_dict(orient="records")
                 }
                 
+                # Local JSON File Save Protocol
                 with open(f"{VAULT_DIR}/{target_label}.json", "w") as f:
                     json.dump(payload, f)
+
+                # --- LIVE MONDAY.COM SYNC ENGINE ---
+                if MONDAY_API_TOKEN != "YOUR_MONDAY_API_TOKEN_HERE" and MONDAY_BOARD_ID != "YOUR_MONDAY_BOARD_ID_HERE":
+                    url = "https://api.monday.com/v2"
+                    headers = {
+                        "Authorization": MONDAY_API_TOKEN,
+                        "Content-Type": "application/json",
+                        "API-Version": "2023-10"
+                    }
                     
+                    # Convert pricing metrics, status text (with Title Casing mapping), and address keys
+                    column_values_json = json.dumps({
+                        "status": {"label": str(st.session_state.status).title()},
+                        "text": st.session_state.site_address_str,
+                        "numeric": round(grand_total_calc, 2),
+                        "date4": {"date": st.session_state.start_date_val.strftime("%Y-%m-%d")}
+                    })
+                    
+                    # Construct graphQL query to cleanly append rows to your tracking board
+                    query = """
+                    mutation ($boardId: ID!, $itemName: String!, $columnValues: JSON!) {
+                        create_item (board_id: $boardId, item_name: $itemName, column_values: $columnValues, create_labels_if_missing: true) {
+                            id
+                        }
+                    }
+                    """
+                    
+                    variables = {
+                        "boardId": MONDAY_BOARD_ID,
+                        "itemName": target_label,
+                        "columnValues": column_values_json
+                    }
+                    
+                    # Fire payload over API webstream safely without locking UI thread execution
+                    response = requests.post(url, json={"query": query, "variables": variables}, headers=headers)
+                    if response.status_code == 200:
+                        st.toast("🚀 Successfully synced pricing metadata to Monday.com Board!", icon="✨")
+                    else:
+                        st.sidebar.warning(f"Monday API status drop: Code {response.status_code}")
+                # ----------------------------------------
+                
                 st.session_state.active_filename = target_label
                 st.session_state.proj = target_label
                 st.session_state.rename_mode = False
@@ -712,5 +746,5 @@ if st.session_state.df is not None and not st.session_state.df.empty:
             st.error("Cannot sync data tables because workspace is empty.")
             
     cleaned_pdf_items = st.session_state.df.to_dict('records')
-    pdf_b = create_calculation_pdf(st.session_state.proj, h_tot_c, lab, wav, crt, h_tot_c+lab+wav+crt, weeks, start_d, end_d, cleaned_pdf_items, l_maths, st.session_state.status)
+    pdf_b = create_calculation_pdf(st.session_state.proj, h_tot_c, lab, wav, crt, grand_total_calc, weeks, start_d, end_d, cleaned_pdf_items, l_maths, st.session_state.status)
     action_col_2.download_button("📥 DOWNLOAD DETAILED AUDIT PDF", pdf_b, file_name=f"{st.session_state.proj}_Analysis.pdf", use_container_width=True)
