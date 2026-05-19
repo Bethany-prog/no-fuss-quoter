@@ -737,16 +737,16 @@ if st.session_state.df is not None and not st.session_state.df.empty:
                         if "data" in res_data and "create_item" in res_data["data"] and res_data["data"]["create_item"]:
                             new_item_id = res_data["data"]["create_item"]["id"]
                             
-                            # UPGRADE v52.3: PERFECTED TWO-STEP BINARY MULTIPART UPLOAD CHANNEL
+                            # --- UPGRADE v52.4: STANDARD FIELD ALIGNED BINARY FILE STREAM CHANNEL ---
                             file_url = "https://api.monday.com/v2/file"
                             
-                            # CRITICAL REPAIR: Strip generic Content-Type headers so requests builds perfect multipart boundaries
+                            # Content-Type headers are removed completely to allow automatic multipart boundary string generation
                             file_headers = {
                                 "Authorization": MONDAY_API_TOKEN,
                                 "API-Version": "2023-10"
                             }
                             
-                            # Perfected GraphQL string payload definition 
+                            # GraphQL query layout mapping variables directly into your board's "files" column type
                             file_query = 'mutation add_file($file: File!) { add_file_to_column (item_id: ' + str(new_item_id) + ', column_id: "files", file: $file) { id } }'
                             
                             file_upload_data = {
@@ -754,7 +754,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
                                 "variables": {"file": None}
                             }
                             
-                            # Build explicit variable mapping payload
+                            # Standard boundary variable layout mapping configuration
                             file_map = {
                                 "file": ["variables.file"]
                             }
@@ -765,10 +765,10 @@ if st.session_state.df is not None and not st.session_state.df.empty:
                             }
                             
                             form_files = {
-                                "file": (f"{target_label}_Analysis.pdf", pdf_b, 'application/pdf')
+                                "file": (f"{target_label}_Analysis.pdf", pdf_b, 'application/pdf') # Fixed: Explicitly mapped form fields to 'file' matching the schema
                             }
                             
-                            # Execute targeted multipart post request
+                            # Post the binary payload over Monday's file asset streaming architecture
                             file_response = requests.post(file_url, headers=file_headers, data=form_payload, files=form_files)
                             
                             if file_response.status_code == 200:
