@@ -647,6 +647,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
         for idx, row in st.session_state.df.iterrows():
             if row.get('Lab_Math') and row['Lab_Math'].strip() != "":
                 raw_item_cost = row['Raw_Lab']
+                
                 clean_lbl = str(row['Product'])
                 if 'Anchoring' in row and row['Anchoring'] and row['Anchoring'] != "":
                     clean_lbl += f" ({row['Anchoring']})"
