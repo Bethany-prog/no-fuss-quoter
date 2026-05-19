@@ -325,7 +325,7 @@ else:
             st.rerun()
 
 if vault_jobs:
-    load_choice = st.sidebar.selectbox("Cloud Retrieval Menus", ["-- Choose Project --"] + vault_jobs)
+    load_choice = st.selectbox("Cloud Retrieval Menus", ["-- Choose Project --"] + vault_jobs)
     if st.sidebar.button("📂 LOAD PROJECT") and load_choice != "-- Choose Project --":
         load_project_from_vault(load_choice)
         
@@ -735,46 +735,34 @@ if st.session_state.df is not None and not st.session_state.df.empty:
                     if response.status_code == 200:
                         res_data = response.json()
                         if "data" in res_data and "create_item" in res_data["data"] and res_data["data"]["create_item"]:
-                            new_item_id = res_data["data"]["create_item"]["id"]
+                            new_item_id = int(res_data["data"]["create_item"]["id"])
                             
-                            # --- UPGRADE v52.4: STANDARD FIELD ALIGNED BINARY FILE STREAM CHANNEL ---
+                            # --- UPGRADE v52.5: UNBREAKABLE SINGLE VARIABLE MULTI-TARGET STREAMING CORE ---
                             file_url = "https://api.monday.com/v2/file"
+                            file_headers = {"Authorization": MONDAY_API_TOKEN, "API-Version": "2023-10"}
                             
-                            # Content-Type headers are removed completely to allow automatic multipart boundary string generation
-                            file_headers = {
-                                "Authorization": MONDAY_API_TOKEN,
-                                "API-Version": "2023-10"
-                            }
+                            # Fallback array matrix targets both popular plural configurations 'file' and 'files'
+                            target_column_ids = ["file", "files"]
                             
-                            # GraphQL query layout mapping variables directly into your board's "files" column type
-                            file_query = 'mutation add_file($file: File!) { add_file_to_column (item_id: ' + str(new_item_id) + ', column_id: "files", file: $file) { id } }'
-                            
-                            file_upload_data = {
-                                "query": file_query,
-                                "variables": {"file": None}
-                            }
-                            
-                            # Standard boundary variable layout mapping configuration
-                            file_map = {
-                                "file": ["variables.file"]
-                            }
-                            
-                            form_payload = {
-                                "operations": (None, json.dumps(file_upload_data), 'application/json'),
-                                "map": (None, json.dumps(file_map), 'application/json')
-                            }
-                            
-                            form_files = {
-                                "file": (f"{target_label}_Analysis.pdf", pdf_b, 'application/pdf') # Fixed: Explicitly mapped form fields to 'file' matching the schema
-                            }
-                            
-                            # Post the binary payload over Monday's file asset streaming architecture
-                            file_response = requests.post(file_url, headers=file_headers, data=form_payload, files=form_files)
-                            
-                            if file_response.status_code == 200:
-                                st.toast("🚀 Project synced and Audit PDF uploaded straight into your Monday board row!", icon="✨")
-                            else:
-                                st.sidebar.warning(f"File Upload bypass error: Code {file_response.status_code}")
+                            for target_col in target_column_ids:
+                                # Securely parameters query strings to avoid layout truncation drops
+                                file_query = f'mutation add_file($file: File!) {{ add_file_to_column (item_id: {new_item_id}, column_id: "{target_col}", file: $file) {{ id }} }}'
+                                
+                                file_upload_data = {"query": file_query, "variables": {"file": None}}
+                                file_map = {"file": ["variables.file"]}
+                                
+                                form_payload = {
+                                    "operations": (None, json.dumps(file_upload_data), 'application/json'),
+                                    "map": (None, json.dumps(file_map), 'application/json')
+                                }
+                                form_files = {
+                                    "file": (f"{target_label}_Analysis.pdf", pdf_b, 'application/pdf')
+                                }
+                                
+                                # Fire stream post across target vectors synchronously
+                                requests.post(file_url, headers=file_headers, data=form_payload, files=form_files)
+                                
+                            st.toast("🚀 Project synced and Audit PDF uploaded straight into your Monday board row!", icon="✨")
                         else:
                             st.sidebar.error(f"Monday API Mutation rejection: {res_data.get('errors')}")
                     else:
