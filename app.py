@@ -6,7 +6,7 @@ from fpdf import FPDF
 import re
 import json
 import os
-import requests  # Added for monday.com API communication
+import requests  # Handles monday.com API communication
 from geopy.geocoders import Nominatim
 from geopy.distance import geodesic
 
@@ -24,7 +24,6 @@ DEPOT_LAT = -38.1171
 DEPOT_LON = 145.2442
 
 # --- MONDAY.COM INTEGRATION CONFIGURATION ---
-# Live parameters safely locked in place below
 MONDAY_API_TOKEN = "eyJhbGciOiJIUzI1NiJ9.eyJ0aWQiOjY2MDE0NTU3OSwiYWFpIjoxMSwidWlkIjoxMDM5MDY4MzIsImlhZCI6IjIwMjYtMDUtMTlUMDY6MDM6NDAuNDI1WiIsInBlciI6Im1lOndyaXRlIiwiYWN0aWQiOjM1MTk3NzkyLCJyZ24iOiJhcHNlMiJ9.WhU9v9lEvl02QFEWm760Q17I6T_RkNTgS4mW5tFw_vk"
 MONDAY_BOARD_ID = "5028633785"
 # ---------------------------------------------
@@ -674,6 +673,9 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     st.markdown("")  
     action_col_1, action_col_2 = st.columns(2)
     
+    cleaned_pdf_items = st.session_state.df.to_dict('records')
+    pdf_b = create_calculation_pdf(st.session_state.proj, h_tot_c, lab, wav, crt, grand_total_calc, weeks, start_d, end_d, cleaned_pdf_items, l_maths, st.session_state.status)
+
     if action_col_1.button("💾 SAVE PROJECT TO CLOUD", use_container_width=True):
         if st.session_state.df is not None and not st.session_state.df.empty:
             try:
@@ -705,15 +707,18 @@ if st.session_state.df is not None and not st.session_state.df.empty:
                         "API-Version": "2023-10"
                     }
                     
-                    # Convert pricing metrics, status text (with Title Casing mapping), and address keys
+                    # UPGRADE v52.2: Mapping strictly to universal Monday token index fallback values
                     column_values_json = json.dumps({
                         "status": {"label": str(st.session_state.status).title()},
                         "text": st.session_state.site_address_str,
-                        "numeric": round(grand_total_calc, 2),
-                        "date4": {"date": st.session_state.start_date_val.strftime("%Y-%m-%d")}
+                        "text_1": st.session_state.site_address_str, # Fallback index copy injection
+                        "numbers": round(grand_total_calc, 2),
+                        "numeric": round(grand_total_calc, 2), # Fallback index copy injection
+                        "date": {"date": st.session_state.start_date_val.strftime("%Y-%m-%d")},
+                        "date4": {"date": st.session_state.start_date_val.strftime("%Y-%m-%d")} # Fallback index copy injection
                     })
                     
-                    # Construct graphQL query to cleanly append rows to your tracking board
+                    # Mutation query to create the item row
                     query = """
                     mutation ($boardId: ID!, $itemName: String!, $columnValues: JSON!) {
                         create_item (board_id: $boardId, item_name: $itemName, column_values: $columnValues, create_labels_if_missing: true) {
@@ -728,10 +733,45 @@ if st.session_state.df is not None and not st.session_state.df.empty:
                         "columnValues": column_values_json
                     }
                     
-                    # Fire payload over API webstream safely without locking UI thread execution
                     response = requests.post(url, json={"query": query, "variables": variables}, headers=headers)
                     if response.status_code == 200:
-                        st.toast("🚀 Successfully synced pricing metadata to Monday.com Board!", icon="✨")
+                        res_data = response.json()
+                        if "data" in res_data and "create_item" in res_data["data"] and res_data["data"]["create_item"]:
+                            new_item_id = res_data["data"]["create_item"]["id"]
+                            
+                            # UPGRADE v52.2: STEP 2 - STREAM THE PDF DIRECTLY INTO THE CREATED ROW FILE COLUMN
+                            file_url = "https://api.monday.com/v2/file"
+                            file_headers = {
+                                "Authorization": MONDAY_API_TOKEN,
+                                "API-Version": "2023-10"
+                            }
+                            
+                            # GraphQL operation spec mapping the file straight into your 'files' type column
+                            file_query = f'mutation {{ add_file_to_column (item_id: {new_item_id}, column_id: "files", file: $file) {{ id }} }}'
+                            
+                            file_payload = {
+                                "query": file_query
+                            }
+                            
+                            # Formulate standard multipart/form-data boundary wrapper
+                            file_upload_data = [
+                                ('query', (None, file_query)),
+                                ('map', (None, json.dumps({"image": ["variables.file"]})))
+                            ]
+                            
+                            file_binary_stream = [
+                                ('image', (f"{target_label}_Analysis.pdf", pdf_b, 'application/pdf'))
+                            ]
+                            
+                            # Fire multipart binary directly over Monday's file stream server
+                            file_response = requests.post(file_url, headers=file_headers, data={"query": f'mutation ($file: File!) {{ add_file_to_column (file: $file, item_id: {new_item_id}, column_id: "files") {{ id }} }}'}, files=[('variables[file]', (f"{target_label}_Analysis.pdf", pdf_b, 'application/pdf'))])
+                            
+                            if file_response.status_code == 200:
+                                st.toast("🚀 Project synced and Audit PDF uploaded straight into your Monday board row!", icon="✨")
+                            else:
+                                st.toast("✅ Row built, but File attachment column mapping bypassed. Ensure your column ID is named 'files'.", icon="ℹ️")
+                        else:
+                            st.sidebar.error(f"Monday API Mutation rejection: {res_data.get('errors')}")
                     else:
                         st.sidebar.warning(f"Monday API status drop: Code {response.status_code}")
                 # ----------------------------------------
@@ -746,6 +786,4 @@ if st.session_state.df is not None and not st.session_state.df.empty:
         else:
             st.error("Cannot sync data tables because workspace is empty.")
             
-    cleaned_pdf_items = st.session_state.df.to_dict('records')
-    pdf_b = create_calculation_pdf(st.session_state.proj, h_tot_c, lab, wav, crt, grand_total_calc, weeks, start_d, end_d, cleaned_pdf_items, l_maths, st.session_state.status)
     action_col_2.download_button("📥 DOWNLOAD DETAILED AUDIT PDF", pdf_b, file_name=f"{st.session_state.proj}_Analysis.pdf", use_container_width=True)
