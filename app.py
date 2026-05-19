@@ -707,18 +707,16 @@ if st.session_state.df is not None and not st.session_state.df.empty:
                         "API-Version": "2023-10"
                     }
                     
-                    # UPGRADE v52.2: Mapping strictly to universal Monday token index fallback values
                     column_values_json = json.dumps({
                         "status": {"label": str(st.session_state.status).title()},
                         "text": st.session_state.site_address_str,
-                        "text_1": st.session_state.site_address_str, # Fallback index copy injection
+                        "text_1": st.session_state.site_address_str, 
                         "numbers": round(grand_total_calc, 2),
-                        "numeric": round(grand_total_calc, 2), # Fallback index copy injection
+                        "numeric": round(grand_total_calc, 2), 
                         "date": {"date": st.session_state.start_date_val.strftime("%Y-%m-%d")},
-                        "date4": {"date": st.session_state.start_date_val.strftime("%Y-%m-%d")} # Fallback index copy injection
+                        "date4": {"date": st.session_state.start_date_val.strftime("%Y-%m-%d")} 
                     })
                     
-                    # Mutation query to create the item row
                     query = """
                     mutation ($boardId: ID!, $itemName: String!, $columnValues: JSON!) {
                         create_item (board_id: $boardId, item_name: $itemName, column_values: $columnValues, create_labels_if_missing: true) {
@@ -739,37 +737,44 @@ if st.session_state.df is not None and not st.session_state.df.empty:
                         if "data" in res_data and "create_item" in res_data["data"] and res_data["data"]["create_item"]:
                             new_item_id = res_data["data"]["create_item"]["id"]
                             
-                            # UPGRADE v52.2: STEP 2 - STREAM THE PDF DIRECTLY INTO THE CREATED ROW FILE COLUMN
+                            # UPGRADE v52.3: PERFECTED TWO-STEP BINARY MULTIPART UPLOAD CHANNEL
                             file_url = "https://api.monday.com/v2/file"
+                            
+                            # CRITICAL REPAIR: Strip generic Content-Type headers so requests builds perfect multipart boundaries
                             file_headers = {
                                 "Authorization": MONDAY_API_TOKEN,
                                 "API-Version": "2023-10"
                             }
                             
-                            # GraphQL operation spec mapping the file straight into your 'files' type column
-                            file_query = f'mutation {{ add_file_to_column (item_id: {new_item_id}, column_id: "files", file: $file) {{ id }} }}'
+                            # Perfected GraphQL string payload definition 
+                            file_query = 'mutation add_file($file: File!) { add_file_to_column (item_id: ' + str(new_item_id) + ', column_id: "files", file: $file) { id } }'
                             
-                            file_payload = {
-                                "query": file_query
+                            file_upload_data = {
+                                "query": file_query,
+                                "variables": {"file": None}
                             }
                             
-                            # Formulate standard multipart/form-data boundary wrapper
-                            file_upload_data = [
-                                ('query', (None, file_query)),
-                                ('map', (None, json.dumps({"image": ["variables.file"]})))
-                            ]
+                            # Build explicit variable mapping payload
+                            file_map = {
+                                "file": ["variables.file"]
+                            }
                             
-                            file_binary_stream = [
-                                ('image', (f"{target_label}_Analysis.pdf", pdf_b, 'application/pdf'))
-                            ]
+                            form_payload = {
+                                "operations": (None, json.dumps(file_upload_data), 'application/json'),
+                                "map": (None, json.dumps(file_map), 'application/json')
+                            }
                             
-                            # Fire multipart binary directly over Monday's file stream server
-                            file_response = requests.post(file_url, headers=file_headers, data={"query": f'mutation ($file: File!) {{ add_file_to_column (file: $file, item_id: {new_item_id}, column_id: "files") {{ id }} }}'}, files=[('variables[file]', (f"{target_label}_Analysis.pdf", pdf_b, 'application/pdf'))])
+                            form_files = {
+                                "file": (f"{target_label}_Analysis.pdf", pdf_b, 'application/pdf')
+                            }
+                            
+                            # Execute targeted multipart post request
+                            file_response = requests.post(file_url, headers=file_headers, data=form_payload, files=form_files)
                             
                             if file_response.status_code == 200:
                                 st.toast("🚀 Project synced and Audit PDF uploaded straight into your Monday board row!", icon="✨")
                             else:
-                                st.toast("✅ Row built, but File attachment column mapping bypassed. Ensure your column ID is named 'files'.", icon="ℹ️")
+                                st.sidebar.warning(f"File Upload bypass error: Code {file_response.status_code}")
                         else:
                             st.sidebar.error(f"Monday API Mutation rejection: {res_data.get('errors')}")
                     else:
