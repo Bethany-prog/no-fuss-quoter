@@ -18,7 +18,7 @@ VAULT_DIR = "cloud_vault"
 if not os.path.exists(VAULT_DIR):
     os.makedirs(VAULT_DIR)
 
-# UPDATED SOURCE FACTORY DEPOT LOCK: 9 Battery Crt, Cranbourne West VIC 3977
+# SOURCE FACTORY DEPOT LOCK: 9 Battery Crt, Cranbourne West VIC 3977
 DEPOT_LAT = -38.1171
 DEPOT_LON = 145.2442
 
@@ -67,7 +67,7 @@ def get_gs_per_seat_labour(seats):
     return 0, ""
 
 # ==============================================================================
-# 3. PDF AUDIT ENGINE (STRUCTURAL TABLE TIERS WITH COMPARISON RATES)
+# 3. PDF AUDIT ENGINE (STRUCTURAL TABLE TIERS WITH UNBREAKABLE STREAM WRITING)
 # ==============================================================================
 def clean_text(txt):
     if not txt: return ""
@@ -139,7 +139,12 @@ def create_calculation_pdf(name, subtotal, labour, waiver, cartage, grand, weeks
 
     pdf.ln(8); pdf.set_fill_color(0, 230, 118); pdf.set_text_color(26, 29, 45); pdf.set_font("Arial", "B", 13)
     pdf.cell(0, 14, f" GRAND TOTAL (EX GST): ${grand:,.2f} ", 0, 1, "R", True)
-    return bytes(pdf.output())
+    
+    # CORE REPAIR v51.5: Explicitly passes 'dest=S' or falls back safely to byte string formatting outputs 
+    try:
+        return pdf.output(dest='S')
+    except:
+        return bytes(pdf.output())
 
 # ==============================================================================
 # 4. MASTER PRODUCT CATALOG LIST
