@@ -6,7 +6,6 @@ from fpdf import FPDF
 import re
 import json
 import os
-import requests  # Handles monday.com API communication
 from geopy.geocoders import Nominatim
 from geopy.distance import geodesic
 
@@ -22,11 +21,6 @@ if not os.path.exists(VAULT_DIR):
 # SOURCE FACTORY DEPOT LOCK: 9 Battery Crt, Cranbourne West VIC 3977
 DEPOT_LAT = -38.1171
 DEPOT_LON = 145.2442
-
-# --- MONDAY.COM INTEGRATION CONFIGURATION ---
-MONDAY_API_TOKEN = "eyJhbGciOiJIUzI1NiJ9.eyJ0aWQiOjY2MDE0NTU3OSwiYWFpIjoxMSwidWlkIjoxMDM5MDY4MzIsImlhZCI6IjIwMjYtMDUtMTlUMDY6MDM6NDAuNDI1WiIsInBlciI6Im1lOndyaXRlIiwiYWN0aWQiOjM1MTk3NzkyLCJyZ24iOiJhcHNlMiJ9.WhU9v9lEvl02QFEWm760Q17I6T_RkNTgS4mW5tFw_vk"
-MONDAY_BOARD_ID = "5028633785"
-# ---------------------------------------------
 
 # ==============================================================================
 # 1. ACCESS CONTROL TOWER (SECURITY GATE)
@@ -68,12 +62,12 @@ def get_gs_per_seat_labour(seats):
         if seats <= b["max"]:
             total_pool = (b["staff"] * b["hrs"] * rate) * 2 * 2
             per_seat = total_pool / seats
-            desc = f"Grandstand Seating Labour: ({b['staff']} staff x {b['hrs']}hrs x $55) x 2 x 2 = ${total_pool:,.2f}"
+            desc = f"Standard Seating: {seats:,.0f} seats -> Base Labour Allocations Matrix applied"
             return round(per_seat, 2), desc
     return 0, ""
 
 # ==============================================================================
-# 3. PDF AUDIT ENGINE (STRUCTURAL TABLE TIERS WITH UNIVERSAL BYTE STREAM FIX)
+# 3. PDF AUDIT ENGINE (STRUCTURAL TABLE TIERS WITH UNIVERSAL MEMORY BUFFERS)
 # ==============================================================================
 def clean_text(txt):
     if not txt: return ""
@@ -155,18 +149,13 @@ def create_calculation_pdf(name, subtotal, labour, waiver, cartage, grand, weeks
         return bytes(pdf.output())
 
 # ==============================================================================
-# 4. MASTER PRODUCT CATALOG LIST
+# 4. MASTER FLOORING PRODUCT CATALOG LIST (UPDATED TYPE NAME HEADING FOCUS)
 # ==============================================================================
-CATALOG = {
-    "Flooring": {
-        "I-Trac®": {"rate": 23.40, "block": 46.80, "lab_fix": 4.65, "kg": 15.0},
-        "Supa-Trac®": {"rate": 11.55, "block": 25.00, "lab_fix": 4.65, "kg": 4.5, "sheet_sqm": 3.13},
-        "Plastorip": {"rate": 10.15, "block": 20.30, "lab_fix": 3.05, "kg": 4.0},
-        "Trakmat": {"rate": 22.05, "block": 44.10, "lab_fix": 5.00, "kg": 35.0}
-    },
-    "Grandstands": {
-        "Standard Seating": {"rate": 15.00, "block": 30.00, "kg": 25.0}
-    }
+FLOORING_CATALOG = {
+    "I-Trac®": {"rate": 23.40, "block": 46.80, "lab_fix": 4.65, "kg": 15.0},
+    "Supa-Trac®": {"rate": 11.55, "block": 25.00, "lab_fix": 4.65, "kg": 4.5, "sheet_sqm": 3.13},
+    "Plastorip": {"rate": 10.15, "block": 20.30, "lab_fix": 3.05, "kg": 4.0},
+    "Trakmat": {"rate": 22.05, "block": 44.10, "lab_fix": 5.00, "kg": 35.0}
 }
 STRUCT_LOGIC = {span: {"bay": (5 if span >= 10 else 3), "s_rate": 23.0, "m_rate": 18.20, "s_lab": 0.40} for span in [3, 4, 6, 9, 10, 12, 15, 20]}
 STAGES = ["Quoted", "Accepted", "Paid", "On Hire", "Returned", "Cancelled"]
@@ -325,7 +314,7 @@ else:
             st.rerun()
 
 if vault_jobs:
-    load_choice = st.selectbox("Cloud Retrieval Menus", ["-- Choose Project --"] + vault_jobs)
+    load_choice = st.sidebar.selectbox("Cloud Retrieval Menus", ["-- Choose Project --"] + vault_jobs)
     if st.sidebar.button("📂 LOAD PROJECT") and load_choice != "-- Choose Project --":
         load_project_from_vault(load_choice)
         
@@ -406,29 +395,33 @@ st.session_state.saved_waiver_mode = waiver_mode
 
 st.divider(); col1, col2 = st.columns(2)
 with col1:
-    st.markdown("### ⚡ Structures")
-    s_type = st.selectbox("Structure Type", ["Standard Frame Marquee", "WOW Marquee"], key=f"str_type_{st.session_state.reset_key_seed}")
+    st.markdown("### ⚡ Structures & Seating Systems")
+    s_type = st.selectbox("Product Line Type", ["Standard Frame Marquee", "WOW Marquee", "Grandstand Seating Tier"], key=f"str_type_{st.session_state.reset_key_seed}")
     
     if s_type == "WOW Marquee":
-        st.caption("⚡ **Engine Alert:** WOW Marquee pricing rule active ($1,029.00 Base / Custom Labor Engine).")
+        st.caption("WOW Marquee rules enabled ($1,029.00 Base / Adaptive Setup Matrix).")
         m_in = "6x3" 
-        m_q = st.number_input("Qty", min_value=1, value=1, key=f"str_qty_{st.session_state.reset_key_seed}")
+        m_q = st.number_input("Structure Count Qty", min_value=1, value=1, key=f"str_qty_{st.session_state.reset_key_seed}")
+        anchoring_type = st.segmented_control("Anchoring Method", ["Pegged", "Weighted"], default="Pegged", key=f"anch_tog_{st.session_state.reset_key_seed}")
+        
+    elif s_type == "Grandstand Seating Tier":
+        # UPGRADE v53.0: Moving grandstand configuration forms inside structures dashboard zone
+        st.caption("Grandstand Tier rules active (Variable matrix labour pooling distribution system).")
+        m_in = "Seating System"
+        m_q = st.number_input("Total Seat Capacity Count", min_value=1, value=50, key=f"str_qty_{st.session_state.reset_key_seed}")
+        anchoring_type = "" # Bypassed
+        
     else:
         m_in = st.text_input("Size (e.g. 10x15)", key=f"str_sz_{st.session_state.reset_key_seed}")
-        m_q = st.number_input("Qty", min_value=1, value=None, key=f"str_qty_{st.session_state.reset_key_seed}")
+        m_q = st.number_input("Structure Count Qty", min_value=1, value=None, key=f"str_qty_{st.session_state.reset_key_seed}")
+        anchoring_type = st.segmented_control("Anchoring Method", ["Pegged", "Weighted"], default="Pegged", key=f"anch_tog_{st.session_state.reset_key_seed}")
         
-    anchoring_type = st.segmented_control("Anchoring Method", ["Pegged", "Weighted"], default="Pegged", key=f"anch_tog_{st.session_state.reset_key_seed}")
-    
-    if st.button("Add Structure") and m_in and m_q:
+    if st.button("Add Structural System") and m_in and m_q:
         if s_type == "WOW Marquee":
             brate = 1029.00
-            span, length = 6, 3
-            logic = STRUCT_LOGIC[6] 
-            
             new_struct_df = pd.DataFrame([{
                 "Qty": m_q, "Product": "WOW Marquee 6x3m", "Unit Rate": brate, "Min_Lab": 0, 
-                "Raw_Lab": 0.0, 
-                "Lab_Math": "WOW Engine Logic Triggered", "KG": 450.0 * m_q, 
+                "Raw_Lab": 0.0, "Lab_Math": "WOW Engine Logic Triggered", "KG": 450.0 * m_q, 
                 "Is_Marquee": True, "Discount": 0.0, "Lab_Per_Unit": 0, "Base_Hire": brate, "Anchoring": anchoring_type, "Override_Rate": 0.0
             }])
             st.session_state.df = pd.concat([st.session_state.df, new_struct_df], ignore_index=True)
@@ -438,7 +431,6 @@ with col1:
                 total_ballast_needed = legs_count * 500.0 
                 calculated_weights = math.ceil(total_ballast_needed / 30.0) 
                 w_lab_cost = calculated_weights * 1.65
-                
                 new_weight_df = pd.DataFrame([{
                     "Qty": calculated_weights, "Product": "30kg Weights", "Unit Rate": 6.60, "Min_Lab": 0, 
                     "Raw_Lab": w_lab_cost, "Lab_Math": f"30kg Weights: {calculated_weights:,.0f} units x $1.65", 
@@ -446,6 +438,21 @@ with col1:
                 }])
                 st.session_state.df = pd.concat([st.session_state.df, new_weight_df], ignore_index=True)
             st.rerun()
+            
+        elif s_type == "Grandstand Seating Tier":
+            # UPGRADE v53.0: Relocated deployment matrix logic execution block
+            lab_per_seat, lab_desc = get_gs_per_seat_labour(m_q)
+            base_seat_hire = 15.00 if weeks < 4 else 7.50
+            combined_unit_rate = base_seat_hire + lab_per_seat
+            
+            new_gs_df = pd.DataFrame([{
+                "Qty": m_q, "Product": "Standard Seating Grandstand", "Unit Rate": combined_unit_rate, "Min_Lab": 0, 
+                "Raw_Lab": 0.0, "Lab_Math": lab_desc, "KG": m_q * 25.0, "Is_Marquee": False, "Discount": 0.0, 
+                "Lab_Per_Unit": lab_per_seat, "Base_Hire": base_seat_hire, "Anchoring": "", "Override_Rate": 0.0
+            }])
+            st.session_state.df = pd.concat([st.session_state.df, new_gs_df], ignore_index=True)
+            st.rerun()
+            
         else:
             nums = re.findall(r'\d+', m_in)
             if len(nums) >= 2:
@@ -466,16 +473,10 @@ with col1:
                     num_bays = math.ceil(length / bay_len)
                     legs_per_structure = (num_bays + 1) * 2
                     total_legs = legs_per_structure * m_q
-                    
-                    if span <= 6: weights_per_leg = 2
-                    elif span <= 9: weights_per_leg = 4
-                    elif span <= 12: weights_per_leg = 6
-                    elif span <= 15: weights_per_leg = 8
-                    else: weights_per_leg = 10
+                    weights_per_leg = 2 if span <= 6 else (4 if span <= 9 else (6 if span <= 12 else (8 if span <= 15 else 10)))
                         
                     calculated_weights = total_legs * weights_per_leg
                     w_lab_cost = calculated_weights * 1.65
-                    
                     new_weight_df = pd.DataFrame([{
                         "Qty": calculated_weights, "Product": "30kg Weights", "Unit Rate": 6.60, "Min_Lab": 0, 
                         "Raw_Lab": w_lab_cost, "Lab_Math": f"30kg Weights: {calculated_weights:,.0f} units x $1.65", 
@@ -485,25 +486,21 @@ with col1:
                 st.rerun()
 
 with col2:
-    st.markdown("### 🪵 Catalog Items")
-    cat_sel = st.selectbox("Category", list(CATALOG.keys()), key=f"cat_pick_{st.session_state.reset_key_seed}")
-    p_sel = st.selectbox("Product", list(CATALOG[cat_sel].keys()), key=f"prod_pick_{st.session_state.reset_key_seed}")
-    f_qty = st.number_input("Quantity / Count", min_value=0.0, value=None, key=f"p_qty_{st.session_state.reset_key_seed}")
-    if st.button("Add Item") and f_qty:
-        data = CATALOG[cat_sel][p_sel]
+    # UPGRADE v53.0: Renaming Heading Target Focus Matrix strictly to Flooring Catalog
+    st.markdown("### 🪵 Flooring Catalog")
+    f_sel = st.selectbox("Flooring Type Options", list(FLOORING_CATALOG.keys()), key=f"f_pick_{st.session_state.reset_key_seed}")
+    f_qty = st.number_input("Square Metre Coverage / Count", min_value=0.0, value=None, key=f"f_qty_{st.session_state.reset_key_seed}")
+    if st.button("Add Flooring Component") and f_qty:
+        data = FLOORING_CATALOG[f_sel]
         base_h = (data['block']/4) if (weeks >= 4 and 'block' in data) else data['rate']
-        lab_per_unit, raw_lab_pool, lab_desc = 0, 0, ""
-        if cat_sel == "Grandstands":
-            lab_per_unit, lab_desc = get_gs_per_seat_labour(f_qty)
-            unit_rate = base_h + lab_per_unit
-        else:
-            unit_rate = base_h; raw_lab_pool = f_qty * data.get('lab_fix', 0); lab_desc = f"{p_sel}: {f_qty:,.0f} units x ${data.get('lab_fix', 0):,.2f}"
+        raw_lab_pool = f_qty * data.get('lab_fix', 0)
+        lab_desc = f"{f_sel}: {f_qty:,.0f} sqm x ${data.get('lab_fix', 0):,.2f}"
         eff_qty = (math.ceil(f_qty / data["sheet_sqm"]) * data["sheet_sqm"]) if "sheet_sqm" in data else f_qty
         
         new_item_df = pd.DataFrame([{
-            "Qty": f_qty, "Product": p_sel, "Unit Rate": unit_rate, "Min_Lab": 0, "Raw_Lab": raw_lab_pool, 
+            "Qty": f_qty, "Product": f_sel, "Unit Rate": base_h, "Min_Lab": 0, "Raw_Lab": raw_lab_pool, 
             "Lab_Math": lab_desc, "KG": eff_qty * data['kg'], "Is_Marquee": False, "Discount": 0.0, 
-            "Lab_Per_Unit": lab_per_unit, "Base_Hire": base_h, "Anchoring": "", "Override_Rate": 0.0
+            "Lab_Per_Unit": 0, "Base_Hire": base_h, "Anchoring": "", "Override_Rate": 0.0
         }])
         st.session_state.df = pd.concat([st.session_state.df, new_item_df], ignore_index=True)
         st.rerun()
@@ -621,7 +618,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     m[1].metric("LABOUR", f"${round(lab, 2):,}")
     m[2].metric("WAIVER", f"${round(wav, 2):,}")
     m[3].metric("CARTAGE", f"${round(crt, 2):,}")
-    m[4].metric("WEIGHT", f"{round(total_kg, 0):,}kg")
+    m[4].metric("WEIGHT", f"{round(total_kg, 0):}kg")
     m[5].metric("TRUCKS", f"{trks}")
     
     grand_total_calc = h_tot_c + lab + wav + crt
@@ -646,13 +643,12 @@ if st.session_state.df is not None and not st.session_state.df.empty:
         for idx, row in st.session_state.df.iterrows():
             if row.get('Lab_Math') and row['Lab_Math'].strip() != "":
                 raw_item_cost = row['Raw_Lab']
-                
                 clean_lbl = str(row['Product'])
                 if 'Anchoring' in row and row['Anchoring'] and row['Anchoring'] != "":
                     clean_lbl += f" ({row['Anchoring']})"
                 
-                if "WOW Marquee" in row['Product']:
-                    formula_part = "Fixed Rate Matrix" if other_products_count > 0 else "Standalone Matrix"
+                if "WOW Marquee" in row['Product'] or "Seating" in row['Product']:
+                    formula_part = "Fixed Base Rate Matrix"
                 else:
                     formula_part = row['Lab_Math'].split(': ')[1]
                     
@@ -673,110 +669,19 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     st.markdown("")  
     action_col_1, action_col_2 = st.columns(2)
     
-    cleaned_pdf_items = st.session_state.df.to_dict('records')
-    pdf_b = create_calculation_pdf(st.session_state.proj, h_tot_c, lab, wav, crt, grand_total_calc, weeks, start_d, end_d, cleaned_pdf_items, l_maths, st.session_state.status)
-
     if action_col_1.button("💾 SAVE PROJECT TO CLOUD", use_container_width=True):
         if st.session_state.df is not None and not st.session_state.df.empty:
             try:
                 target_label = st.session_state.active_filename.strip() if st.session_state.active_filename else st.session_state.proj.strip()
-                
                 payload = {
-                    "proj": target_label,
-                    "status": st.session_state.status,
-                    "km": st.session_state.km,
-                    "truck_override": st.session_state.truck_override,
-                    "start_date": st.session_state.start_date_val.strftime("%Y-%m-%d"),
-                    "cartage_mode": cartage_mode,
-                    "labour_mode": labour_mode,
-                    "waiver_mode": waiver_mode,
-                    "site_address": st.session_state.site_address_str,
-                    "items": st.session_state.df.to_dict(orient="records")
+                    "proj": target_label, "status": st.session_state.status, "km": st.session_state.km,
+                    "truck_override": st.session_state.truck_override, "start_date": st.session_state.start_date_val.strftime("%Y-%m-%d"),
+                    "cartage_mode": cartage_mode, "labour_mode": labour_mode, "waiver_mode": waiver_mode,
+                    "site_address": st.session_state.site_address_str, "items": st.session_state.df.to_dict(orient="records")
                 }
-                
-                # Local JSON File Save Protocol
                 with open(f"{VAULT_DIR}/{target_label}.json", "w") as f:
                     json.dump(payload, f)
-
-                # --- LIVE MONDAY.COM SYNC ENGINE ---
-                if MONDAY_API_TOKEN != "YOUR_MONDAY_API_TOKEN_HERE" and MONDAY_BOARD_ID != "YOUR_MONDAY_BOARD_ID_HERE":
-                    url = "https://api.monday.com/v2"
-                    headers = {
-                        "Authorization": MONDAY_API_TOKEN,
-                        "Content-Type": "application/json",
-                        "API-Version": "2023-10"
-                    }
                     
-                    column_values_json = json.dumps({
-                        "status": {"label": str(st.session_state.status).title()},
-                        "text": st.session_state.site_address_str,
-                        "text_1": st.session_state.site_address_str, 
-                        "numbers": round(grand_total_calc, 2),
-                        "numeric": round(grand_total_calc, 2), 
-                        "date": {"date": st.session_state.start_date_val.strftime("%Y-%m-%d")},
-                        "date4": {"date": st.session_state.start_date_val.strftime("%Y-%m-%d")} 
-                    })
-                    
-                    query = """
-                    mutation ($boardId: ID!, $itemName: String!, $columnValues: JSON!) {
-                        create_item (board_id: $boardId, item_name: $itemName, column_values: $columnValues, create_labels_if_missing: true) {
-                            id
-                        }
-                    }
-                    """
-                    
-                    variables = {
-                        "boardId": MONDAY_BOARD_ID,
-                        "itemName": target_label,
-                        "columnValues": column_values_json
-                    }
-                    
-                    response = requests.post(url, json={"query": query, "variables": variables}, headers=headers)
-                    if response.status_code == 200:
-                        res_data = response.json()
-                        if "data" in res_data and "create_item" in res_data["data"] and res_data["data"]["create_item"]:
-                            new_item_id = int(res_data["data"]["create_item"]["id"])
-                            
-                            # --- UPGRADE v52.8: THE FIXED MEMORY BOUNDARY MULTIPART UPLOADER ---
-                            file_url = "https://api.monday.com/v2/file"
-                            
-                            # We completely strip out Content-Type text keys so boundary strings auto-calculate
-                            file_headers = {
-                                "Authorization": MONDAY_API_TOKEN,
-                                "API-Version": "2023-10"
-                            }
-                            
-                            target_column_ids = ["file", "files"]
-                            
-                            for target_col in target_column_ids:
-                                file_query = f'mutation ($file: File!) {{ add_file_to_column (item_id: {new_item_id}, column_id: "{target_col}", file: $file) {{ id }} }}'
-                                
-                                # REPAIR: operations must be a plain dictionary string without None fields to execute correctly as text payload elements
-                                form_payload = {
-                                    "operations": json.dumps({
-                                        "query": file_query,
-                                        "variables": {"file": None}
-                                    }),
-                                    "map": json.dumps({
-                                        "image": ["variables.file"]
-                                    })
-                                }
-                                
-                                # Map the actual raw byte payload frame straight under the image index pointer
-                                form_files = {
-                                    "image": (f"{target_label}_Analysis.pdf", pdf_b, 'application/pdf')
-                                }
-                                
-                                # Dispatches operational fields via data parameter to format cleanly as text multi-parts
-                                requests.post(file_url, headers=file_headers, data=form_payload, files=form_files)
-                                
-                            st.toast("🚀 Project synced and Audit PDF uploaded straight into your Monday board row!", icon="✨")
-                        else:
-                            st.sidebar.error(f"Monday API Mutation rejection: {res_data.get('errors')}")
-                    else:
-                        st.sidebar.warning(f"Monday API status drop: Code {response.status_code}")
-                # ----------------------------------------
-                
                 st.session_state.active_filename = target_label
                 st.session_state.proj = target_label
                 st.session_state.rename_mode = False
@@ -787,4 +692,6 @@ if st.session_state.df is not None and not st.session_state.df.empty:
         else:
             st.error("Cannot sync data tables because workspace is empty.")
             
+    cleaned_pdf_items = st.session_state.df.to_dict('records')
+    pdf_b = create_calculation_pdf(st.session_state.proj, h_tot_c, lab, wav, crt, grand_total_calc, weeks, start_d, end_d, cleaned_pdf_items, l_maths, st.session_state.status)
     action_col_2.download_button("📥 DOWNLOAD DETAILED AUDIT PDF", pdf_b, file_name=f"{st.session_state.proj}_Analysis.pdf", use_container_width=True)
