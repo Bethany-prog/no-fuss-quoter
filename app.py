@@ -184,9 +184,9 @@ if 'saved_cartage_mode' not in st.session_state: st.session_state.saved_cartage_
 if 'saved_labour_mode' not in st.session_state: st.session_state.saved_labour_mode = "Separate"
 if 'saved_waiver_mode' not in st.session_state: st.session_state.saved_waiver_mode = "Charge"
 
-if 'man_labour_val' not in st.session_state: st.session_state.man_labour_val = 0.0
-if 'man_cartage_val' not in st.session_state: st.session_state.man_cartage_val = 0.0
-if 'man_waiver_val' not in st.session_state: st.session_state.man_waiver_val = 0.0
+if 'man_labour_val' not in st.session_state: st.session_state.man_labour_val = -1.0
+if 'man_cartage_val' not in st.session_state: st.session_state.man_cartage_val = -1.0
+if 'man_waiver_val' not in st.session_state: st.session_state.man_waiver_val = -1.0
 if 'use_man_override' not in st.session_state: st.session_state.use_man_override = False
 
 def pull_vault_archive_list():
@@ -212,9 +212,9 @@ def load_project_from_vault(label_name):
             st.session_state.saved_labour_mode = d.get("labour_mode", "Separate")
             st.session_state.saved_waiver_mode = d.get("waiver_mode", "Charge")
             
-            st.session_state.man_labour_val = float(d.get("man_labour_val", 0.0))
-            st.session_state.man_cartage_val = float(d.get("man_cartage_val", 0.0))
-            st.session_state.man_waiver_val = float(d.get("man_waiver_val", 0.0))
+            st.session_state.man_labour_val = float(d.get("man_labour_val", -1.0))
+            st.session_state.man_cartage_val = float(d.get("man_cartage_val", -1.0))
+            st.session_state.man_waiver_val = float(d.get("man_waiver_val", -1.0))
             st.session_state.use_man_override = bool(d.get("use_man_override", False))
             
             if "start_date" in d and d["start_date"]:
@@ -308,9 +308,9 @@ if st.sidebar.button("➕ START NEW", use_container_width=True):
     st.session_state.saved_cartage_mode = "Charge"
     st.session_state.saved_labour_mode = "Separate"
     st.session_state.saved_waiver_mode = "Charge"
-    st.session_state.man_labour_val = 0.0
-    st.session_state.man_cartage_val = 0.0
-    st.session_state.man_waiver_val = 0.0
+    st.session_state.man_labour_val = -1.0
+    st.session_state.man_cartage_val = -1.0
+    st.session_state.man_waiver_val = -1.0
     st.session_state.use_man_override = False
     st.session_state.reset_key_seed += 1
     st.rerun()
@@ -355,9 +355,9 @@ if vault_jobs:
                 st.session_state.saved_cartage_mode = "Charge"
                 st.session_state.saved_labour_mode = "Separate"
                 st.session_state.saved_waiver_mode = "Charge"
-                st.session_state.man_labour_val = 0.0
-                st.session_state.man_cartage_val = 0.0
-                st.session_state.man_waiver_val = 0.0
+                st.session_state.man_labour_val = -1.0
+                st.session_state.man_cartage_val = -1.0
+                st.session_state.man_waiver_val = -1.0
                 st.session_state.use_man_override = False
                 st.session_state.reset_key_seed += 1
                 st.rerun()
@@ -536,7 +536,6 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     h_col4b.markdown("<div class='summary-hdr'>Override Rate</div>", unsafe_allow_html=True)
     h_col5.markdown("<div class='summary-hdr' style='text-align: right;'>Subtotal</div>", unsafe_allow_html=True)
     
-    # UPGRADE v54.4 PRE-CALCULATION BLOCK: First pass loops data to discover active dependencies BEFORE math parsing
     other_products_count = 0
     wow_marquee_qty = 0
     for idx, row in st.session_state.df.iterrows():
@@ -545,8 +544,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
             other_products_count += 1
         if "WOW Marquee" in p_name:
             wow_marquee_qty += int(row["Qty"])
-
-    # Synchronize layout text mappings cleanly 
+            
     for idx, row in st.session_state.df.iterrows():
         if "WOW Marquee" in row["Product"]:
             st.session_state.df.at[idx, "Raw_Lab"] = 1411.00
@@ -555,7 +553,6 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     h_tot_c, h_wk1_gear, total_kg, itrac_sqm = 0.0, 0.0, 0.0, 0.0
     has_itrac = False
 
-    # Execution summary row builder block
     for idx, row in st.session_state.df.iterrows():
         override = row.get("Override_Rate", 0.0)
         active_base = override if override > 0 else row["Unit Rate"]
@@ -618,7 +615,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
             cb[3].write(f"${standard_r_rate:,.2f}")
             cb[6].markdown(f"<div style='text-align: right; color: grey; font-style: italic;'>${r_tot:,.2f}</div>", unsafe_allow_html=True)
 
-    # Post-calculated logistics definitions anchor blocks
+    # Logistics automated calculations variables
     safe_km = st.session_state.km if st.session_state.km else 0
     if has_itrac:
         min_trucks = math.ceil(itrac_sqm / 288) or 1
@@ -626,39 +623,60 @@ if st.session_state.df is not None and not st.session_state.df.empty:
         min_trucks = math.ceil(total_kg / 6000) or 1
     trks = max(min_trucks, st.session_state.truck_override) if st.session_state.truck_override > 0 else min_trucks
     
-    # Securely compile raw metrics pooling elements inside safe namespace runtime zones
     raw_lab_pool = st.session_state.df["Raw_Lab"].sum()
     auto_labour = max(raw_lab_pool, 350) if labour_mode == "Separate" else 0
     auto_cartage = trks * safe_km * 4 * 3.50 if cartage_mode == "Charge" else 0
     auto_waiver = h_wk1_gear * 0.07 if waiver_mode == "Charge" else 0
 
+    # UPGRADE v54.5: MANUAL ADJMUSTMENTS FORMATTED AS AN EXACT WORKSPACE MATCH FOR QUOTE SUMMARY GRID
     st.divider()
-    st.markdown("### 🛠️ Manual Logistic Adjustments")
-    toggle_val = st.toggle("Enable Manual Overrides (Bypass Automated Calculations)", value=st.session_state.use_man_override)
-    st.session_state.use_man_override = toggle_val
+    st.markdown("### 🛠️ MANUAL LOGISTICS OVERRIDES")
     
-    col_adj1, col_adj2, col_adj3 = st.columns(3)
+    # Header tier block layout alignment
+    h_adj0, h_adj1, h_adj2, h_adj3 = st.columns([0.4, 3.2, 2.2, 1.4])
+    h_adj1.markdown("<div class='summary-hdr'>Item Description</div>", unsafe_allow_html=True)
+    h_adj2.markdown("<div class='summary-hdr'>Override Rate (Editable)</div>", unsafe_allow_html=True)
+    h_adj3.markdown("<div class='summary-hdr' style='text-align: right;'>Subtotal</div>", unsafe_allow_html=True)
     
-    with col_adj1:
-        st.markdown("**Labour Adjustment ($)**")
-        ui_lab = st.number_input("Set Labour Total", min_value=0.0, value=float(st.session_state.man_labour_val if toggle_val else auto_labour), key="ui_lab_field")
-        if toggle_val: st.session_state.man_labour_val = ui_lab
-        
-    with col_adj2:
-        st.markdown("**Cartage Adjustment ($)**")
-        ui_crt = st.number_input("Set Cartage Total", min_value=0.0, value=float(st.session_state.man_cartage_val if toggle_val else auto_cartage), key="ui_crt_field")
-        if toggle_val: st.session_state.man_cartage_val = ui_crt
-        
-    with col_adj3:
-        st.markdown("**Waiver Adjustment ($)**")
-        ui_wav = st.number_input("Set Waiver Total", min_value=0.0, value=float(st.session_state.man_waiver_val if toggle_val else auto_waiver), key="ui_wav_field")
-        if toggle_val: st.session_state.man_waiver_val = ui_wav
+    # Setup values trackers internally
+    cur_lab = float(st.session_state.man_labour_val if st.session_state.man_labour_val >= 0 else auto_labour)
+    cur_crt = float(st.session_state.man_cartage_val if st.session_state.man_cartage_val >= 0 else auto_cartage)
+    cur_wav = float(st.session_state.man_waiver_val if st.session_state.man_waiver_val >= 0 else auto_waiver)
 
-    final_labour = st.session_state.man_labour_val if toggle_val else auto_labour
-    final_cartage = st.session_state.man_cartage_val if toggle_val else auto_cartage
-    final_waiver = st.session_state.man_waiver_val if toggle_val else auto_waiver
+    # Row 1: Labour line component
+    r1_c0, r1_c1, r1_c2, r1_c3 = st.columns([0.4, 3.2, 2.2, 1.4])
+    # Toggle switch sits under index 0 spacing cleanly
+    lab_chk = r1_c0.checkbox("L", value=st.session_state.use_man_override, label_visibility="collapsed", key="lab_chk_active")
+    r1_c1.markdown("<div class='item-text'>Labour Handling Override</div>", unsafe_allow_html=True)
+    val_lab = r1_c2.number_input("LabRate", min_value=0.0, value=cur_lab, label_visibility="collapsed", key="ui_lab_field")
+    r1_c3.markdown(f"<div style='text-align: right; font-size: 20px; font-weight: 700; color: #1A1D2D; margin-top: 10px;'>${val_lab:,.2f}</div>", unsafe_allow_html=True)
 
-    # Metrics Display Dashboard
+    # Row 2: Cartage line component
+    r2_c0, r2_c1, r2_c2, r2_c3 = st.columns([0.4, 3.2, 2.2, 1.4])
+    r2_c1.markdown("<div class='item-text'>Cartage Freight Override</div>", unsafe_allow_html=True)
+    val_crt = r2_c2.number_input("CrtRate", min_value=0.0, value=cur_crt, label_visibility="collapsed", key="ui_crt_field")
+    r2_c3.markdown(f"<div style='text-align: right; font-size: 20px; font-weight: 700; color: #1A1D2D; margin-top: 10px;'>${val_crt:,.2f}</div>", unsafe_allow_html=True)
+
+    # Row 3: Waiver line component
+    r3_c0, r3_c1, r3_c2, r3_c3 = st.columns([0.4, 3.2, 2.2, 1.4])
+    r3_c1.markdown("<div class='item-text'>Damage Waiver Override</div>", unsafe_allow_html=True)
+    val_wav = r3_c2.number_input("WavRate", min_value=0.0, value=cur_wav, label_visibility="collapsed", key="ui_wav_field")
+    r3_c3.markdown(f"<div style='text-align: right; font-size: 20px; font-weight: 700; color: #1A1D2D; margin-top: 10px;'>${val_wav:,.2f}</div>", unsafe_allow_html=True)
+
+    # Session storage mapping loops synchronizer 
+    if lab_chk != st.session_state.use_man_override or val_lab != cur_lab or val_crt != cur_crt or val_wav != cur_wav:
+        st.session_state.use_man_override = lab_chk
+        st.session_state.man_labour_val = val_lab if lab_chk else -1.0
+        st.session_state.man_cartage_val = val_crt if lab_chk else -1.0
+        st.session_state.man_waiver_val = val_wav if lab_chk else -1.0
+        st.rerun()
+
+    final_labour = val_lab if lab_chk else auto_labour
+    final_cartage = val_crt if lab_chk else auto_cartage
+    final_waiver = val_wav if lab_chk else auto_waiver
+
+    # Metrics Display Dashboard Status Cards Layout
+    st.divider()
     m = st.columns(6)
     m[0].metric("HIRE COST", f"${round(h_tot_c, 2):,}")
     m[1].metric("LABOUR", f"${round(final_labour, 2):,}")
@@ -670,10 +688,10 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     grand_total_calc = h_tot_c + final_labour + final_waiver + final_cartage
     st.markdown(f"<div class='gt-banner'>GRAND TOTAL (EX GST): ${grand_total_calc:,.2f}</div>", unsafe_allow_html=True)
     
-    # Structural mathematical layout dictionary targeting clean PDF generation
+    # Structural mathematical dictionary template generation for PDF processing 
     structural_math_dict = {"LABOUR": [], "LOGISTICS": [], "DAMAGE WAIVER": []}
     
-    if toggle_val:
+    if lab_chk:
         structural_math_dict["LABOUR"].append(f"Manual Override Total Applied = ${final_labour:,.2f}")
         structural_math_dict["LOGISTICS"].append(f"Manual Override Total Applied = ${final_cartage:,.2f}")
         structural_math_dict["DAMAGE WAIVER"].append(f"Manual Override Total Applied = ${final_waiver:,.2f}")
@@ -706,7 +724,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
                     "truck_override": st.session_state.truck_override, "start_date": st.session_state.start_date_val.strftime("%Y-%m-%d"),
                     "cartage_mode": cartage_mode, "labour_mode": labour_mode, "waiver_mode": waiver_mode,
                     "site_address": st.session_state.site_address_str, "items": st.session_state.df.to_dict(orient="records"),
-                    "man_labour_val": final_labour, "man_cartage_val": final_cartage, "man_waiver_val": final_waiver, "use_man_override": toggle_val
+                    "man_labour_val": final_labour, "man_cartage_val": final_cartage, "man_waiver_val": final_waiver, "use_man_override": lab_chk
                 }
                 with open(f"{VAULT_DIR}/{target_label}.json", "w") as f:
                     json.dump(payload, f)
