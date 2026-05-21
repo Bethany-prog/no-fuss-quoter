@@ -129,16 +129,14 @@ def create_calculation_pdf(name, subtotal, labour, waiver, cartage, grand, weeks
             pdf.cell(col_w[3], 8, f"{item.get('Discount', 0.0):.1f}%", 1, 0, "C")
             pdf.cell(col_w[4], 8, f"${r_total:,.2f}", 1, 1, "R")
 
-    # Section 2: Pure Calculation Sections (Black Headers Implemented Dynamically)
+    # Section 2: Pure Calculation Sections
     pdf.ln(5)
-    
     categories = ["LABOUR", "LOGISTICS", "DAMAGE WAIVER"]
     for cat in categories:
         if cat in structural_math_dict and structural_math_dict[cat]:
             pdf.set_fill_color(26, 29, 45); pdf.set_text_color(255, 255, 255); pdf.set_font("Arial", "B", 11)
             pdf.cell(0, 9, f" {cat}", 0, 1, "L", True)
             pdf.set_text_color(0, 0, 0); pdf.set_font("Arial", "", 10)
-            
             for line in structural_math_dict[cat]:
                 pdf.cell(0, 7, clean_text(f" {line}"), border="B", ln=True)
             pdf.ln(3)
@@ -186,6 +184,12 @@ if 'saved_cartage_mode' not in st.session_state: st.session_state.saved_cartage_
 if 'saved_labour_mode' not in st.session_state: st.session_state.saved_labour_mode = "Separate"
 if 'saved_waiver_mode' not in st.session_state: st.session_state.saved_waiver_mode = "Charge"
 
+# UPGRADE v54.3: Manual layout parameters persistence storage hooks
+if 'man_labour_val' not in st.session_state: st.session_state.man_labour_val = 0.0
+if 'man_cartage_val' not in st.session_state: st.session_state.man_cartage_val = 0.0
+if 'man_waiver_val' not in st.session_state: st.session_state.man_waiver_val = 0.0
+if 'use_man_override' not in st.session_state: st.session_state.use_man_override = False
+
 def pull_vault_archive_list():
     try:
         files = [f.replace(".json", "") for f in os.listdir(VAULT_DIR) if f.endswith(".json")]
@@ -208,6 +212,12 @@ def load_project_from_vault(label_name):
             st.session_state.saved_cartage_mode = d.get("cartage_mode", "Charge")
             st.session_state.saved_labour_mode = d.get("labour_mode", "Separate")
             st.session_state.saved_waiver_mode = d.get("waiver_mode", "Charge")
+            
+            # Restore saved overrides
+            st.session_state.man_labour_val = float(d.get("man_labour_val", 0.0))
+            st.session_state.man_cartage_val = float(d.get("man_cartage_val", 0.0))
+            st.session_state.man_waiver_val = float(d.get("man_waiver_val", 0.0))
+            st.session_state.use_man_override = bool(d.get("use_man_override", False))
             
             if "start_date" in d and d["start_date"]:
                 try:
@@ -300,6 +310,10 @@ if st.sidebar.button("➕ START NEW", use_container_width=True):
     st.session_state.saved_cartage_mode = "Charge"
     st.session_state.saved_labour_mode = "Separate"
     st.session_state.saved_waiver_mode = "Charge"
+    st.session_state.man_labour_val = 0.0
+    st.session_state.man_cartage_val = 0.0
+    st.session_state.man_waiver_val = 0.0
+    st.session_state.use_man_override = False
     st.session_state.reset_key_seed += 1
     st.rerun()
 
@@ -343,6 +357,10 @@ if vault_jobs:
                 st.session_state.saved_cartage_mode = "Charge"
                 st.session_state.saved_labour_mode = "Separate"
                 st.session_state.saved_waiver_mode = "Charge"
+                st.session_state.man_labour_val = 0.0
+                st.session_state.man_cartage_val = 0.0
+                st.session_state.man_waiver_val = 0.0
+                st.session_state.use_man_override = False
                 st.session_state.reset_key_seed += 1
                 st.rerun()
 else:
@@ -432,7 +450,7 @@ with col1:
             st.session_state.df = pd.concat([st.session_state.df, new_struct_df], ignore_index=True)
             
             if anchoring_type == "Weighted":
-                # UPGRADE v54.2: Enforce fixed 128 block size footprint override for target 2-unit configurations
+                # Automated structural scaling linkage defaults logic
                 calculated_weights = 128 if m_q == 2 else math.ceil((4 * m_q * 500.0) / 30.0)
                 w_lab_cost = calculated_weights * 1.65
                 new_weight_df = pd.DataFrame([{
@@ -513,9 +531,9 @@ with col2:
 if st.session_state.df is not None and not st.session_state.df.empty:
     st.divider(); st.subheader("📝 QUOTE SUMMARY")
     
-    h_col0, h_col1, h_col2, h_col3, h_col4, h_col4b, h_col5 = st.columns([0.4, 3.2, 0.8, 1.2, 1.2, 1.2, 1.4])
+    h_col0, h_col1, h_col2, h_col3, h_col4, h_col4b, h_col5 = st.columns([0.4, 3.2, 1.0, 1.2, 1.2, 1.2, 1.4])
     h_col1.markdown("<div class='summary-hdr'>Item Description</div>", unsafe_allow_html=True)
-    h_col2.markdown("<div class='summary-hdr'>Qty</div>", unsafe_allow_html=True)
+    h_col2.markdown("<div class='summary-hdr'>Qty (Editable)</div>", unsafe_allow_html=True)
     h_col3.markdown("<div class='summary-hdr'>Gross Unit</div>", unsafe_allow_html=True)
     h_col4.markdown("<div class='summary-hdr'>Disc %</div>", unsafe_allow_html=True)
     h_col4b.markdown("<div class='summary-hdr'>Override Rate</div>", unsafe_allow_html=True)
@@ -533,12 +551,17 @@ if st.session_state.df is not None and not st.session_state.df.empty:
         if "WOW Marquee" in p_name:
             wow_marquee_qty += int(row["Qty"])
             
-    # UPGRADE v54.2: Enforce weekend rate baseline matrix values ($1411 flat calculation)
+    # Set dynamic label lines
     for idx, row in st.session_state.df.iterrows():
         if "WOW Marquee" in row["Product"]:
-            st.session_state.df.at[idx, "Raw_Lab"] = 1411.00
-            st.session_state.df.at[idx, "Lab_Math"] = f"WOW Marquee: {wow_marquee_qty} x $706 = $1,441.00"
+            if other_products_count > 0:
+                st.session_state.df.at[idx, "Raw_Lab"] = 706.00
+                st.session_state.df.at[idx, "Lab_Math"] = f"WOW Marquee: {row['Qty']:.0f} x $706 = $1,441.00"
+            else:
+                st.session_state.df.at[idx, "Raw_Lab"] = 1441.00
+                st.session_state.df.at[idx, "Lab_Math"] = f"WOW Marquee: {row['Qty']:.0f} x $706 = $1,441.00"
 
+    # Execution summary renderer
     for idx, row in st.session_state.df.iterrows():
         override = row.get("Override_Rate", 0.0)
         active_base = override if override > 0 else row["Unit Rate"]
@@ -555,7 +578,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
         wk1_t = (qty * brate + row["Raw_Lab"]) * dm if labour_mode == "Include in Hire" else (qty * brate) * dm
         h_tot_c += wk1_t
         
-        c0, c1, c2, c3, c4, c4b, c5 = st.columns([0.4, 3.2, 0.8, 1.2, 1.2, 1.2, 1.4])
+        c0, c1, c2, c3, c4, c4b, c5 = st.columns([0.4, 3.2, 1.0, 1.2, 1.2, 1.2, 1.4])
         if c0.button("🗑️", key=f"sdel_{idx}"):
             st.session_state.df.drop(idx, inplace=True)
             st.session_state.df.reset_index(drop=True, inplace=True)
@@ -566,7 +589,18 @@ if st.session_state.df is not None and not st.session_state.df.empty:
             prod_display += f" ({row['Anchoring']})"
             
         c1.markdown(f"<div class='item-text'>{prod_display} - Wk 1</div>", unsafe_allow_html=True)
-        c2.write(f"{qty:,.0f}")
+        
+        # UPGRADE v54.3: Added interactive Quantity box input field controls inside row lines
+        new_qty = c2.number_input("QtyBox", min_value=0.0, step=1.0, value=float(qty), key=f"sqty_{idx}", label_visibility="collapsed")
+        if new_qty != float(qty):
+            st.session_state.df.at[idx, "Qty"] = new_qty
+            # Recalculate weights dynamically if main marquee structure shifts counts
+            if "WOW Marquee" in row["Product"] and anchoring_type == "Weighted":
+                for w_idx, w_row in st.session_state.df.iterrows():
+                    if w_row["Product"] == "30kg Weights":
+                        st.session_state.df.at[w_idx, "Qty"] = 128 if new_qty == 2 else math.ceil((4 * new_qty * 500.0) / 30.0)
+            st.rerun()
+            
         c3.write(f"${row['Unit Rate']:,.2f}")
         
         new_disc = c4.number_input("Disc %", 0.0, 100.0, float(row["Discount"]), 1.0, key=f"sd_{idx}", label_visibility="collapsed")
@@ -585,74 +619,85 @@ if st.session_state.df is not None and not st.session_state.df.empty:
             r_rate = (active_hire_base * 0.5 if row["Is_Marquee"] else active_hire_base)
             r_tot = qty * r_rate * (weeks-1) * dm
             h_tot_c += r_tot
-            cb = st.columns([0.4, 3.2, 0.8, 1.2, 1.2, 1.2, 1.4])
+            cb = st.columns([0.4, 3.2, 1.0, 1.2, 1.2, 1.2, 1.4])
             cb[1].markdown(f"<div style='color:grey; font-style:italic; font-size:18px;'>└ Recurring (x{weeks-1} wks)</div>", unsafe_allow_html=True)
             cb[2].write(f"{qty:,.0f}")
             standard_r_rate = (row["Base_Hire"] * 0.5 if row["Is_Marquee"] else row["Base_Hire"])
             cb[3].write(f"${standard_r_rate:,.2f}")
             cb[6].markdown(f"<div style='text-align: right; color: grey; font-style: italic;'>${r_tot:,.2f}</div>", unsafe_allow_html=True)
 
-    # Logistics calculations
-    st.divider()
-    col_left, col_right = st.columns(2)
-    with col_left:
-        st.markdown("### 🚛 Logistics Override")
-        if has_itrac:
-            min_trucks = math.ceil(itrac_sqm / 288) or 1
-        else:
-            min_trucks = math.ceil(total_kg / 6000) or 1
-        
-        val_trucks = max(min_trucks, st.session_state.truck_override) if st.session_state.truck_override > 0 else min_trucks
-        trks = st.number_input("Manually Set Truck Count", min_value=min_trucks, value=int(val_trucks), key=f"trk_field_{st.session_state.reset_key_seed}")
-        st.session_state.truck_override = trks
-
+    # Pre-calculated logistics metrics context anchors
     safe_km = st.session_state.km if st.session_state.km else 0
-    wav = h_wk1_gear * 0.07 if waiver_mode == "Charge" else 0
-    crt = trks * safe_km * 4 * 3.50 if cartage_mode == "Charge" else 0
+    if has_itrac:
+        min_trucks = math.ceil(itrac_sqm / 288) or 1
+    else:
+        min_trucks = math.ceil(total_kg / 6000) or 1
+    trks = max(min_trucks, st.session_state.truck_override) if st.session_state.truck_override > 0 else min_trucks
     
-    raw_lab_pool = st.session_state.df["Raw_Lab"].sum()
-    lab = max(raw_lab_pool, 350) if labour_mode == "Separate" else 0
-    is_floor_active = (raw_lab_pool < 350 and labour_mode == "Separate")
+    auto_labour = max(raw_lab_pool, 350) if labour_mode == "Separate" else 0
+    auto_cartage = trks * safe_km * 4 * 3.50 if cartage_mode == "Charge" else 0
+    auto_waiver = h_wk1_gear * 0.07 if waiver_mode == "Charge" else 0
+
+    # UPGRADE v54.3: INTERACTIVE ADAPTIVE METRIC CONTROL TIERS
+    st.divider()
+    st.markdown("### 🛠️ Manual Logistic Adjustments")
+    toggle_val = st.toggle("Enable Manual Overrides (Bypass Automated Calculations)", value=st.session_state.use_man_override)
+    st.session_state.use_man_override = toggle_val
     
+    col_adj1, col_adj2, col_adj3 = st.columns(3)
+    
+    with col_adj1:
+        st.markdown("**Labour Adjustment ($)**")
+        ui_lab = st.number_input("Set Labour Total", min_value=0.0, value=float(st.session_state.man_labour_val if toggle_val else auto_labour), key="ui_lab_field")
+        if toggle_val: st.session_state.man_labour_val = ui_lab
+        
+    with col_adj2:
+        st.markdown("**Cartage Adjustment ($)**")
+        ui_crt = st.number_input("Set Cartage Total", min_value=0.0, value=float(st.session_state.man_cartage_val if toggle_val else auto_cartage), key="ui_crt_field")
+        if toggle_val: st.session_state.man_cartage_val = ui_crt
+        
+    with col_adj3:
+        st.markdown("**Waiver Adjustment ($)**")
+        ui_wav = st.number_input("Set Waiver Total", min_value=0.0, value=float(st.session_state.man_waiver_val if toggle_val else auto_waiver), key="ui_wav_field")
+        if toggle_val: st.session_state.man_waiver_val = ui_wav
+
+    # Calculate final variables based on toggle activation state
+    final_labour = st.session_state.man_labour_val if toggle_val else auto_labour
+    final_cartage = st.session_state.man_cartage_val if toggle_val else auto_cartage
+    final_waiver = st.session_state.man_waiver_val if toggle_val else auto_waiver
+
+    # Metrics Display Dashboard
     m = st.columns(6)
     m[0].metric("HIRE COST", f"${round(h_tot_c, 2):,}")
-    m[1].metric("LABOUR", f"${round(lab, 2):,}")
-    m[2].metric("WAIVER", f"${round(wav, 2):,}")
-    m[3].metric("CARTAGE", f"${round(crt, 2):,}")
+    m[1].metric("LABOUR", f"${round(final_labour, 2):,}")
+    m[2].metric("WAIVER", f"${round(final_waiver, 2):,}")
+    m[3].metric("CARTAGE", f"${round(final_cartage, 2):,}")
     m[4].metric("WEIGHT", f"{round(total_kg, 0):}kg")
     m[5].metric("TRUCKS", f"{trks}")
     
-    grand_total_calc = h_tot_c + lab + wav + crt
+    grand_total_calc = h_tot_c + final_labour + final_waiver + final_cartage
     st.markdown(f"<div class='gt-banner'>GRAND TOTAL (EX GST): ${grand_total_calc:,.2f}</div>", unsafe_allow_html=True)
     
-    # UPGRADE v54.2: Structured pure math list mappings
+    # Compile textual structural mathematical lists targeting PDF outputs
     structural_math_dict = {"LABOUR": [], "LOGISTICS": [], "DAMAGE WAIVER": []}
     
-    if labour_mode == "Free":
-        structural_math_dict["LABOUR"].append("Free")
-    elif labour_mode == "Include in Hire":
-        structural_math_dict["LABOUR"].append("Included in Hire Rate")
+    if toggle_val:
+        structural_math_dict["LABOUR"].append(f"Manual Override Total Applied = ${final_labour:,.2f}")
+        structural_math_dict["LOGISTICS"].append(f"Manual Override Total Applied = ${final_cartage:,.2f}")
+        structural_math_dict["DAMAGE WAIVER"].append(f"Manual Override Total Applied = ${final_waiver:,.2f}")
     else:
+        # Generate standard proofs
         for idx, row in st.session_state.df.iterrows():
             if row.get('Raw_Lab', 0.0) > 0.0 or "WOW Marquee" in row['Product']:
                 if "WOW Marquee" in row['Product']:
                     structural_math_dict["LABOUR"].append(f"{row['Lab_Math']}")
                 else:
-                    qty_blocks = row['Qty']
-                    structural_math_dict["LABOUR"].append(f"30kg Weights: {qty_blocks:,.0f} units x $1.65 = ${row['Raw_Lab']:,.2f}")
-        if is_floor_active:
+                    structural_math_dict["LABOUR"].append(f"30kg Weights: {row['Qty']:,.0f} units x $1.65 = ${row['Raw_Lab']:,.2f}")
+        if is_floor_active and labour_mode == "Separate":
             structural_math_dict["LABOUR"].append(f"Floor Buffer = ${350.00 - raw_lab_pool:,.2f}")
-        structural_math_dict["LABOUR"].append(f"Total = ${lab:,.2f}")
-        
-    if cartage_mode == "Free":
-        structural_math_dict["LOGISTICS"].append("Free")
-    else:
-        structural_math_dict["LOGISTICS"].append(f"{trks} Trucks x {safe_km}km x 4 x 3.50 = ${crt:,.2f}")
-        
-    if waiver_mode == "Free":
-        structural_math_dict["DAMAGE WAIVER"].append("Free")
-    else:
-        structural_math_dict["DAMAGE WAIVER"].append(f"{h_wk1_gear:,.2f} * 7% = ${wav:,.2f}")
+        structural_math_dict["LABOUR"].append(f"Total = ${final_labour:,.2f}")
+        structural_math_dict["LOGISTICS"].append(f"{trks} Trucks x {safe_km}km x 4 x 3.50 = ${final_cartage:,.2f}")
+        structural_math_dict["DAMAGE WAIVER"].append(f"{h_wk1_gear:,.2f} * 7% = ${final_waiver:,.2f}")
 
     # SAVE & DOWNLOAD INTERACTION ZONE
     st.markdown("")  
@@ -666,7 +711,8 @@ if st.session_state.df is not None and not st.session_state.df.empty:
                     "proj": target_label, "status": st.session_state.status, "km": st.session_state.km,
                     "truck_override": st.session_state.truck_override, "start_date": st.session_state.start_date_val.strftime("%Y-%m-%d"),
                     "cartage_mode": cartage_mode, "labour_mode": labour_mode, "waiver_mode": waiver_mode,
-                    "site_address": st.session_state.site_address_str, "items": st.session_state.df.to_dict(orient="records")
+                    "site_address": st.session_state.site_address_str, "items": st.session_state.df.to_dict(orient="records"),
+                    "man_labour_val": final_labour, "man_cartage_val": final_cartage, "man_waiver_val": final_waiver, "use_man_override": toggle_val
                 }
                 with open(f"{VAULT_DIR}/{target_label}.json", "w") as f:
                     json.dump(payload, f)
@@ -682,5 +728,5 @@ if st.session_state.df is not None and not st.session_state.df.empty:
             st.error("Cannot sync data tables because workspace is empty.")
             
     cleaned_pdf_items = st.session_state.df.to_dict('records')
-    pdf_b = create_calculation_pdf(st.session_state.proj, h_tot_c, lab, wav, crt, grand_total_calc, weeks, start_d, end_d, cleaned_pdf_items, structural_math_dict, st.session_state.status)
+    pdf_b = create_calculation_pdf(st.session_state.proj, h_tot_c, final_labour, final_waiver, final_cartage, grand_total_calc, weeks, start_d, end_d, cleaned_pdf_items, structural_math_dict, st.session_state.status)
     action_col_2.download_button("📥 DOWNLOAD DETAILED AUDIT PDF", pdf_b, file_name=f"{st.session_state.proj}_Analysis.pdf", mime="application/pdf", use_container_width=True)
