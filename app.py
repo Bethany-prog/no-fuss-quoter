@@ -67,7 +67,7 @@ def get_gs_per_seat_labour(seats):
     return 0, ""
 
 # ==============================================================================
-# 3. PDF AUDIT ENGINE (UPGRADED NATIVE BYTES CAPTURE STRUCTURE)
+# 3. PDF AUDIT ENGINE (UPGRADED FULL LAYOUT UNBREAKABLE BUFFER CAPTURE)
 # ==============================================================================
 def clean_text(txt):
     if not txt: return ""
@@ -140,8 +140,14 @@ def create_calculation_pdf(name, subtotal, labour, waiver, cartage, grand, weeks
     pdf.ln(8); pdf.set_fill_color(0, 230, 118); pdf.set_text_color(26, 29, 45); pdf.set_font("Arial", "B", 13)
     pdf.cell(0, 14, f" GRAND TOTAL (EX GST): ${grand:,.2f} ", 0, 1, "R", True)
     
-    # UPGRADE v53.3: Force universal modern output binary format across versions safely
-    return pdf.output(dest='S')
+    # REPAIR v53.4: Encodes layout layers to native byte string values without string formatting breaks
+    try:
+        raw_output = pdf.output()
+        if isinstance(raw_output, str):
+            return raw_output.encode('latin-1', 'replace')
+        return bytes(raw_output)
+    except Exception:
+        return bytes(pdf.output())
 
 # ==============================================================================
 # 4. MASTER FLOORING PRODUCT CATALOG LIST
@@ -686,7 +692,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
             
     cleaned_pdf_items = st.session_state.df.to_dict('records')
     
-    # CORE UPGRADE FIXED HOOK v53.3: Wrap the stateless document builder inline directly within the trigger parameters 
+    # Stateless trigger strategy passing variables natively inside button initialization
     action_col_2.download_button(
         label="📥 DOWNLOAD DETAILED AUDIT PDF",
         data=create_calculation_pdf(
