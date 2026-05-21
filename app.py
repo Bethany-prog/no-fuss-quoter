@@ -184,7 +184,6 @@ if 'saved_cartage_mode' not in st.session_state: st.session_state.saved_cartage_
 if 'saved_labour_mode' not in st.session_state: st.session_state.saved_labour_mode = "Separate"
 if 'saved_waiver_mode' not in st.session_state: st.session_state.saved_waiver_mode = "Charge"
 
-# UPGRADE v54.3: Manual layout parameters persistence storage hooks
 if 'man_labour_val' not in st.session_state: st.session_state.man_labour_val = 0.0
 if 'man_cartage_val' not in st.session_state: st.session_state.man_cartage_val = 0.0
 if 'man_waiver_val' not in st.session_state: st.session_state.man_waiver_val = 0.0
@@ -213,7 +212,6 @@ def load_project_from_vault(label_name):
             st.session_state.saved_labour_mode = d.get("labour_mode", "Separate")
             st.session_state.saved_waiver_mode = d.get("waiver_mode", "Charge")
             
-            # Restore saved overrides
             st.session_state.man_labour_val = float(d.get("man_labour_val", 0.0))
             st.session_state.man_cartage_val = float(d.get("man_cartage_val", 0.0))
             st.session_state.man_waiver_val = float(d.get("man_waiver_val", 0.0))
@@ -450,7 +448,6 @@ with col1:
             st.session_state.df = pd.concat([st.session_state.df, new_struct_df], ignore_index=True)
             
             if anchoring_type == "Weighted":
-                # Automated structural scaling linkage defaults logic
                 calculated_weights = 128 if m_q == 2 else math.ceil((4 * m_q * 500.0) / 30.0)
                 w_lab_cost = calculated_weights * 1.65
                 new_weight_df = pd.DataFrame([{
@@ -539,9 +536,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     h_col4b.markdown("<div class='summary-hdr'>Override Rate</div>", unsafe_allow_html=True)
     h_col5.markdown("<div class='summary-hdr' style='text-align: right;'>Subtotal</div>", unsafe_allow_html=True)
     
-    h_tot_c, h_wk1_gear, total_kg, itrac_sqm = 0.0, 0.0, 0.0, 0.0
-    has_itrac = False
-    
+    # UPGRADE v54.4 PRE-CALCULATION BLOCK: First pass loops data to discover active dependencies BEFORE math parsing
     other_products_count = 0
     wow_marquee_qty = 0
     for idx, row in st.session_state.df.iterrows():
@@ -550,18 +545,17 @@ if st.session_state.df is not None and not st.session_state.df.empty:
             other_products_count += 1
         if "WOW Marquee" in p_name:
             wow_marquee_qty += int(row["Qty"])
-            
-    # Set dynamic label lines
+
+    # Synchronize layout text mappings cleanly 
     for idx, row in st.session_state.df.iterrows():
         if "WOW Marquee" in row["Product"]:
-            if other_products_count > 0:
-                st.session_state.df.at[idx, "Raw_Lab"] = 706.00
-                st.session_state.df.at[idx, "Lab_Math"] = f"WOW Marquee: {row['Qty']:.0f} x $706 = $1,441.00"
-            else:
-                st.session_state.df.at[idx, "Raw_Lab"] = 1441.00
-                st.session_state.df.at[idx, "Lab_Math"] = f"WOW Marquee: {row['Qty']:.0f} x $706 = $1,441.00"
+            st.session_state.df.at[idx, "Raw_Lab"] = 1411.00
+            st.session_state.df.at[idx, "Lab_Math"] = f"WOW Marquee: {row['Qty']:.0f} x $706 = $1,441.00"
 
-    # Execution summary renderer
+    h_tot_c, h_wk1_gear, total_kg, itrac_sqm = 0.0, 0.0, 0.0, 0.0
+    has_itrac = False
+
+    # Execution summary row builder block
     for idx, row in st.session_state.df.iterrows():
         override = row.get("Override_Rate", 0.0)
         active_base = override if override > 0 else row["Unit Rate"]
@@ -590,12 +584,10 @@ if st.session_state.df is not None and not st.session_state.df.empty:
             
         c1.markdown(f"<div class='item-text'>{prod_display} - Wk 1</div>", unsafe_allow_html=True)
         
-        # UPGRADE v54.3: Added interactive Quantity box input field controls inside row lines
         new_qty = c2.number_input("QtyBox", min_value=0.0, step=1.0, value=float(qty), key=f"sqty_{idx}", label_visibility="collapsed")
         if new_qty != float(qty):
             st.session_state.df.at[idx, "Qty"] = new_qty
-            # Recalculate weights dynamically if main marquee structure shifts counts
-            if "WOW Marquee" in row["Product"] and anchoring_type == "Weighted":
+            if "WOW Marquee" in row["Product"]:
                 for w_idx, w_row in st.session_state.df.iterrows():
                     if w_row["Product"] == "30kg Weights":
                         st.session_state.df.at[w_idx, "Qty"] = 128 if new_qty == 2 else math.ceil((4 * new_qty * 500.0) / 30.0)
@@ -626,7 +618,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
             cb[3].write(f"${standard_r_rate:,.2f}")
             cb[6].markdown(f"<div style='text-align: right; color: grey; font-style: italic;'>${r_tot:,.2f}</div>", unsafe_allow_html=True)
 
-    # Pre-calculated logistics metrics context anchors
+    # Post-calculated logistics definitions anchor blocks
     safe_km = st.session_state.km if st.session_state.km else 0
     if has_itrac:
         min_trucks = math.ceil(itrac_sqm / 288) or 1
@@ -634,11 +626,12 @@ if st.session_state.df is not None and not st.session_state.df.empty:
         min_trucks = math.ceil(total_kg / 6000) or 1
     trks = max(min_trucks, st.session_state.truck_override) if st.session_state.truck_override > 0 else min_trucks
     
+    # Securely compile raw metrics pooling elements inside safe namespace runtime zones
+    raw_lab_pool = st.session_state.df["Raw_Lab"].sum()
     auto_labour = max(raw_lab_pool, 350) if labour_mode == "Separate" else 0
     auto_cartage = trks * safe_km * 4 * 3.50 if cartage_mode == "Charge" else 0
     auto_waiver = h_wk1_gear * 0.07 if waiver_mode == "Charge" else 0
 
-    # UPGRADE v54.3: INTERACTIVE ADAPTIVE METRIC CONTROL TIERS
     st.divider()
     st.markdown("### 🛠️ Manual Logistic Adjustments")
     toggle_val = st.toggle("Enable Manual Overrides (Bypass Automated Calculations)", value=st.session_state.use_man_override)
@@ -661,7 +654,6 @@ if st.session_state.df is not None and not st.session_state.df.empty:
         ui_wav = st.number_input("Set Waiver Total", min_value=0.0, value=float(st.session_state.man_waiver_val if toggle_val else auto_waiver), key="ui_wav_field")
         if toggle_val: st.session_state.man_waiver_val = ui_wav
 
-    # Calculate final variables based on toggle activation state
     final_labour = st.session_state.man_labour_val if toggle_val else auto_labour
     final_cartage = st.session_state.man_cartage_val if toggle_val else auto_cartage
     final_waiver = st.session_state.man_waiver_val if toggle_val else auto_waiver
@@ -678,7 +670,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     grand_total_calc = h_tot_c + final_labour + final_waiver + final_cartage
     st.markdown(f"<div class='gt-banner'>GRAND TOTAL (EX GST): ${grand_total_calc:,.2f}</div>", unsafe_allow_html=True)
     
-    # Compile textual structural mathematical lists targeting PDF outputs
+    # Structural mathematical layout dictionary targeting clean PDF generation
     structural_math_dict = {"LABOUR": [], "LOGISTICS": [], "DAMAGE WAIVER": []}
     
     if toggle_val:
@@ -686,20 +678,22 @@ if st.session_state.df is not None and not st.session_state.df.empty:
         structural_math_dict["LOGISTICS"].append(f"Manual Override Total Applied = ${final_cartage:,.2f}")
         structural_math_dict["DAMAGE WAIVER"].append(f"Manual Override Total Applied = ${final_waiver:,.2f}")
     else:
-        # Generate standard proofs
         for idx, row in st.session_state.df.iterrows():
             if row.get('Raw_Lab', 0.0) > 0.0 or "WOW Marquee" in row['Product']:
                 if "WOW Marquee" in row['Product']:
                     structural_math_dict["LABOUR"].append(f"{row['Lab_Math']}")
                 else:
                     structural_math_dict["LABOUR"].append(f"30kg Weights: {row['Qty']:,.0f} units x $1.65 = ${row['Raw_Lab']:,.2f}")
+        is_floor_active = (raw_lab_pool < 350 and labour_mode == "Separate")
         if is_floor_active and labour_mode == "Separate":
             structural_math_dict["LABOUR"].append(f"Floor Buffer = ${350.00 - raw_lab_pool:,.2f}")
         structural_math_dict["LABOUR"].append(f"Total = ${final_labour:,.2f}")
         structural_math_dict["LOGISTICS"].append(f"{trks} Trucks x {safe_km}km x 4 x 3.50 = ${final_cartage:,.2f}")
         structural_math_dict["DAMAGE WAIVER"].append(f"{h_wk1_gear:,.2f} * 7% = ${final_waiver:,.2f}")
 
-    # SAVE & DOWNLOAD INTERACTION ZONE
+# ==============================================================================
+# 9. SAVE & DOWNLOAD INTERACTION ZONE
+# ==============================================================================
     st.markdown("")  
     action_col_1, action_col_2 = st.columns(2)
     
