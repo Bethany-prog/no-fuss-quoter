@@ -6,7 +6,6 @@ from fpdf import FPDF
 import re
 import json
 import os
-import io  # UPGRADE v53.1: Added for universal memory buffer data streaming
 from geopy.geocoders import Nominatim
 from geopy.distance import geodesic
 
@@ -68,7 +67,7 @@ def get_gs_per_seat_labour(seats):
     return 0, ""
 
 # ==============================================================================
-# 3. PDF AUDIT ENGINE (UPGRADED UNIVERSAL MEMORY STREAM PIPE)
+# 3. PDF AUDIT ENGINE (STRUCTURAL TABLE TIERS WITH STATELESS STREAMING)
 # ==============================================================================
 def clean_text(txt):
     if not txt: return ""
@@ -141,16 +140,16 @@ def create_calculation_pdf(name, subtotal, labour, waiver, cartage, grand, weeks
     pdf.ln(8); pdf.set_fill_color(0, 230, 118); pdf.set_text_color(26, 29, 45); pdf.set_font("Arial", "B", 13)
     pdf.cell(0, 14, f" GRAND TOTAL (EX GST): ${grand:,.2f} ", 0, 1, "R", True)
     
-    # UPGRADE v53.1: Bulletproof virtual RAM buffer capture strategy for both old fpdf and modern fpdf2 variants
     try:
-        # Modern fpdf2 structure returns data via standard output encoders
-        return pdf.output()
+        raw_pdf_bytes = pdf.output()
+        if isinstance(raw_pdf_bytes, str):
+            return raw_pdf_bytes.encode('latin-1', 'replace')
+        return bytes(raw_pdf_bytes)
     except Exception:
-        # Fallback for alternative structures
         return bytes(pdf.output(dest='S'))
 
 # ==============================================================================
-# 4. MASTER FLOORING PRODUCT CATALOG LIST 
+# 4. MASTER FLOORING PRODUCT CATALOG LIST
 # ==============================================================================
 FLOORING_CATALOG = {
     "I-Trac®": {"rate": 23.40, "block": 46.80, "lab_fix": 4.65, "kg": 15.0},
@@ -515,7 +514,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     h_col3.markdown("<div class='summary-hdr'>Gross Unit</div>", unsafe_allow_html=True)
     h_col4.markdown("<div class='summary-hdr'>Disc %</div>", unsafe_allow_html=True)
     h_col4b.markdown("<div class='summary-hdr'>Override Rate</div>", unsafe_allow_html=True)
-    h_col5.markdown("<div class='summary-hdr', style='text-align: right;'>Subtotal</div>", unsafe_allow_html=True)
+    h_col5.markdown("<div class='summary-hdr' style='text-align: right;'>Subtotal</div>", unsafe_allow_html=True)
     
     h_tot_c, h_wk1_gear, total_kg, itrac_sqm = 0.0, 0.0, 0.0, 0.0
     has_itrac = False
@@ -690,9 +689,17 @@ if st.session_state.df is not None and not st.session_state.df.empty:
         else:
             st.error("Cannot sync data tables because workspace is empty.")
             
-    # Capture populated byte streams cleanly inside runtime variable space
+    # UPGRADE v53.1: Pass explicit mapping dictionary lists inside function references to guarantee runtime stability
     cleaned_pdf_items = st.session_state.df.to_dict('records')
-    pdf_b = create_calculation_pdf(st.session_state.proj, h_tot_c, lab, wav, crt, grand_total_calc, weeks, start_d, end_d, cleaned_pdf_items, l_maths, st.session_state.status)
     
-    # Render operational download interface safely
-    action_col_2.download_button("📥 DOWNLOAD DETAILED AUDIT PDF", pdf_b, file_name=f"{st.session_state.proj}_Analysis.pdf", mime="application/pdf", use_container_width=True)
+    # Render the operational stateless download block
+    action_col_2.download_button(
+        label="📥 DOWNLOAD DETAILED AUDIT PDF",
+        data=create_calculation_pdf(
+            st.session_state.proj, h_tot_c, lab, wav, crt, grand_total_calc, 
+            weeks, start_d, end_d, cleaned_pdf_items, l_maths, st.session_state.status
+        ),
+        file_name=f"{st.session_state.proj}_Analysis.pdf",
+        mime="application/pdf",
+        use_container_width=True
+    )
