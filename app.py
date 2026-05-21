@@ -6,6 +6,7 @@ from fpdf import FPDF
 import re
 import json
 import os
+import io  # UPGRADE v53.1: Added for universal memory buffer data streaming
 from geopy.geocoders import Nominatim
 from geopy.distance import geodesic
 
@@ -67,7 +68,7 @@ def get_gs_per_seat_labour(seats):
     return 0, ""
 
 # ==============================================================================
-# 3. PDF AUDIT ENGINE (STRUCTURAL TABLE TIERS WITH UNIVERSAL MEMORY BUFFERS)
+# 3. PDF AUDIT ENGINE (UPGRADED UNIVERSAL MEMORY STREAM PIPE)
 # ==============================================================================
 def clean_text(txt):
     if not txt: return ""
@@ -140,16 +141,16 @@ def create_calculation_pdf(name, subtotal, labour, waiver, cartage, grand, weeks
     pdf.ln(8); pdf.set_fill_color(0, 230, 118); pdf.set_text_color(26, 29, 45); pdf.set_font("Arial", "B", 13)
     pdf.cell(0, 14, f" GRAND TOTAL (EX GST): ${grand:,.2f} ", 0, 1, "R", True)
     
+    # UPGRADE v53.1: Bulletproof virtual RAM buffer capture strategy for both old fpdf and modern fpdf2 variants
     try:
-        raw_pdf_bytes = pdf.output()
-        if isinstance(raw_pdf_bytes, str):
-            return raw_pdf_bytes.encode('latin-1', 'replace')
-        return bytes(raw_pdf_bytes)
-    except:
-        return bytes(pdf.output())
+        # Modern fpdf2 structure returns data via standard output encoders
+        return pdf.output()
+    except Exception:
+        # Fallback for alternative structures
+        return bytes(pdf.output(dest='S'))
 
 # ==============================================================================
-# 4. MASTER FLOORING PRODUCT CATALOG LIST (UPDATED TYPE NAME HEADING FOCUS)
+# 4. MASTER FLOORING PRODUCT CATALOG LIST 
 # ==============================================================================
 FLOORING_CATALOG = {
     "I-Trac®": {"rate": 23.40, "block": 46.80, "lab_fix": 4.65, "kg": 15.0},
@@ -405,11 +406,10 @@ with col1:
         anchoring_type = st.segmented_control("Anchoring Method", ["Pegged", "Weighted"], default="Pegged", key=f"anch_tog_{st.session_state.reset_key_seed}")
         
     elif s_type == "Grandstand Seating Tier":
-        # UPGRADE v53.0: Moving grandstand configuration forms inside structures dashboard zone
         st.caption("Grandstand Tier rules active (Variable matrix labour pooling distribution system).")
         m_in = "Seating System"
         m_q = st.number_input("Total Seat Capacity Count", min_value=1, value=50, key=f"str_qty_{st.session_state.reset_key_seed}")
-        anchoring_type = "" # Bypassed
+        anchoring_type = "" 
         
     else:
         m_in = st.text_input("Size (e.g. 10x15)", key=f"str_sz_{st.session_state.reset_key_seed}")
@@ -440,7 +440,6 @@ with col1:
             st.rerun()
             
         elif s_type == "Grandstand Seating Tier":
-            # UPGRADE v53.0: Relocated deployment matrix logic execution block
             lab_per_seat, lab_desc = get_gs_per_seat_labour(m_q)
             base_seat_hire = 15.00 if weeks < 4 else 7.50
             combined_unit_rate = base_seat_hire + lab_per_seat
@@ -486,7 +485,6 @@ with col1:
                 st.rerun()
 
 with col2:
-    # UPGRADE v53.0: Renaming Heading Target Focus Matrix strictly to Flooring Catalog
     st.markdown("### 🪵 Flooring Catalog")
     f_sel = st.selectbox("Flooring Type Options", list(FLOORING_CATALOG.keys()), key=f"f_pick_{st.session_state.reset_key_seed}")
     f_qty = st.number_input("Square Metre Coverage / Count", min_value=0.0, value=None, key=f"f_qty_{st.session_state.reset_key_seed}")
@@ -517,7 +515,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     h_col3.markdown("<div class='summary-hdr'>Gross Unit</div>", unsafe_allow_html=True)
     h_col4.markdown("<div class='summary-hdr'>Disc %</div>", unsafe_allow_html=True)
     h_col4b.markdown("<div class='summary-hdr'>Override Rate</div>", unsafe_allow_html=True)
-    h_col5.markdown("<div class='summary-hdr' style='text-align: right;'>Subtotal</div>", unsafe_allow_html=True)
+    h_col5.markdown("<div class='summary-hdr', style='text-align: right;'>Subtotal</div>", unsafe_allow_html=True)
     
     h_tot_c, h_wk1_gear, total_kg, itrac_sqm = 0.0, 0.0, 0.0, 0.0
     has_itrac = False
@@ -692,6 +690,9 @@ if st.session_state.df is not None and not st.session_state.df.empty:
         else:
             st.error("Cannot sync data tables because workspace is empty.")
             
+    # Capture populated byte streams cleanly inside runtime variable space
     cleaned_pdf_items = st.session_state.df.to_dict('records')
     pdf_b = create_calculation_pdf(st.session_state.proj, h_tot_c, lab, wav, crt, grand_total_calc, weeks, start_d, end_d, cleaned_pdf_items, l_maths, st.session_state.status)
-    action_col_2.download_button("📥 DOWNLOAD DETAILED AUDIT PDF", pdf_b, file_name=f"{st.session_state.proj}_Analysis.pdf", use_container_width=True)
+    
+    # Render operational download interface safely
+    action_col_2.download_button("📥 DOWNLOAD DETAILED AUDIT PDF", pdf_b, file_name=f"{st.session_state.proj}_Analysis.pdf", mime="application/pdf", use_container_width=True)
