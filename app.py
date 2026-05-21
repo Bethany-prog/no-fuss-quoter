@@ -67,7 +67,7 @@ def get_gs_per_seat_labour(seats):
     return 0, ""
 
 # ==============================================================================
-# 3. PDF AUDIT ENGINE (UPGRADED WITH DETAILED INDEPENDENT STRUCTURAL CATEGORIES)
+# 3. PDF AUDIT ENGINE (UPGRADED STRUCTURAL MATH WRAPPER TIERS)
 # ==============================================================================
 def clean_text(txt):
     if not txt: return ""
@@ -77,7 +77,7 @@ def clean_text(txt):
         cleaned = cleaned.replace(char, rep)
     return cleaned.encode('latin-1', 'replace').decode('latin-1')
 
-def create_calculation_pdf(name, subtotal, labour, waiver, cartage, grand, weeks, start, end, items_list, log_maths, status):
+def create_calculation_pdf(name, subtotal, labour, waiver, cartage, grand, weeks, start, end, items_list, structural_math_dict, status):
     pdf = FPDF()
     pdf.add_page()
     
@@ -123,21 +123,27 @@ def create_calculation_pdf(name, subtotal, labour, waiver, cartage, grand, weeks
             r_rate = display_unit_rate * 0.5 if item['Is_Marquee'] else display_unit_rate
             r_total = (item['Qty'] * r_rate * (weeks-1)) * dm
             
-            pdf.cell(col_w[0], 8, clean_text(f"    └ Recurring Hire (x{weeks-1} wks)"), 1, 0, "L")
+            pdf.cell(col_w[0], 8, clean_text(f"   └ Recurring Hire (x{weeks-1} wks)"), 1, 0, "L")
             pdf.cell(col_w[1], 8, f"{item['Qty']:,.0f}", 1, 0, "C")
             pdf.cell(col_w[2], 8, f"${r_rate:,.2f}", 1, 0, "R")
             pdf.cell(col_w[3], 8, f"{item.get('Discount', 0.0):.1f}%", 1, 0, "C")
             pdf.cell(col_w[4], 8, f"${r_total:,.2f}", 1, 1, "R")
 
-    # Section 2: Logistics & Breakdowns
-    pdf.ln(5); pdf.set_fill_color(26, 29, 45); pdf.set_text_color(255, 255, 255); pdf.set_font("Arial", "B", 11)
-    pdf.cell(0, 10, " 2. LABOUR, LOGISTICS & WAIVER BREAKDOWNS", 0, 1, "L", True)
-    pdf.set_text_color(0, 0, 0); pdf.set_font("Arial", "", 10)
+    # Section 2: Pure Calculation Sections (Black Headers Implemented Dynamically)
+    pdf.ln(5)
     
-    for m in log_maths: 
-        pdf.cell(0, 8, clean_text(f" {m}"), border="B", ln=True)
+    categories = ["LABOUR", "LOGISTICS", "DAMAGE WAIVER"]
+    for cat in categories:
+        if cat in structural_math_dict and structural_math_dict[cat]:
+            pdf.set_fill_color(26, 29, 45); pdf.set_text_color(255, 255, 255); pdf.set_font("Arial", "B", 11)
+            pdf.cell(0, 9, f" {cat}", 0, 1, "L", True)
+            pdf.set_text_color(0, 0, 0); pdf.set_font("Arial", "", 10)
+            
+            for line in structural_math_dict[cat]:
+                pdf.cell(0, 7, clean_text(f" {line}"), border="B", ln=True)
+            pdf.ln(3)
 
-    pdf.ln(8); pdf.set_fill_color(0, 230, 118); pdf.set_text_color(26, 29, 45); pdf.set_font("Arial", "B", 13)
+    pdf.ln(5); pdf.set_fill_color(0, 230, 118); pdf.set_text_color(26, 29, 45); pdf.set_font("Arial", "B", 13)
     pdf.cell(0, 14, f" GRAND TOTAL (EX GST): ${grand:,.2f} ", 0, 1, "R", True)
     
     try:
@@ -528,7 +534,6 @@ if st.session_state.df is not None and not st.session_state.df.empty:
         if "WOW Marquee" in p_name:
             wow_marquee_qty += int(row["Qty"])
             
-    # UPGRADE v54.0: Dynamic multi-marquee string layout calculation assignment
     for idx, row in st.session_state.df.iterrows():
         if "WOW Marquee" in row["Product"]:
             if other_products_count > 0:
@@ -624,43 +629,36 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     grand_total_calc = h_tot_c + lab + wav + crt
     st.markdown(f"<div class='gt-banner'>GRAND TOTAL (EX GST): ${grand_total_calc:,.2f}</div>", unsafe_allow_html=True)
     
-    # UPGRADE v54.0: Strict itemized layout categorizations (Independent headers)
-    l_maths = []
+    # UPGRADE v54.0: Structural dictionary isolation data compiler
+    structural_math_dict = {"LABOUR": [], "LOGISTICS": [], "DAMAGE WAIVER": []}
     
-    l_maths.append("--- [ LABOUR BREAKDOWN ] ---")
+    # 1. LABOUR DATA HOOKS
     if labour_mode == "Free":
-        l_maths.append("Labour Charges: Free / Special Promo Waiver")
+        structural_math_dict["LABOUR"].append("Labour: Free")
     elif labour_mode == "Include in Hire":
-        l_maths.append("Labour Charges: Included natively within individual item base unit rates")
+        structural_math_dict["LABOUR"].append("Labour: Included in Hire Rate")
     else:
         for idx, row in st.session_state.df.iterrows():
             if row.get('Raw_Lab', 0.0) > 0.0 or "WOW Marquee" in row['Product']:
-                raw_item_cost = row['Raw_Lab']
                 if "WOW Marquee" in row['Product']:
-                    l_maths.append(f"• {row['Lab_Math']}")
+                    structural_math_dict["LABOUR"].append(f"{row['Lab_Math']}")
                 else:
-                    l_maths.append(f"• {row['Product']}: {row['Lab_Math'].split(': ')[1]} = ${raw_item_cost:,.2f}")
+                    structural_math_dict["LABOUR"].append(f"{row['Product']}: {row['Lab_Math'].split(': ')[1]} = ${row['Raw_Lab']:,.2f}")
         if is_floor_active:
-            l_maths.append(f"• Minimum Labour Floor Buffer Top-up Applied = ${350.00 - raw_lab_pool:,.2f}")
-        l_maths.append(f"TOTAL APPLIED LABOUR FEE = ${lab:,.2f}")
+            structural_math_dict["LABOUR"].append(f"Minimum Floor Buffer Top-up = ${350.00 - raw_lab_pool:,.2f}")
+        structural_math_dict["LABOUR"].append(f"Total = ${lab:,.2f}")
         
-    l_maths.append("")
-    l_maths.append("--- [ LOGISTICS BREAKDOWN ] ---")
+    # 2. LOGISTICS DATA HOOKS
     if cartage_mode == "Free":
-        l_maths.append("Logistics Cartage: Free Delivery Allocation")
+        structural_math_dict["LOGISTICS"].append("Cartage: Free")
     else:
-        l_maths.append(f"• Transport Configuration: {trks} Trucks x {safe_km} One-Way KM (4x Route Matrix)")
-        l_maths.append(f"• Formula: ({trks} Trucks x {safe_km}km x 4) x $3.50 base rate")
-        l_maths.append(f"TOTAL APPLIED LOGISTICS FEE = ${crt:,.2f}")
+        structural_math_dict["LOGISTICS"].append(f"{trks} Trucks * {safe_km}km * 4 * 3.50 = ${crt:,.2f}")
         
-    l_maths.append("")
-    l_maths.append("--- [ DAMAGE WAIVER BREAKDOWN ] ---")
+    # 3. DAMAGE WAIVER DATA HOOKS
     if waiver_mode == "Free":
-        l_maths.append("Damage Waiver: Waived / Not Charged")
+        structural_math_dict["DAMAGE WAIVER"].append("Damage Waiver: Free")
     else:
-        l_maths.append(f"• Equipment Indemnity base calculation pool: ${h_wk1_gear:,.2f}")
-        l_maths.append(f"• Formula: ${h_wk1_gear:,.2f} x 7% industry standard asset safety rate")
-        l_maths.append(f"TOTAL APPLIED DAMAGE WAIVER = ${wav:,.2f}")
+        structural_math_dict["DAMAGE WAIVER"].append(f"{h_wk1_gear:,.2f} * 7% = ${wav:,.2f}")
 
     # SAVE & DOWNLOAD INTERACTION ZONE
     st.markdown("")  
@@ -690,5 +688,5 @@ if st.session_state.df is not None and not st.session_state.df.empty:
             st.error("Cannot sync data tables because workspace is empty.")
             
     cleaned_pdf_items = st.session_state.df.to_dict('records')
-    pdf_b = create_calculation_pdf(st.session_state.proj, h_tot_c, lab, wav, crt, grand_total_calc, weeks, start_d, end_d, cleaned_pdf_items, l_maths, st.session_state.status)
+    pdf_b = create_calculation_pdf(st.session_state.proj, h_tot_c, lab, wav, crt, grand_total_calc, weeks, start_d, end_d, cleaned_pdf_items, structural_math_dict, st.session_state.status)
     action_col_2.download_button("📥 DOWNLOAD DETAILED AUDIT PDF", pdf_b, file_name=f"{st.session_state.proj}_Analysis.pdf", mime="application/pdf", use_container_width=True)
