@@ -525,16 +525,15 @@ if st.session_state.df is not None and not st.session_state.df.empty:
         if p_name != "30kg Weights" and "WOW Marquee" not in p_name:
             other_products_count += 1
             
-    # UPGRADE v53.7: Set installation labour to static flat rates (Includes bump-in & out, once off fee)
+    # REPAIR v53.9: Fixed default configuration variables mapping to the precise $1,441.00 base line sum
     for idx, row in st.session_state.df.iterrows():
         if "WOW Marquee" in row["Product"]:
-            qty_scalar = row["Qty"]
             if other_products_count > 0:
-                st.session_state.df.at[idx, "Raw_Lab"] = 706.00 * qty_scalar
-                st.session_state.df.at[idx, "Lab_Math"] = f"WOW Marquee 6x3m: {qty_scalar:,.0f} units x $706.00"
+                st.session_state.df.at[idx, "Raw_Lab"] = 706.00
+                st.session_state.df.at[idx, "Lab_Math"] = "WOW Marquee 6x3m (Weighted) (Fixed Base Rate Matrix) = $706.00"
             else:
-                st.session_state.df.at[idx, "Raw_Lab"] = 1411.00 * qty_scalar
-                st.session_state.df.at[idx, "Lab_Math"] = f"WOW Marquee 6x3m: {qty_scalar:,.0f} units x $1,411.00"
+                st.session_state.df.at[idx, "Raw_Lab"] = 1441.00
+                st.session_state.df.at[idx, "Lab_Math"] = "WOW Marquee 6x3m (Weighted) (Fixed Base Rate Matrix) = $1,441.00"
 
     for idx, row in st.session_state.df.iterrows():
         override = row.get("Override_Rate", 0.0)
@@ -549,7 +548,6 @@ if st.session_state.df is not None and not st.session_state.df.empty:
             itrac_sqm += qty
             has_itrac = True
             
-        # UPGRADE v53.7: Adjusted baseline formula calculations so structural labour does not compound over weeks
         wk1_t = (qty * brate + row["Raw_Lab"]) * dm if labour_mode == "Include in Hire" else (qty * brate) * dm
         h_tot_c += wk1_t
         
@@ -594,7 +592,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     st.divider()
     col_left, col_right = st.columns(2)
     with col_left:
-        st.markdown("### ### 🚛 Logistics Override")
+        st.markdown("### 🚛 Logistics Override")
         if has_itrac:
             min_trucks = math.ceil(itrac_sqm / 288) or 1
         else:
@@ -608,7 +606,6 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     wav = h_wk1_gear * 0.07 if waiver_mode == "Charge" else 0
     crt = trks * safe_km * 4 * 3.50 if cartage_mode == "Charge" else 0
     
-    # UPGRADE v53.7: Total labour compiles as a strict static once-off sum configuration pool 
     raw_lab_pool = st.session_state.df["Raw_Lab"].sum()
     lab = max(raw_lab_pool, 350) if labour_mode == "Separate" else 0
     is_floor_active = (raw_lab_pool < 350 and labour_mode == "Separate")
@@ -640,7 +637,6 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     elif labour_mode == "Include in Hire":
         l_maths.append("Labour: Included in Hire Rate")
     else:
-        # UPGRADE v53.7: Cleaned up calculation print outputs (Removed active charges and threshold notices)
         for idx, row in st.session_state.df.iterrows():
             if row.get('Lab_Math') and row['Lab_Math'].strip() != "":
                 raw_item_cost = row['Raw_Lab']
