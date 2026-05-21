@@ -67,7 +67,7 @@ def get_gs_per_seat_labour(seats):
     return 0, ""
 
 # ==============================================================================
-# 3. PDF AUDIT ENGINE (STRUCTURAL TABLE TIERS WITH STATELESS STREAMING)
+# 3. PDF AUDIT ENGINE (UPGRADED NATIVE BYTES CAPTURE STRUCTURE)
 # ==============================================================================
 def clean_text(txt):
     if not txt: return ""
@@ -140,13 +140,8 @@ def create_calculation_pdf(name, subtotal, labour, waiver, cartage, grand, weeks
     pdf.ln(8); pdf.set_fill_color(0, 230, 118); pdf.set_text_color(26, 29, 45); pdf.set_font("Arial", "B", 13)
     pdf.cell(0, 14, f" GRAND TOTAL (EX GST): ${grand:,.2f} ", 0, 1, "R", True)
     
-    try:
-        raw_pdf_bytes = pdf.output()
-        if isinstance(raw_pdf_bytes, str):
-            return raw_pdf_bytes.encode('latin-1', 'replace')
-        return bytes(raw_pdf_bytes)
-    except Exception:
-        return bytes(pdf.output(dest='S'))
+    # UPGRADE v53.3: Force universal modern output binary format across versions safely
+    return pdf.output(dest='S')
 
 # ==============================================================================
 # 4. MASTER FLOORING PRODUCT CATALOG LIST
@@ -689,10 +684,9 @@ if st.session_state.df is not None and not st.session_state.df.empty:
         else:
             st.error("Cannot sync data tables because workspace is empty.")
             
-    # UPGRADE v53.1: Pass explicit mapping dictionary lists inside function references to guarantee runtime stability
     cleaned_pdf_items = st.session_state.df.to_dict('records')
     
-    # Render the operational stateless download block
+    # CORE UPGRADE FIXED HOOK v53.3: Wrap the stateless document builder inline directly within the trigger parameters 
     action_col_2.download_button(
         label="📥 DOWNLOAD DETAILED AUDIT PDF",
         data=create_calculation_pdf(
