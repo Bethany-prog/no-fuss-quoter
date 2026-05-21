@@ -184,10 +184,8 @@ if 'saved_cartage_mode' not in st.session_state: st.session_state.saved_cartage_
 if 'saved_labour_mode' not in st.session_state: st.session_state.saved_labour_mode = "Separate"
 if 'saved_waiver_mode' not in st.session_state: st.session_state.saved_waiver_mode = "Charge"
 
-if 'man_labour_val' not in st.session_state: st.session_state.man_labour_val = -1.0
-if 'man_cartage_val' not in st.session_state: st.session_state.man_cartage_val = -1.0
-if 'man_waiver_val' not in st.session_state: st.session_state.man_waiver_val = -1.0
-if 'use_man_override' not in st.session_state: st.session_state.use_man_override = False
+# UPGRADE v54.6: Dynamic row parameter tracking storage structures for itemized dictionary overrides
+if 'overrides_dict' not in st.session_state: st.session_state.overrides_dict = {}
 
 def pull_vault_archive_list():
     try:
@@ -212,10 +210,7 @@ def load_project_from_vault(label_name):
             st.session_state.saved_labour_mode = d.get("labour_mode", "Separate")
             st.session_state.saved_waiver_mode = d.get("waiver_mode", "Charge")
             
-            st.session_state.man_labour_val = float(d.get("man_labour_val", -1.0))
-            st.session_state.man_cartage_val = float(d.get("man_cartage_val", -1.0))
-            st.session_state.man_waiver_val = float(d.get("man_waiver_val", -1.0))
-            st.session_state.use_man_override = bool(d.get("use_man_override", False))
+            st.session_state.overrides_dict = d.get("overrides_dict", {})
             
             if "start_date" in d and d["start_date"]:
                 try:
@@ -249,6 +244,7 @@ st.markdown("""<style>
     div.stMetric { background-color: #FFFFFF !important; padding: 15px !important; border-radius: 12px !important; border: 2px solid #3D5AFE !important; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
     div[data-testid="stMetricValue"] { color: #3D5AFE !important; font-size: 30px !important; font-weight: 800 !important; }
     .item-text { font-size: 20px !important; font-weight: 700 !important; color: #1A1D2D; margin-top: 10px; }
+    .sub-math-hint { font-size: 13px !important; color: #5C6BC0 !important; font-style: italic; font-weight: 600; display: block; margin-top: -4px; margin-bottom: 8px; }
     .gt-banner { background: #1A1D2D; color: #00E676; padding: 40px; border-radius: 20px; text-align: right; font-size: 44px !important; font-weight: 900; margin-top: 30px; border: 6px solid #00E676; box-shadow: 0 10px 20px rgba(0,0,0,0.2); }
     .summary-hdr { font-weight: 800 !important; color: #1A1D2D !important; font-size: 15px !important; text-transform: uppercase !important; border-bottom: 2px solid #1A1D2D; padding-bottom: 5px; }
 </style>""", unsafe_allow_html=True)
@@ -308,10 +304,7 @@ if st.sidebar.button("➕ START NEW", use_container_width=True):
     st.session_state.saved_cartage_mode = "Charge"
     st.session_state.saved_labour_mode = "Separate"
     st.session_state.saved_waiver_mode = "Charge"
-    st.session_state.man_labour_val = -1.0
-    st.session_state.man_cartage_val = -1.0
-    st.session_state.man_waiver_val = -1.0
-    st.session_state.use_man_override = False
+    st.session_state.overrides_dict = {}
     st.session_state.reset_key_seed += 1
     st.rerun()
 
@@ -355,10 +348,7 @@ if vault_jobs:
                 st.session_state.saved_cartage_mode = "Charge"
                 st.session_state.saved_labour_mode = "Separate"
                 st.session_state.saved_waiver_mode = "Charge"
-                st.session_state.man_labour_val = -1.0
-                st.session_state.man_cartage_val = -1.0
-                st.session_state.man_waiver_val = -1.0
-                st.session_state.use_man_override = False
+                st.session_state.overrides_dict = {}
                 st.session_state.reset_key_seed += 1
                 st.rerun()
 else:
@@ -536,6 +526,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     h_col4b.markdown("<div class='summary-hdr'>Override Rate</div>", unsafe_allow_html=True)
     h_col5.markdown("<div class='summary-hdr' style='text-align: right;'>Subtotal</div>", unsafe_allow_html=True)
     
+    # Pre-calculate active metrics dependency pointers first to clear NameErrors
     other_products_count = 0
     wow_marquee_qty = 0
     for idx, row in st.session_state.df.iterrows():
@@ -553,6 +544,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     h_tot_c, h_wk1_gear, total_kg, itrac_sqm = 0.0, 0.0, 0.0, 0.0
     has_itrac = False
 
+    # Standard layout schedule generation map
     for idx, row in st.session_state.df.iterrows():
         override = row.get("Override_Rate", 0.0)
         active_base = override if override > 0 else row["Unit Rate"]
@@ -615,7 +607,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
             cb[3].write(f"${standard_r_rate:,.2f}")
             cb[6].markdown(f"<div style='text-align: right; color: grey; font-style: italic;'>${r_tot:,.2f}</div>", unsafe_allow_html=True)
 
-    # Logistics automated calculations variables
+    # Core system baseline calculator variables
     safe_km = st.session_state.km if st.session_state.km else 0
     if has_itrac:
         min_trucks = math.ceil(itrac_sqm / 288) or 1
@@ -624,90 +616,134 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     trks = max(min_trucks, st.session_state.truck_override) if st.session_state.truck_override > 0 else min_trucks
     
     raw_lab_pool = st.session_state.df["Raw_Lab"].sum()
-    auto_labour = max(raw_lab_pool, 350) if labour_mode == "Separate" else 0
-    auto_cartage = trks * safe_km * 4 * 3.50 if cartage_mode == "Charge" else 0
-    auto_waiver = h_wk1_gear * 0.07 if waiver_mode == "Charge" else 0
+    auto_labour_total = max(raw_lab_pool, 350) if labour_mode == "Separate" else 0
+    auto_cartage_total = trks * safe_km * 4 * 3.50 if cartage_mode == "Charge" else 0
+    auto_waiver_total = h_wk1_gear * 0.07 if waiver_mode == "Charge" else 0
 
-    # UPGRADE v54.5: MANUAL ADJMUSTMENTS FORMATTED AS AN EXACT WORKSPACE MATCH FOR QUOTE SUMMARY GRID
+    # UPGRADE v54.6: GRANULAR INDEPENDENT LINE ITEM OVERRIDES CORE ARCHITECTURE
     st.divider()
     st.markdown("### 🛠️ MANUAL LOGISTICS OVERRIDES")
     
-    # Header tier block layout alignment
     h_adj0, h_adj1, h_adj2, h_adj3 = st.columns([0.4, 3.2, 2.2, 1.4])
     h_adj1.markdown("<div class='summary-hdr'>Item Description</div>", unsafe_allow_html=True)
     h_adj2.markdown("<div class='summary-hdr'>Override Rate (Editable)</div>", unsafe_allow_html=True)
     h_adj3.markdown("<div class='summary-hdr' style='text-align: right;'>Subtotal</div>", unsafe_allow_html=True)
     
-    # Setup values trackers internally
-    cur_lab = float(st.session_state.man_labour_val if st.session_state.man_labour_val >= 0 else auto_labour)
-    cur_crt = float(st.session_state.man_cartage_val if st.session_state.man_cartage_val >= 0 else auto_cartage)
-    cur_wav = float(st.session_state.man_waiver_val if st.session_state.man_waiver_val >= 0 else auto_waiver)
+    final_labour_pool_sum = 0.0
+    has_changes_detected = False
+    
+    # A. ITEMIZE LABOUR ENTRIES GRID PIERS
+    if labour_mode == "Separate":
+        for idx, row in st.session_state.df.iterrows():
+            if row.get('Raw_Lab', 0.0) > 0.0 or "WOW Marquee" in row['Product']:
+                p_label = row['Product']
+                lbl_key = f"lab_ovr_{p_label}_{idx}"
+                
+                # Fetch auto book value parameters
+                auto_val = 1411.00 if "WOW Marquee" in p_label else float(row['Raw_Lab'])
+                math_hint_str = row['Lab_Math'] if "WOW Marquee" in p_label else f"{row['Qty']:,.0f} units x $1.65 = ${auto_val:,.2f}"
+                
+                saved_override_val = st.session_state.overrides_dict.get(lbl_key, -1.0)
+                active_display_val = saved_override_val if saved_override_val >= 0 else auto_val
+                
+                r_c0, r_c1, r_c2, r_c3 = st.columns([0.4, 3.2, 2.2, 1.4])
+                r_c1.markdown(f"<div class='item-text'>Labour: {p_label}</div><div class='sub-math-hint'>{math_hint_str}</div>", unsafe_allow_html=True)
+                
+                new_input_val = r_c2.number_input("InputL", min_value=0.0, value=float(active_display_val), key=f"f_l_{idx}", label_visibility="collapsed")
+                r_c3.markdown(f"<div style='text-align: right; font-size: 20px; font-weight: 700; color: #1A1D2D; margin-top: 10px;'>${new_input_val:,.2f}</div>", unsafe_allow_html=True)
+                
+                final_labour_pool_sum += new_input_val
+                if new_input_val != active_display_val:
+                    st.session_state.overrides_dict[lbl_key] = new_input_val
+                    has_changes_detected = True
 
-    # Row 1: Labour line component
-    r1_c0, r1_c1, r1_c2, r1_c3 = st.columns([0.4, 3.2, 2.2, 1.4])
-    # Toggle switch sits under index 0 spacing cleanly
-    lab_chk = r1_c0.checkbox("L", value=st.session_state.use_man_override, label_visibility="collapsed", key="lab_chk_active")
-    r1_c1.markdown("<div class='item-text'>Labour Handling Override</div>", unsafe_allow_html=True)
-    val_lab = r1_c2.number_input("LabRate", min_value=0.0, value=cur_lab, label_visibility="collapsed", key="ui_lab_field")
-    r1_c3.markdown(f"<div style='text-align: right; font-size: 20px; font-weight: 700; color: #1A1D2D; margin-top: 10px;'>${val_lab:,.2f}</div>", unsafe_allow_html=True)
+        # Enforce floor limits buffer
+        if final_labour_pool_sum < 350.00 and final_labour_pool_sum > 0:
+            floor_topup = 350.00 - final_labour_pool_sum
+            r_f0, r_f1, r_f2, r_f3 = st.columns([0.4, 3.2, 2.2, 1.4])
+            r_f1.markdown("<div class='item-text'>Labour Minimum Floor Buffer</div><div class='sub-math-hint'>system minimum baseline standard</div>", unsafe_allow_html=True)
+            r_f3.markdown(f"<div style='text-align: right; font-size: 20px; font-weight: 700; color: grey; margin-top: 10px;'>${floor_topup:,.2f}</div>", unsafe_allow_html=True)
+            final_labour_pool_sum = 350.00
+    else:
+        final_labour_pool_sum = auto_labour_total
 
-    # Row 2: Cartage line component
-    r2_c0, r2_c1, r2_c2, r2_c3 = st.columns([0.4, 3.2, 2.2, 1.4])
-    r2_c1.markdown("<div class='item-text'>Cartage Freight Override</div>", unsafe_allow_html=True)
-    val_crt = r2_c2.number_input("CrtRate", min_value=0.0, value=cur_crt, label_visibility="collapsed", key="ui_crt_field")
-    r2_c3.markdown(f"<div style='text-align: right; font-size: 20px; font-weight: 700; color: #1A1D2D; margin-top: 10px;'>${val_crt:,.2f}</div>", unsafe_allow_html=True)
+    # B. ITEMIZE CARTAGE LOGISTICS ENTRY ROW
+    cart_key = "logistics_cartage_freight_global"
+    saved_cart_override = st.session_state.overrides_dict.get(cart_key, -1.0)
+    active_cart_display = saved_cart_override if saved_cart_override >= 0 else auto_cartage_total
+    cart_hint = f"{trks} Trucks x {safe_km}km x 4 x $3.50 = ${auto_cartage_total:,.2f}" if cartage_mode == "Charge" else "Cartage math bypassed"
 
-    # Row 3: Waiver line component
-    r3_c0, r3_c1, r3_c2, r3_c3 = st.columns([0.4, 3.2, 2.2, 1.4])
-    r3_c1.markdown("<div class='item-text'>Damage Waiver Override</div>", unsafe_allow_html=True)
-    val_wav = r3_c2.number_input("WavRate", min_value=0.0, value=cur_wav, label_visibility="collapsed", key="ui_wav_field")
-    r3_c3.markdown(f"<div style='text-align: right; font-size: 20px; font-weight: 700; color: #1A1D2D; margin-top: 10px;'>${val_wav:,.2f}</div>", unsafe_allow_html=True)
+    r_t0, r_t1, r_t2, r_t3 = st.columns([0.4, 3.2, 2.2, 1.4])
+    r_t1.markdown(f"<div class='item-text'>Logistics Cartage Freight</div><div class='sub-math-hint'>{cart_hint}</div>", unsafe_allow_html=True)
+    new_cart_val = r_t2.number_input("InputC", min_value=0.0, value=float(active_cart_display), key="f_c_global", label_visibility="collapsed")
+    r_t3.markdown(f"<div style='text-align: right; font-size: 20px; font-weight: 700; color: #1A1D2D; margin-top: 10px;'>${new_cart_val:,.2f}</div>", unsafe_allow_html=True)
+    
+    final_cartage_sum = new_cart_val
+    if new_cart_val != active_cart_display:
+        st.session_state.overrides_dict[cart_key] = new_cart_val
+        has_changes_detected = True
 
-    # Session storage mapping loops synchronizer 
-    if lab_chk != st.session_state.use_man_override or val_lab != cur_lab or val_crt != cur_crt or val_wav != cur_wav:
-        st.session_state.use_man_override = lab_chk
-        st.session_state.man_labour_val = val_lab if lab_chk else -1.0
-        st.session_state.man_cartage_val = val_crt if lab_chk else -1.0
-        st.session_state.man_waiver_val = val_wav if lab_chk else -1.0
+    # C. ITEMIZE DAMAGE WAIVER ENTRY ROW
+    waiv_key = "damage_waiver_insurance_global"
+    saved_waiv_override = st.session_state.overrides_dict.get(waiv_key, -1.0)
+    active_waiv_display = saved_waiv_override if saved_waiv_override >= 0 else auto_waiver_total
+    waiv_hint = f"${h_wk1_gear:,.2f} gear value * 7% = ${auto_waiver_total:,.2f}" if waiver_mode == "Charge" else "Damage waiver bypassed"
+
+    r_w0, r_w1, r_w2, r_w3 = st.columns([0.4, 3.2, 2.2, 1.4])
+    r_w1.markdown(f"<div class='item-text'>Equipment Damage Waiver</div><div class='sub-math-hint'>{waiv_hint}</div>", unsafe_allow_html=True)
+    new_waiv_val = r_w2.number_input("InputW", min_value=0.0, value=float(active_waiv_display), key="f_w_global", label_visibility="collapsed")
+    r_w3.markdown(f"<div style='text-align: right; font-size: 20px; font-weight: 700; color: #1A1D2D; margin-top: 10px;'>${new_waiv_val:,.2f}</div>", unsafe_allow_html=True)
+    
+    final_waiver_sum = new_waiv_val
+    if new_waiv_val != active_waiv_display:
+        st.session_state.overrides_dict[waiv_key] = new_waiv_val
+        has_changes_detected = True
+
+    if has_changes_detected:
         st.rerun()
 
-    final_labour = val_lab if lab_chk else auto_labour
-    final_cartage = val_crt if lab_chk else auto_cartage
-    final_waiver = val_wav if lab_chk else auto_waiver
-
-    # Metrics Display Dashboard Status Cards Layout
+    # Metrics Display Status Cards Dashboard Summary Engine
     st.divider()
     m = st.columns(6)
     m[0].metric("HIRE COST", f"${round(h_tot_c, 2):,}")
-    m[1].metric("LABOUR", f"${round(final_labour, 2):,}")
-    m[2].metric("WAIVER", f"${round(final_waiver, 2):,}")
-    m[3].metric("CARTAGE", f"${round(final_cartage, 2):,}")
+    m[1].metric("LABOUR", f"${round(final_labour_pool_sum, 2):,}")
+    m[2].metric("WAIVER", f"${round(final_waiver_sum, 2):,}")
+    m[3].metric("CARTAGE", f"${round(final_cartage_sum, 2):,}")
     m[4].metric("WEIGHT", f"{round(total_kg, 0):}kg")
     m[5].metric("TRUCKS", f"{trks}")
     
-    grand_total_calc = h_tot_c + final_labour + final_waiver + final_cartage
+    grand_total_calc = h_tot_c + final_labour_pool_sum + final_waiver_sum + final_cartage_sum
     st.markdown(f"<div class='gt-banner'>GRAND TOTAL (EX GST): ${grand_total_calc:,.2f}</div>", unsafe_allow_html=True)
     
-    # Structural mathematical dictionary template generation for PDF processing 
+    # Compile text proofs list for Section 2 structural PDF generation format
     structural_math_dict = {"LABOUR": [], "LOGISTICS": [], "DAMAGE WAIVER": []}
     
-    if lab_chk:
-        structural_math_dict["LABOUR"].append(f"Manual Override Total Applied = ${final_labour:,.2f}")
-        structural_math_dict["LOGISTICS"].append(f"Manual Override Total Applied = ${final_cartage:,.2f}")
-        structural_math_dict["DAMAGE WAIVER"].append(f"Manual Override Total Applied = ${final_waiver:,.2f}")
+    if labour_mode == "Free":
+        structural_math_dict["LABOUR"].append("Free")
+    elif labour_mode == "Include in Hire":
+        structural_math_dict["LABOUR"].append("Included in Hire Rate")
     else:
         for idx, row in st.session_state.df.iterrows():
             if row.get('Raw_Lab', 0.0) > 0.0 or "WOW Marquee" in row['Product']:
-                if "WOW Marquee" in row['Product']:
-                    structural_math_dict["LABOUR"].append(f"{row['Lab_Math']}")
+                p_label = row['Product']
+                lbl_key = f"lab_ovr_{p_label}_{idx}"
+                if lbl_key in st.session_state.overrides_dict:
+                    structural_math_dict["LABOUR"].append(f"{p_label} = ${st.session_state.overrides_dict[lbl_key]:,.2f} (Manual Override)")
                 else:
-                    structural_math_dict["LABOUR"].append(f"30kg Weights: {row['Qty']:,.0f} units x $1.65 = ${row['Raw_Lab']:,.2f}")
-        is_floor_active = (raw_lab_pool < 350 and labour_mode == "Separate")
-        if is_floor_active and labour_mode == "Separate":
-            structural_math_dict["LABOUR"].append(f"Floor Buffer = ${350.00 - raw_lab_pool:,.2f}")
-        structural_math_dict["LABOUR"].append(f"Total = ${final_labour:,.2f}")
-        structural_math_dict["LOGISTICS"].append(f"{trks} Trucks x {safe_km}km x 4 x 3.50 = ${final_cartage:,.2f}")
-        structural_math_dict["DAMAGE WAIVER"].append(f"{h_wk1_gear:,.2f} * 7% = ${final_waiver:,.2f}")
+                    structural_math_dict["LABOUR"].append(f"{row['Lab_Math']}")
+        if raw_lab_pool < 350.00:
+            structural_math_dict["LABOUR"].append("Minimum Floor Adjustment Top-up applied")
+        structural_math_dict["LABOUR"].append(f"Total = ${final_labour_pool_sum:,.2f}")
+        
+    if cart_key in st.session_state.overrides_dict:
+        structural_math_dict["LOGISTICS"].append(f"Cartage Freight = ${final_cartage_sum:,.2f} (Manual Override)")
+    else:
+        structural_math_dict["LOGISTICS"].append(f"{trks} Trucks x {safe_km}km x 4 x 3.50 = ${final_cartage_sum:,.2f}")
+        
+    if waiv_key in st.session_state.overrides_dict:
+        structural_math_dict["DAMAGE WAIVER"].append(f"Damage Waiver = ${final_waiver_sum:,.2f} (Manual Override)")
+    else:
+        structural_math_dict["DAMAGE WAIVER"].append(f"{h_wk1_gear:,.2f} * 7% = ${final_waiver_sum:,.2f}")
 
 # ==============================================================================
 # 9. SAVE & DOWNLOAD INTERACTION ZONE
@@ -724,7 +760,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
                     "truck_override": st.session_state.truck_override, "start_date": st.session_state.start_date_val.strftime("%Y-%m-%d"),
                     "cartage_mode": cartage_mode, "labour_mode": labour_mode, "waiver_mode": waiver_mode,
                     "site_address": st.session_state.site_address_str, "items": st.session_state.df.to_dict(orient="records"),
-                    "man_labour_val": final_labour, "man_cartage_val": final_cartage, "man_waiver_val": final_waiver, "use_man_override": lab_chk
+                    "overrides_dict": st.session_state.overrides_dict
                 }
                 with open(f"{VAULT_DIR}/{target_label}.json", "w") as f:
                     json.dump(payload, f)
@@ -740,5 +776,5 @@ if st.session_state.df is not None and not st.session_state.df.empty:
             st.error("Cannot sync data tables because workspace is empty.")
             
     cleaned_pdf_items = st.session_state.df.to_dict('records')
-    pdf_b = create_calculation_pdf(st.session_state.proj, h_tot_c, final_labour, final_waiver, final_cartage, grand_total_calc, weeks, start_d, end_d, cleaned_pdf_items, structural_math_dict, st.session_state.status)
+    pdf_b = create_calculation_pdf(st.session_state.proj, h_tot_c, final_labour_pool_sum, final_waiver_sum, final_cartage_sum, grand_total_calc, weeks, start_d, end_d, cleaned_pdf_items, structural_math_dict, st.session_state.status)
     action_col_2.download_button("📥 DOWNLOAD DETAILED AUDIT PDF", pdf_b, file_name=f"{st.session_state.proj}_Analysis.pdf", mime="application/pdf", use_container_width=True)
