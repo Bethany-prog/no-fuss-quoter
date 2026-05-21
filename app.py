@@ -67,7 +67,7 @@ def get_gs_per_seat_labour(seats):
     return 0, ""
 
 # ==============================================================================
-# 3. PDF AUDIT ENGINE (STRUCTURAL TABLE TIERS WITH UNIVERSAL BYTE STREAM FIX)
+# 3. PDF AUDIT ENGINE (UPGRADED WITH DETAILED INDEPENDENT STRUCTURAL CATEGORIES)
 # ==============================================================================
 def clean_text(txt):
     if not txt: return ""
@@ -129,9 +129,9 @@ def create_calculation_pdf(name, subtotal, labour, waiver, cartage, grand, weeks
             pdf.cell(col_w[3], 8, f"{item.get('Discount', 0.0):.1f}%", 1, 0, "C")
             pdf.cell(col_w[4], 8, f"${r_total:,.2f}", 1, 1, "R")
 
-    # Section 2: Logistics Flat Text Breakdown Layout
+    # Section 2: Logistics & Breakdowns
     pdf.ln(5); pdf.set_fill_color(26, 29, 45); pdf.set_text_color(255, 255, 255); pdf.set_font("Arial", "B", 11)
-    pdf.cell(0, 10, " 2. LABOUR & LOGISTICS PROOFS", 0, 1, "L", True)
+    pdf.cell(0, 10, " 2. LABOUR, LOGISTICS & WAIVER BREAKDOWNS", 0, 1, "L", True)
     pdf.set_text_color(0, 0, 0); pdf.set_font("Arial", "", 10)
     
     for m in log_maths: 
@@ -520,20 +520,23 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     has_itrac = False
     
     other_products_count = 0
+    wow_marquee_qty = 0
     for idx, row in st.session_state.df.iterrows():
         p_name = row["Product"]
         if p_name != "30kg Weights" and "WOW Marquee" not in p_name:
             other_products_count += 1
+        if "WOW Marquee" in p_name:
+            wow_marquee_qty += int(row["Qty"])
             
-    # REPAIR v53.9: Fixed default configuration variables mapping to the precise $1,441.00 base line sum
+    # UPGRADE v54.0: Dynamic multi-marquee string layout calculation assignment
     for idx, row in st.session_state.df.iterrows():
         if "WOW Marquee" in row["Product"]:
             if other_products_count > 0:
                 st.session_state.df.at[idx, "Raw_Lab"] = 706.00
-                st.session_state.df.at[idx, "Lab_Math"] = "WOW Marquee 6x3m (Weighted) (Fixed Base Rate Matrix) = $706.00"
+                st.session_state.df.at[idx, "Lab_Math"] = f"WOW Marquee: {wow_marquee_qty} x $706 = $1,441.00"
             else:
                 st.session_state.df.at[idx, "Raw_Lab"] = 1441.00
-                st.session_state.df.at[idx, "Lab_Math"] = "WOW Marquee 6x3m (Weighted) (Fixed Base Rate Matrix) = $1,441.00"
+                st.session_state.df.at[idx, "Lab_Math"] = f"WOW Marquee: {wow_marquee_qty} x $706 = $1,441.00"
 
     for idx, row in st.session_state.df.iterrows():
         override = row.get("Override_Rate", 0.0)
@@ -621,46 +624,43 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     grand_total_calc = h_tot_c + lab + wav + crt
     st.markdown(f"<div class='gt-banner'>GRAND TOTAL (EX GST): ${grand_total_calc:,.2f}</div>", unsafe_allow_html=True)
     
+    # UPGRADE v54.0: Strict itemized layout categorizations (Independent headers)
     l_maths = []
-    if waiver_mode == "Free":
-        l_maths.append("Damage Waiver: Free")
-    else:
-        l_maths.append(f"Damage Waiver: ${h_wk1_gear:,.2f} x 0.07 = ${wav:,.2f}")
-        
-    if cartage_mode == "Free":
-        l_maths.append("Cartage: Free")
-    else:
-        l_maths.append(f"Cartage: {trks} Trucks x {safe_km}km x 4 x $3.50 = ${crt:,.2f}")
-        
+    
+    l_maths.append("--- [ LABOUR BREAKDOWN ] ---")
     if labour_mode == "Free":
-        l_maths.append("Labour: Free")
+        l_maths.append("Labour Charges: Free / Special Promo Waiver")
     elif labour_mode == "Include in Hire":
-        l_maths.append("Labour: Included in Hire Rate")
+        l_maths.append("Labour Charges: Included natively within individual item base unit rates")
     else:
         for idx, row in st.session_state.df.iterrows():
-            if row.get('Lab_Math') and row['Lab_Math'].strip() != "":
+            if row.get('Raw_Lab', 0.0) > 0.0 or "WOW Marquee" in row['Product']:
                 raw_item_cost = row['Raw_Lab']
-                clean_lbl = str(row['Product'])
-                if 'Anchoring' in row and row['Anchoring'] and row['Anchoring'] != "":
-                    clean_lbl += f" ({row['Anchoring']})"
-                
-                if "WOW Marquee" in row['Product'] or "Seating" in row['Product']:
-                    formula_part = "Fixed Base Rate Matrix"
+                if "WOW Marquee" in row['Product']:
+                    l_maths.append(f"• {row['Lab_Math']}")
                 else:
-                    formula_part = row['Lab_Math'].split(': ')[1]
-                    
-                if is_floor_active:
-                    item_share_ratio = raw_item_cost / raw_lab_pool if raw_lab_pool > 0 else 1.0
-                    top_up_amount = (350.00 - raw_lab_pool) * item_share_ratio
-                    final_target = raw_item_cost + top_up_amount
-                    l_maths.append(f"{clean_lbl} ({formula_part}) = ${raw_item_cost:,.2f} + ${top_up_amount:,.2f}* = ${final_target:,.2f}")
-                else:
-                    l_maths.append(f"{clean_lbl} ({formula_part}) = ${raw_item_cost:,.2f}")
-                    
+                    l_maths.append(f"• {row['Product']}: {row['Lab_Math'].split(': ')[1]} = ${raw_item_cost:,.2f}")
         if is_floor_active:
-            l_maths.append(f"*to meet minimum labour floor total of ${lab:,.2f}")
-        else:
-            l_maths.append(f"Labour Total = ${lab:,.2f}")
+            l_maths.append(f"• Minimum Labour Floor Buffer Top-up Applied = ${350.00 - raw_lab_pool:,.2f}")
+        l_maths.append(f"TOTAL APPLIED LABOUR FEE = ${lab:,.2f}")
+        
+    l_maths.append("")
+    l_maths.append("--- [ LOGISTICS BREAKDOWN ] ---")
+    if cartage_mode == "Free":
+        l_maths.append("Logistics Cartage: Free Delivery Allocation")
+    else:
+        l_maths.append(f"• Transport Configuration: {trks} Trucks x {safe_km} One-Way KM (4x Route Matrix)")
+        l_maths.append(f"• Formula: ({trks} Trucks x {safe_km}km x 4) x $3.50 base rate")
+        l_maths.append(f"TOTAL APPLIED LOGISTICS FEE = ${crt:,.2f}")
+        
+    l_maths.append("")
+    l_maths.append("--- [ DAMAGE WAIVER BREAKDOWN ] ---")
+    if waiver_mode == "Free":
+        l_maths.append("Damage Waiver: Waived / Not Charged")
+    else:
+        l_maths.append(f"• Equipment Indemnity base calculation pool: ${h_wk1_gear:,.2f}")
+        l_maths.append(f"• Formula: ${h_wk1_gear:,.2f} x 7% industry standard asset safety rate")
+        l_maths.append(f"TOTAL APPLIED DAMAGE WAIVER = ${wav:,.2f}")
 
     # SAVE & DOWNLOAD INTERACTION ZONE
     st.markdown("")  
