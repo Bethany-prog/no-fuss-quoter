@@ -365,14 +365,13 @@ st.session_state.start_date_val = start_d
 end_d = c2.date_input("End Date", value=start_d, key=f"ed_pick_{st.session_state.reset_key_seed}")
 weeks = math.ceil(((end_d - start_d).days) / 7) or 1
 
-# UPGRADE v55.0: Geocoding Map Offline Resilience Core
+# UPGRADE v55.1: Added layout force rerun updates directly below address mapping execution blocks
 input_addr = c3.text_input("🏠 Delivery Site Address", value=st.session_state.site_address_str, placeholder="Type full address or suburb...", key=f"addr_field_{st.session_state.reset_key_seed}")
 
 if input_addr.strip() != st.session_state.site_address_str:
     st.session_state.site_address_str = input_addr.strip()
     if input_addr.strip() != "":
         try:
-            # Bump server connection patience to a stable 5-second max retries limit
             geolocator = Nominatim(user_agent="louis_quoter_engine_v55", timeout=5)
             loc_data = geolocator.geocode(input_addr.strip() + ", Victoria, Australia")
             
@@ -383,22 +382,21 @@ if input_addr.strip() != st.session_state.site_address_str:
                 calculated_raw_km = geodesic(depot_coords, target_coords).kilometers
                 final_buffered_km = round(calculated_raw_km * 1.15, 1)
                 
+                # CORE FIX v55.1: Enforce state-saving refresh so the active box visual changes instantly
                 st.session_state.km = final_buffered_km
-                st.toast(f"📍 Location verified: {loc_data.address[:45]}... Linked as {final_buffered_km} KM", icon="✅")
+                st.rerun()
             else:
-                st.sidebar.error("Address lookup timeout or not found. Use manual KM box below.")
+                st.sidebar.error("Address lookup timeout. Enter distance manually.")
         except Exception as maps_err:
-            # Catch network timeout errors gracefully without crashing or zeroing parameters out
-            st.sidebar.warning("🗺️ Map API timeout or offline. Enter the route distance manually below.")
+            st.sidebar.warning("🗺️ Map API timeout. Enter distance manually below.")
 
-# UPGRADE v55.0: Editable backup input block for one-way distance parameter management
 st.markdown("**🚛 Active Routing Distance**")
 c_km1, c_km2 = st.columns([1, 4])
 new_manual_km = c_km1.number_input("One-Way KM", min_value=0.0, step=0.5, value=float(st.session_state.km), key="manual_km_override_box")
 if new_manual_km != float(st.session_state.km):
     st.session_state.km = new_manual_km
 
-c_km2.info(f"**Configuration Active:** Job site location calculations locked at **{st.session_state.km} One-Way KM** (Origin Depot: Cranbourne West)")
+c_km2.info(f"**Configuration Active:** Job site calculations locked at **{st.session_state.km} One-Way KM** (Origin Depot: Cranbourne West)")
 
 # Multi-Segment Toggle Rules
 l1, l2, l3 = st.columns(3)
@@ -536,7 +534,6 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     h_col4b.markdown("<div class='summary-hdr'>Override Rate</div>", unsafe_allow_html=True)
     h_col5.markdown("<div class='summary-hdr' style='text-align: right;'>Subtotal</div>", unsafe_allow_html=True)
     
-    # Run dynamic parsing checks safely
     other_products_count = 0
     wow_marquee_qty = 0
     for idx, row in st.session_state.df.iterrows():
@@ -616,7 +613,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
             cb[3].write(f"${standard_r_rate:,.2f}")
             cb[6].markdown(f"<div style='text-align: right; color: grey; font-style: italic;'>${r_tot:,.2f}</div>", unsafe_allow_html=True)
 
-    # Core background transport variables engine 
+    # Core system automated logistics calculations trackers 
     if has_itrac:
         min_trucks = math.ceil(itrac_sqm / 288) or 1
     else:
@@ -631,7 +628,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     auto_waiver_total = h_wk1_gear * 0.07 if waiver_mode == "Charge" else 0
 
     # ==============================================================================
-    # 9. MANUAL LOGISTICS OVERRIDES WORKSPACE GRID
+    # 9. ITEMISED MANUAL LOGISTICS OVERRIDES TABLE WORKSPACE MATRIX
     # ==============================================================================
     st.divider()
     st.markdown("### 🛠️ MANUAL LOGISTICS OVERRIDES")
@@ -644,7 +641,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     final_labour_pool_sum = 0.0
     has_changes_detected = False
 
-    # A. LABOUR OVERRIDES
+    # A. GRANULAR LABOUR ITEM LINE MAPPINGS
     if labour_mode == "Separate":
         for idx, row in st.session_state.df.iterrows():
             if row.get('Raw_Lab', 0.0) > 0.0 or "WOW Marquee" in row['Product']:
@@ -683,7 +680,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     else:
         final_labour_pool_sum = 0.0
 
-    # B. TRUCK COUNTS OVERRIDE
+    # B. DYNAMIC TRUCK ALLOCATION SCALAR BOX ROW
     r_trk0, r_trk1, r_trk2, r_trk3 = st.columns([0.4, 3.2, 2.2, 1.4])
     r_trk1.markdown(f"<div class='item-text'>Logistics: Active Truck Allocation Count</div><div class='sub-math-hint'>default calculated configuration requirement = {min_trucks} truck(s)</div>", unsafe_allow_html=True)
     new_trk_count = r_trk2.number_input("TruckInputBox", min_value=float(min_trucks), step=1.0, value=float(trks), key="f_trk_scalar_cell", label_visibility="collapsed")
@@ -770,7 +767,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
         structural_math_dict["DAMAGE WAIVER"].append(f"{h_wk1_gear:,.2f} * 7% = ${final_waiver_sum:,.2f}")
 
 # ==============================================================================
-# 10. SAVE & DOWNLOAD INTERACTION ZONE (WITH NATIVE EXPORT STREAMS FIXED)
+# 10. SAVE & DOWNLOAD INTERACTION ZONE (WITH SAFETY OPENPYXL BYPASS PIPES)
 # ==============================================================================
     st.markdown("")  
     action_col_1, action_col_2, action_col_3 = st.columns(3)
@@ -799,11 +796,12 @@ if st.session_state.df is not None and not st.session_state.df.empty:
         else:
             st.error("Cannot sync data tables because workspace is empty.")
             
+    # Native PDF Generator Buffer execution Pipe Hook
     cleaned_pdf_items = st.session_state.df.to_dict('records')
     pdf_b = create_calculation_pdf(st.session_state.proj, h_tot_c, final_labour_pool_sum, final_waiver_sum, final_cartage_sum, grand_total_calc, weeks, start_d, end_d, cleaned_pdf_items, structural_math_dict, st.session_state.status)
     action_col_2.download_button("📥 DOWNLOAD DETAILED AUDIT PDF", pdf_b, file_name=f"{st.session_state.proj}_Analysis.pdf", mime="application/pdf", use_container_width=True)
 
-    # --- DYNAMIC MEMORY EXCEL TEMPLATE EXPORTER MATRIX HOOK ---
+    # --- DYNAMIC EXCEL TEMPLATE EXPORTER MATRIX HOOK ---
     excel_catalog_data = {
         "Product Group": ["Structures", "Structures", "Structures", "Flooring", "Flooring", "Flooring", "Flooring", "Ballast Accessories"],
         "Product Name": ["Standard Frame Marquee", "WOW Marquee 6x3m", "Standard Seating Grandstand", "I-Trac (R)", "Supa-Trac (R)", "Plastorip", "Trakmat", "30kg Weights"],
@@ -816,15 +814,25 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     
     excel_df = pd.DataFrame(excel_catalog_data)
     
-    excel_buffer = io.BytesIO()
-    with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
-        excel_df.to_excel(writer, index=False, sheet_name='Audit Product Matrix')
-    excel_data_bytes = excel_buffer.getvalue()
+    # SAFETY PIPING BUFFER: If openpyxl dependencies are missing inside cloud engine caches, seamlessly fall back to an unbreakable standard binary stream layout format
+    try:
+        excel_buffer = io.BytesIO()
+        with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
+            excel_df.to_excel(writer, index=False, sheet_name='Audit Product Matrix')
+        excel_data_bytes = excel_buffer.getvalue()
+        file_extension = "xlsx"
+        mime_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    except:
+        # Emergency fail-safe download bypass
+        csv_str = excel_df.to_csv(index=False)
+        excel_data_bytes = csv_str.encode('utf-8')
+        file_extension = "csv"
+        mime_type = "text/csv"
 
     action_col_3.download_button(
-        label="📊 DOWNLOAD EXCEL SHEET TEMPLATE",
+        label=f"📊 DOWNLOAD EXCEL CATALOG TEMPLATE",
         data=excel_data_bytes,
-        file_name="Louis_Master_Quoter_Audit_Template.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        file_name=f"Louis_Master_Quoter_Template.{file_extension}",
+        mime=mime_type,
         use_container_width=True
     )
