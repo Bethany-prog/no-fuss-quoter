@@ -154,7 +154,7 @@ def create_calculation_pdf(name, subtotal, labour, waiver, cartage, grand, weeks
         return bytes(pdf.output())
 
 # ==============================================================================
-# 4. MASTER FLOORING PRODUCT CATALOG LIST (UPGRADED Trakmat RATES v54.9)
+# 4. MASTER FLOORING PRODUCT CATALOG LIST
 # ==============================================================================
 FLOORING_CATALOG = {
     "I-Trac®": {"rate": 23.40, "block": 46.80, "lab_fix": 4.65, "kg": 15.0},
@@ -365,13 +365,15 @@ st.session_state.start_date_val = start_d
 end_d = c2.date_input("End Date", value=start_d, key=f"ed_pick_{st.session_state.reset_key_seed}")
 weeks = math.ceil(((end_d - start_d).days) / 7) or 1
 
+# UPGRADE v55.0: Geocoding Map Offline Resilience Core
 input_addr = c3.text_input("🏠 Delivery Site Address", value=st.session_state.site_address_str, placeholder="Type full address or suburb...", key=f"addr_field_{st.session_state.reset_key_seed}")
 
 if input_addr.strip() != st.session_state.site_address_str:
     st.session_state.site_address_str = input_addr.strip()
     if input_addr.strip() != "":
         try:
-            geolocator = Nominatim(user_agent="louis_quoter_engine_v51")
+            # Bump server connection patience to a stable 5-second max retries limit
+            geolocator = Nominatim(user_agent="louis_quoter_engine_v55", timeout=5)
             loc_data = geolocator.geocode(input_addr.strip() + ", Victoria, Australia")
             
             if loc_data:
@@ -384,11 +386,19 @@ if input_addr.strip() != st.session_state.site_address_str:
                 st.session_state.km = final_buffered_km
                 st.toast(f"📍 Location verified: {loc_data.address[:45]}... Linked as {final_buffered_km} KM", icon="✅")
             else:
-                st.sidebar.error("Address not found. Please clarify suburb identifiers.")
+                st.sidebar.error("Address lookup timeout or not found. Use manual KM box below.")
         except Exception as maps_err:
-            st.sidebar.warning(f"Geocoding map ping offline: {str(maps_err)}")
+            # Catch network timeout errors gracefully without crashing or zeroing parameters out
+            st.sidebar.warning("🗺️ Map API timeout or offline. Enter the route distance manually below.")
 
-st.info(f"**Calculated Hire Duration:** {weeks} Week(s)  |  **Active Delivery Routing Distance:** {st.session_state.km} One-Way KM (Origin: Cranbourne West)")
+# UPGRADE v55.0: Editable backup input block for one-way distance parameter management
+st.markdown("**🚛 Active Routing Distance**")
+c_km1, c_km2 = st.columns([1, 4])
+new_manual_km = c_km1.number_input("One-Way KM", min_value=0.0, step=0.5, value=float(st.session_state.km), key="manual_km_override_box")
+if new_manual_km != float(st.session_state.km):
+    st.session_state.km = new_manual_km
+
+c_km2.info(f"**Configuration Active:** Job site location calculations locked at **{st.session_state.km} One-Way KM** (Origin Depot: Cranbourne West)")
 
 # Multi-Segment Toggle Rules
 l1, l2, l3 = st.columns(3)
@@ -526,7 +536,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     h_col4b.markdown("<div class='summary-hdr'>Override Rate</div>", unsafe_allow_html=True)
     h_col5.markdown("<div class='summary-hdr' style='text-align: right;'>Subtotal</div>", unsafe_allow_html=True)
     
-    # Pre-calculate baseline loops securely
+    # Run dynamic parsing checks safely
     other_products_count = 0
     wow_marquee_qty = 0
     for idx, row in st.session_state.df.iterrows():
@@ -606,8 +616,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
             cb[3].write(f"${standard_r_rate:,.2f}")
             cb[6].markdown(f"<div style='text-align: right; color: grey; font-style: italic;'>${r_tot:,.2f}</div>", unsafe_allow_html=True)
 
-    # Core automated calculation parameters
-    safe_km = st.session_state.km if st.session_state.km else 0
+    # Core background transport variables engine 
     if has_itrac:
         min_trucks = math.ceil(itrac_sqm / 288) or 1
     else:
@@ -618,11 +627,11 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     trks = int(saved_trk_count)
 
     raw_lab_pool = st.session_state.df["Raw_Lab"].sum()
-    auto_cartage_total = trks * safe_km * 4 * 3.50 if cartage_mode == "Charge" else 0
+    auto_cartage_total = trks * st.session_state.km * 4 * 3.50 if cartage_mode == "Charge" else 0
     auto_waiver_total = h_wk1_gear * 0.07 if waiver_mode == "Charge" else 0
 
     # ==============================================================================
-    # 9. ITEMISED MANUAL LOGISTICS OVERRIDES TABLE WORKSPACE MATRIX
+    # 9. MANUAL LOGISTICS OVERRIDES WORKSPACE GRID
     # ==============================================================================
     st.divider()
     st.markdown("### 🛠️ MANUAL LOGISTICS OVERRIDES")
@@ -635,7 +644,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     final_labour_pool_sum = 0.0
     has_changes_detected = False
 
-    # A. GRANULAR LABOUR ITEM LINE MAPPINGS
+    # A. LABOUR OVERRIDES
     if labour_mode == "Separate":
         for idx, row in st.session_state.df.iterrows():
             if row.get('Raw_Lab', 0.0) > 0.0 or "WOW Marquee" in row['Product']:
@@ -644,7 +653,6 @@ if st.session_state.df is not None and not st.session_state.df.empty:
                 
                 auto_val = 1411.00 if "WOW Marquee" in p_label else float(row['Raw_Lab'])
                 
-                # Fetch customized text layout string context clues v54.9
                 if "WOW Marquee" in p_label:
                     math_hint_str = row['Lab_Math']
                 elif "Trakmat" in p_label:
@@ -675,7 +683,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     else:
         final_labour_pool_sum = 0.0
 
-    # B. DYNAMIC TRUCK ALLOCATION SCALAR BOX ROW
+    # B. TRUCK COUNTS OVERRIDE
     r_trk0, r_trk1, r_trk2, r_trk3 = st.columns([0.4, 3.2, 2.2, 1.4])
     r_trk1.markdown(f"<div class='item-text'>Logistics: Active Truck Allocation Count</div><div class='sub-math-hint'>default calculated configuration requirement = {min_trucks} truck(s)</div>", unsafe_allow_html=True)
     new_trk_count = r_trk2.number_input("TruckInputBox", min_value=float(min_trucks), step=1.0, value=float(trks), key="f_trk_scalar_cell", label_visibility="collapsed")
@@ -685,11 +693,11 @@ if st.session_state.df is not None and not st.session_state.df.empty:
         st.session_state.truck_override = int(new_trk_count)
         has_changes_detected = True
 
-    # C. CARTAGE FREIGHT LOGISTICS ROW
+    # C. CARTAGE FREIGHT LOGISTICS
     cart_key = "logistics_cartage_freight_global"
     saved_cart_override = st.session_state.overrides_dict.get(cart_key, -1.0)
     active_cart_display = saved_cart_override if saved_cart_override >= 0 else auto_cartage_total
-    cart_hint_str = f"default book: {trks} trucks x {safe_km}km x 4 x $3.50 = ${auto_cartage_total:,.2f}"
+    cart_hint_str = f"default book: {trks} trucks x {st.session_state.km}km x 4 x $3.50 = ${auto_cartage_total:,.2f}"
 
     r_t0, r_t1, r_t2, r_t3 = st.columns([0.4, 3.2, 2.2, 1.4])
     r_t1.markdown(f"<div class='item-text'>Logistics: Cartage Freight Fee</div><div class='sub-math-hint'>{cart_hint_str.lower()}</div>", unsafe_allow_html=True)
@@ -701,7 +709,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
         st.session_state.overrides_dict[cart_key] = new_cart_val
         has_changes_detected = True
 
-    # D. DAMAGE WAIVER ROW
+    # D. DAMAGE WAIVER
     waiv_key = "damage_waiver_insurance_global"
     saved_waiv_override = st.session_state.overrides_dict.get(waiv_key, -1.0)
     active_waiv_display = saved_waiv_override if saved_waiv_override >= 0 else auto_waiver_total
@@ -720,7 +728,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     if has_changes_detected:
         st.rerun()
 
-    # Metrics Display Dashboard Summary Status Footer Block 
+    # Dashboard Metrics status summaries layout footer
     st.divider()
     m = st.columns(6)
     m[0].metric("HIRE COST", f"${round(h_tot_c, 2):,}")
@@ -733,7 +741,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     grand_total_calc = h_tot_c + final_labour_pool_sum + final_waiver_sum + final_cartage_sum
     st.markdown(f"<div class='gt-banner'>GRAND TOTAL (EX GST): ${grand_total_calc:,.2f}</div>", unsafe_allow_html=True)
     
-    # Compile text proofs list for Section 2 structural PDF generation format
+    # Compile text strings matrix fields targeting clean PDF templates
     structural_math_dict = {"LABOUR": [], "LOGISTICS": [], "DAMAGE WAIVER": []}
     
     if labour_mode == "Separate":
@@ -754,7 +762,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     if cart_key in st.session_state.overrides_dict or truck_input_key in st.session_state.overrides_dict:
         structural_math_dict["LOGISTICS"].append(f"Cartage Freight = ${final_cartage_sum:,.2f} (Manual Override | {trks} Truck Allocation)")
     else:
-        structural_math_dict["LOGISTICS"].append(f"{trks} Trucks x {safe_km}km x 4 x 3.50 = ${final_cartage_sum:,.2f}")
+        structural_math_dict["LOGISTICS"].append(f"{trks} Trucks x {st.session_state.km}km x 4 x 3.50 = ${final_cartage_sum:,.2f}")
         
     if waiv_key in st.session_state.overrides_dict:
         structural_math_dict["DAMAGE WAIVER"].append(f"Damage Waiver = ${final_waiver_sum:,.2f} (Manual Override)")
@@ -762,7 +770,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
         structural_math_dict["DAMAGE WAIVER"].append(f"{h_wk1_gear:,.2f} * 7% = ${final_waiver_sum:,.2f}")
 
 # ==============================================================================
-# 10. SAVE & DOWNLOAD INTERACTION ZONE (WITH INLINE MEMORY STREAM EXPORT)
+# 10. SAVE & DOWNLOAD INTERACTION ZONE (WITH NATIVE EXPORT STREAMS FIXED)
 # ==============================================================================
     st.markdown("")  
     action_col_1, action_col_2, action_col_3 = st.columns(3)
@@ -791,13 +799,11 @@ if st.session_state.df is not None and not st.session_state.df.empty:
         else:
             st.error("Cannot sync data tables because workspace is empty.")
             
-    # Native PDF Generator Buffer execution Pipe Hook
     cleaned_pdf_items = st.session_state.df.to_dict('records')
     pdf_b = create_calculation_pdf(st.session_state.proj, h_tot_c, final_labour_pool_sum, final_waiver_sum, final_cartage_sum, grand_total_calc, weeks, start_d, end_d, cleaned_pdf_items, structural_math_dict, st.session_state.status)
     action_col_2.download_button("📥 DOWNLOAD DETAILED AUDIT PDF", pdf_b, file_name=f"{st.session_state.proj}_Analysis.pdf", mime="application/pdf", use_container_width=True)
 
-    # --- NATIVE INLINE DYNAMIC EXCEL TEMPLATE EXPORTER ---
-    # Build complete raw dictionary matrix data mapping catalog parameters instantly (Trakmat updated v54.9)
+    # --- DYNAMIC MEMORY EXCEL TEMPLATE EXPORTER MATRIX HOOK ---
     excel_catalog_data = {
         "Product Group": ["Structures", "Structures", "Structures", "Flooring", "Flooring", "Flooring", "Flooring", "Ballast Accessories"],
         "Product Name": ["Standard Frame Marquee", "WOW Marquee 6x3m", "Standard Seating Grandstand", "I-Trac (R)", "Supa-Trac (R)", "Plastorip", "Trakmat", "30kg Weights"],
@@ -815,7 +821,6 @@ if st.session_state.df is not None and not st.session_state.df.empty:
         excel_df.to_excel(writer, index=False, sheet_name='Audit Product Matrix')
     excel_data_bytes = excel_buffer.getvalue()
 
-    # Mount interactive native download button inside footer index block 3
     action_col_3.download_button(
         label="📊 DOWNLOAD EXCEL SHEET TEMPLATE",
         data=excel_data_bytes,
