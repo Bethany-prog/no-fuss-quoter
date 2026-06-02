@@ -1,5 +1,4 @@
-streamlit
 pandas
-fpdf
 geopy
-requests
+fpdf2
+openpyxl
