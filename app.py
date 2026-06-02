@@ -6,6 +6,7 @@ from fpdf import FPDF
 import re
 import json
 import os
+import io  # Streamlines memory buffers for native Excel and PDF exports
 from geopy.geocoders import Nominatim
 from geopy.distance import geodesic
 
@@ -153,13 +154,13 @@ def create_calculation_pdf(name, subtotal, labour, waiver, cartage, grand, weeks
         return bytes(pdf.output())
 
 # ==============================================================================
-# 4. MASTER FLOORING PRODUCT CATALOG LIST
+# 4. MASTER FLOORING PRODUCT CATALOG LIST (UPGRADED Trakmat RATES v54.9)
 # ==============================================================================
 FLOORING_CATALOG = {
     "I-Trac®": {"rate": 23.40, "block": 46.80, "lab_fix": 4.65, "kg": 15.0},
     "Supa-Trac®": {"rate": 11.55, "block": 25.00, "lab_fix": 4.65, "kg": 4.5, "sheet_sqm": 3.13},
     "Plastorip": {"rate": 10.15, "block": 20.30, "lab_fix": 3.05, "kg": 4.0},
-    "Trakmat": {"rate": 22.05, "block": 44.10, "lab_fix": 5.00, "kg": 35.0}
+    "Trakmat": {"rate": 23.20, "block": 45.00, "lab_fix": 5.85, "kg": 35.0}
 }
 STRUCT_LOGIC = {span: {"bay": (5 if span >= 10 else 3), "s_rate": 23.0, "m_rate": 18.20, "s_lab": 0.40} for span in [3, 4, 6, 9, 10, 12, 15, 20]}
 STAGES = ["Quoted", "Accepted", "Paid", "On Hire", "Returned", "Cancelled"]
@@ -525,7 +526,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     h_col4b.markdown("<div class='summary-hdr'>Override Rate</div>", unsafe_allow_html=True)
     h_col5.markdown("<div class='summary-hdr' style='text-align: right;'>Subtotal</div>", unsafe_allow_html=True)
     
-    # Pre-calculate active metrics loops completely first to eliminate tracing bugs
+    # Pre-calculate baseline loops securely
     other_products_count = 0
     wow_marquee_qty = 0
     for idx, row in st.session_state.df.iterrows():
@@ -605,14 +606,13 @@ if st.session_state.df is not None and not st.session_state.df.empty:
             cb[3].write(f"${standard_r_rate:,.2f}")
             cb[6].markdown(f"<div style='text-align: right; color: grey; font-style: italic;'>${r_tot:,.2f}</div>", unsafe_allow_html=True)
 
-    # Core system auto logistics trackers calculators 
+    # Core automated calculation parameters
     safe_km = st.session_state.km if st.session_state.km else 0
     if has_itrac:
         min_trucks = math.ceil(itrac_sqm / 288) or 1
     else:
         min_trucks = math.ceil(total_kg / 6000) or 1
         
-    # UPGRADE v54.7: Dynamic routing selector connection links straight to trks row input box configuration values
     truck_input_key = "logistics_truck_allocation_count_scalar"
     saved_trk_count = st.session_state.overrides_dict.get(truck_input_key, float(min_trucks))
     trks = int(saved_trk_count)
@@ -622,7 +622,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     auto_waiver_total = h_wk1_gear * 0.07 if waiver_mode == "Charge" else 0
 
     # ==============================================================================
-    # 9. UPGRADED: ITEMISED MANUAL LOGISTICS OVERRIDES TABLE WORKSPACE MATRIX
+    # 9. ITEMISED MANUAL LOGISTICS OVERRIDES TABLE WORKSPACE MATRIX
     # ==============================================================================
     st.divider()
     st.markdown("### 🛠️ MANUAL LOGISTICS OVERRIDES")
@@ -643,7 +643,14 @@ if st.session_state.df is not None and not st.session_state.df.empty:
                 lbl_key = f"lab_ovr_{p_label}_{idx}"
                 
                 auto_val = 1411.00 if "WOW Marquee" in p_label else float(row['Raw_Lab'])
-                math_hint_str = row['Lab_Math'] if "WOW Marquee" in p_label else f"default book: {row['Qty']:,.0f} units x $1.65 = ${auto_val:,.2f}"
+                
+                # Fetch customized text layout string context clues v54.9
+                if "WOW Marquee" in p_label:
+                    math_hint_str = row['Lab_Math']
+                elif "Trakmat" in p_label:
+                    math_hint_str = f"default book: {row['Qty']:,.0f} units x $5.85 = ${auto_val:,.2f}"
+                else:
+                    math_hint_str = f"default book: {row['Qty']:,.0f} units x $1.65 = ${auto_val:,.2f}"
                 
                 saved_override_val = st.session_state.overrides_dict.get(lbl_key, -1.0)
                 active_display_val = saved_override_val if saved_override_val >= 0 else auto_val
@@ -668,7 +675,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     else:
         final_labour_pool_sum = 0.0
 
-    # B. UPGRADE v54.7: INTEGRATED INDEPENDENT TRUCK ALLOCATION SCALAR BOX ENTRY
+    # B. DYNAMIC TRUCK ALLOCATION SCALAR BOX ROW
     r_trk0, r_trk1, r_trk2, r_trk3 = st.columns([0.4, 3.2, 2.2, 1.4])
     r_trk1.markdown(f"<div class='item-text'>Logistics: Active Truck Allocation Count</div><div class='sub-math-hint'>default calculated configuration requirement = {min_trucks} truck(s)</div>", unsafe_allow_html=True)
     new_trk_count = r_trk2.number_input("TruckInputBox", min_value=float(min_trucks), step=1.0, value=float(trks), key="f_trk_scalar_cell", label_visibility="collapsed")
@@ -678,7 +685,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
         st.session_state.truck_override = int(new_trk_count)
         has_changes_detected = True
 
-    # C. GRANULAR CARTAGE FREIGHT LOGISTICS ROW
+    # C. CARTAGE FREIGHT LOGISTICS ROW
     cart_key = "logistics_cartage_freight_global"
     saved_cart_override = st.session_state.overrides_dict.get(cart_key, -1.0)
     active_cart_display = saved_cart_override if saved_cart_override >= 0 else auto_cartage_total
@@ -694,7 +701,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
         st.session_state.overrides_dict[cart_key] = new_cart_val
         has_changes_detected = True
 
-    # D. GRANULAR DAMAGE WAIVER ROW
+    # D. DAMAGE WAIVER ROW
     waiv_key = "damage_waiver_insurance_global"
     saved_waiv_override = st.session_state.overrides_dict.get(waiv_key, -1.0)
     active_waiv_display = saved_waiv_override if saved_waiv_override >= 0 else auto_waiver_total
@@ -726,7 +733,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     grand_total_calc = h_tot_c + final_labour_pool_sum + final_waiver_sum + final_cartage_sum
     st.markdown(f"<div class='gt-banner'>GRAND TOTAL (EX GST): ${grand_total_calc:,.2f}</div>", unsafe_allow_html=True)
     
-    # Structural mathematical print compilation array mapping directly to black-header PDF layers
+    # Compile text proofs list for Section 2 structural PDF generation format
     structural_math_dict = {"LABOUR": [], "LOGISTICS": [], "DAMAGE WAIVER": []}
     
     if labour_mode == "Separate":
@@ -755,10 +762,10 @@ if st.session_state.df is not None and not st.session_state.df.empty:
         structural_math_dict["DAMAGE WAIVER"].append(f"{h_wk1_gear:,.2f} * 7% = ${final_waiver_sum:,.2f}")
 
 # ==============================================================================
-# 10. SAVE & DOWNLOAD INTERACTION ZONE
+# 10. SAVE & DOWNLOAD INTERACTION ZONE (WITH INLINE MEMORY STREAM EXPORT)
 # ==============================================================================
     st.markdown("")  
-    action_col_1, action_col_2 = st.columns(2)
+    action_col_1, action_col_2, action_col_3 = st.columns(3)
     
     if action_col_1.button("💾 SAVE PROJECT TO CLOUD", use_container_width=True):
         if st.session_state.df is not None and not st.session_state.df.empty:
@@ -784,6 +791,35 @@ if st.session_state.df is not None and not st.session_state.df.empty:
         else:
             st.error("Cannot sync data tables because workspace is empty.")
             
+    # Native PDF Generator Buffer execution Pipe Hook
     cleaned_pdf_items = st.session_state.df.to_dict('records')
     pdf_b = create_calculation_pdf(st.session_state.proj, h_tot_c, final_labour_pool_sum, final_waiver_sum, final_cartage_sum, grand_total_calc, weeks, start_d, end_d, cleaned_pdf_items, structural_math_dict, st.session_state.status)
     action_col_2.download_button("📥 DOWNLOAD DETAILED AUDIT PDF", pdf_b, file_name=f"{st.session_state.proj}_Analysis.pdf", mime="application/pdf", use_container_width=True)
+
+    # --- NATIVE INLINE DYNAMIC EXCEL TEMPLATE EXPORTER ---
+    # Build complete raw dictionary matrix data mapping catalog parameters instantly (Trakmat updated v54.9)
+    excel_catalog_data = {
+        "Product Group": ["Structures", "Structures", "Structures", "Flooring", "Flooring", "Flooring", "Flooring", "Ballast Accessories"],
+        "Product Name": ["Standard Frame Marquee", "WOW Marquee 6x3m", "Standard Seating Grandstand", "I-Trac (R)", "Supa-Trac (R)", "Plastorip", "Trakmat", "30kg Weights"],
+        "Quantity to Fill": ["", "", "", "", "", "", "", ""],
+        "Base Hire Rate Used ($)": ["Dynamic Sqm Logic", 1029.00, "15.00 (Wks 1-3)", 23.40, 11.55, 10.15, 23.20, 6.60],
+        "Multi-Week Block Rate ($)": ["Dynamic Sqm Logic", 1029.00, "7.50 (Wks 4+)", "46.80 (4-Wk Block)", "25.00 (4-Wk Block)", "20.30 (4-Wk Block)", "45.00 (4-Wk Block)", 6.60],
+        "Handling Weight (KG)": ["15.0 kg/sqm", "450.0 kg total", "25.0 kg/seat", "15.0 kg/sqm", "4.5 kg/sqm", "4.0 kg/sqm", "35.0 kg/sheet", "30.0 kg/block"],
+        "Default Labour Rate ($)": ["40% of Base Hire", 1441.00, "Variable Matrix", 4.65, 4.65, 3.05, 5.85, 1.65]
+    }
+    
+    excel_df = pd.DataFrame(excel_catalog_data)
+    
+    excel_buffer = io.BytesIO()
+    with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
+        excel_df.to_excel(writer, index=False, sheet_name='Audit Product Matrix')
+    excel_data_bytes = excel_buffer.getvalue()
+
+    # Mount interactive native download button inside footer index block 3
+    action_col_3.download_button(
+        label="📊 DOWNLOAD EXCEL SHEET TEMPLATE",
+        data=excel_data_bytes,
+        file_name="Louis_Master_Quoter_Audit_Template.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        use_container_width=True
+    )
