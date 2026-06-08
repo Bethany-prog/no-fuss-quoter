@@ -16,12 +16,56 @@ from geopy.distance import geodesic
 st.set_page_config(page_title="Louis Master Quoter", layout="wide")
 
 VAULT_DIR = "cloud_vault"
+CATALOG_FILE = "master_catalog.csv"
+
 if not os.path.exists(VAULT_DIR):
     os.makedirs(VAULT_DIR)
 
 # SOURCE FACTORY DEPOT LOCK: 9 Battery Crt, Cranbourne West VIC 3977
 DEPOT_LAT = -38.1171
 DEPOT_LON = 145.2442
+
+# ==============================================================================
+# DATAFRAME PARSING ENGINE: Pulls parameters from external master_catalog.csv
+# ==============================================================================
+@st.cache_data(ttl=60) # Caches for fast page execution pings, checks for edits every 60s
+def load_external_catalog():
+    if os.path.exists(CATALOG_FILE):
+        try:
+            cat_df = pd.read_csv(CATALOG_FILE)
+            # Standardize column structures
+            for col in ["Product_Group", "Product", "Unit_Rate", "Block_Rate", "Lab_Fix", "Weight_KG", "Sheet_SQM", "Is_Marquee"]:
+                if col not in cat_df.columns:
+                    st.error(f"Catalog Error: Missing expected sheet layout column '{col}' inside your CSV.")
+                    return None
+            return cat_df
+        except Exception as e:
+            st.error(f"Failed to extract catalog file: {str(e)}")
+            return None
+    return None
+
+catalog_db = load_external_catalog()
+
+# Fallback structures engine in case the master_catalog.csv file goes offline or is deleted
+def get_catalog_item_fallback(item_name, column_target):
+    if catalog_db is not None:
+        matched_row = catalog_db[catalog_db["Product"] == item_name]
+        if not matched_row.empty:
+            return matched_row.iloc[0][column_target]
+            
+    # Hardcoded disaster recoveries matrix pointers
+    fallbacks = {
+        "I-Trac®": {"rate": 23.40, "block": 46.80, "lab_fix": 4.65, "kg": 15.0, "sheet_sqm": 0.0},
+        "Supa-Trac®": {"rate": 11.55, "block": 25.00, "lab_fix": 4.65, "kg": 4.5, "sheet_sqm": 3.13},
+        "Plastorip": {"rate": 10.15, "block": 20.30, "lab_fix": 3.05, "kg": 4.0, "sheet_sqm": 0.0},
+        "Trakmat": {"rate": 23.20, "block": 45.00, "lab_fix": 5.85, "kg": 35.0, "sheet_sqm": 0.0},
+        "30kg Weights": {"rate": 6.60, "block": 6.60, "lab_fix": 1.65, "kg": 30.0, "sheet_sqm": 0.0},
+        "WOW Marquee 6x3m": {"rate": 1029.00, "block": 1029.00, "lab_fix": 1411.00, "kg": 450.0, "sheet_sqm": 0.0}
+    }
+    
+    col_map = {"Unit_Rate": "rate", "Block_Rate": "block", "Lab_Fix": "lab_fix", "Weight_KG": "kg", "Sheet_SQM": "sheet_sqm"}
+    mapped_col = col_map.get(column_target, "rate")
+    return fallbacks.get(item_name, {}).get(mapped_col, 0.0)
 
 # ==============================================================================
 # 1. ACCESS CONTROL TOWER (SECURITY GATE)
@@ -153,15 +197,7 @@ def create_calculation_pdf(name, subtotal, labour, waiver, cartage, grand, weeks
     except:
         return bytes(pdf.output())
 
-# ==============================================================================
-# 4. MASTER FLOORING PRODUCT CATALOG LIST
-# ==============================================================================
-FLOORING_CATALOG = {
-    "I-Trac®": {"rate": 23.40, "block": 46.80, "lab_fix": 4.65, "kg": 15.0},
-    "Supa-Trac®": {"rate": 11.55, "block": 25.00, "lab_fix": 4.65, "kg": 4.5, "sheet_sqm": 3.13},
-    "Plastorip": {"rate": 10.15, "block": 20.30, "lab_fix": 3.05, "kg": 4.0},
-    "Trakmat": {"rate": 23.20, "block": 45.00, "lab_fix": 5.85, "kg": 35.0}
-}
+# Global static operational config mappings
 STRUCT_LOGIC = {span: {"bay": (5 if span >= 10 else 3), "s_rate": 23.0, "m_rate": 18.20, "s_lab": 0.40} for span in [3, 4, 6, 9, 10, 12, 15, 20]}
 STAGES = ["Quoted", "Accepted", "Paid", "On Hire", "Returned", "Cancelled"]
 STAGE_COLORS = {"Quoted": "#FF9100", "Accepted": "#00E676", "Paid": "#00B8D4", "On Hire": "#D500F9", "Returned": "#757575", "Cancelled": "#263238"}
@@ -209,7 +245,6 @@ def load_project_from_vault(label_name):
             st.session_state.saved_cartage_mode = d.get("cartage_mode", "Charge")
             st.session_state.saved_labour_mode = d.get("labour_mode", "Separate")
             st.session_state.saved_waiver_mode = d.get("waiver_mode", "Charge")
-            
             st.session_state.overrides_dict = d.get("overrides_dict", {})
             
             if "start_date" in d and d["start_date"]:
@@ -254,9 +289,12 @@ st.markdown("""<style>
 # ==============================================================================
 st.title("Louis Master Quoter")
 
+# Display status warning alert banner if the csv catalog file is physically missing from repository
+if catalog_db is None:
+    st.warning("⚠️ CRITICAL ALERT: 'master_catalog.csv' is missing from root project environment. Running app on localized emergency hardcoded database fallbacks.")
+
 vault_jobs = pull_vault_archive_list()
 
-# THE CONTROL TOWER DEED MATRIX: Top Bulletin Dashboard Alert Scanner
 global_warnings = []
 if vault_jobs:
     for job in vault_jobs:
@@ -365,7 +403,6 @@ st.session_state.start_date_val = start_d
 end_d = c2.date_input("End Date", value=start_d, key=f"ed_pick_{st.session_state.reset_key_seed}")
 weeks = math.ceil(((end_d - start_d).days) / 7) or 1
 
-# UPGRADE v55.1: Added layout force rerun updates directly below address mapping execution blocks
 input_addr = c3.text_input("🏠 Delivery Site Address", value=st.session_state.site_address_str, placeholder="Type full address or suburb...", key=f"addr_field_{st.session_state.reset_key_seed}")
 
 if input_addr.strip() != st.session_state.site_address_str:
@@ -381,8 +418,6 @@ if input_addr.strip() != st.session_state.site_address_str:
                 
                 calculated_raw_km = geodesic(depot_coords, target_coords).kilometers
                 final_buffered_km = round(calculated_raw_km * 1.15, 1)
-                
-                # CORE FIX v55.1: Enforce state-saving refresh so the active box visual changes instantly
                 st.session_state.km = final_buffered_km
                 st.rerun()
             else:
@@ -396,7 +431,7 @@ new_manual_km = c_km1.number_input("One-Way KM", min_value=0.0, step=0.5, value=
 if new_manual_km != float(st.session_state.km):
     st.session_state.km = new_manual_km
 
-c_km2.info(f"**Configuration Active:** Job site calculations locked at **{st.session_state.km} One-Way KM** (Origin Depot: Cranbourne West)")
+c_km2.info(f"**Configuration Active:** Job site location calculations locked at **{st.session_state.km} One-Way KM** (Origin Depot: Cranbourne West)")
 
 # Multi-Segment Toggle Rules
 l1, l2, l3 = st.columns(3)
@@ -437,33 +472,40 @@ with col1:
         
     if st.button("Add Structural System") and m_in and m_q:
         if s_type == "WOW Marquee":
-            brate = 1029.00
+            brate = get_catalog_item_fallback("WOW Marquee 6x3m", "Unit_Rate")
+            weight_factor = get_catalog_item_fallback("WOW Marquee 6x3m", "Weight_KG")
             new_struct_df = pd.DataFrame([{
                 "Qty": m_q, "Product": "WOW Marquee 6x3m", "Unit Rate": brate, "Min_Lab": 0, 
-                "Raw_Lab": 0.0, "Lab_Math": "WOW Engine Logic Triggered", "KG": 450.0 * m_q, 
+                "Raw_Lab": 0.0, "Lab_Math": "WOW Engine Logic Triggered", "KG": weight_factor * m_q, 
                 "Is_Marquee": True, "Discount": 0.0, "Lab_Per_Unit": 0, "Base_Hire": brate, "Anchoring": anchoring_type, "Override_Rate": 0.0
             }])
             st.session_state.df = pd.concat([st.session_state.df, new_struct_df], ignore_index=True)
             
             if anchoring_type == "Weighted":
                 calculated_weights = 128 if m_q == 2 else math.ceil((4 * m_q * 500.0) / 30.0)
-                w_lab_cost = calculated_weights * 1.65
+                w_lab_rate = get_catalog_item_fallback("30kg Weights", "Lab_Fix")
+                w_hire_rate = get_catalog_item_fallback("30kg Weights", "Unit_Rate")
+                w_weight_val = get_catalog_item_fallback("30kg Weights", "Weight_KG")
+                w_lab_cost = calculated_weights * w_lab_rate
                 new_weight_df = pd.DataFrame([{
-                    "Qty": calculated_weights, "Product": "30kg Weights", "Unit Rate": 6.60, "Min_Lab": 0, 
-                    "Raw_Lab": w_lab_cost, "Lab_Math": f"30kg Weights: {calculated_weights:,.0f} units x $1.65", 
-                    "KG": calculated_weights * 30.0, "Is_Marquee": False, "Discount": 0.0, "Lab_Per_Unit": 1.65, "Base_Hire": 6.60, "Anchoring": "", "Override_Rate": 0.0
+                    "Qty": calculated_weights, "Product": "30kg Weights", "Unit Rate": w_hire_rate, "Min_Lab": 0, 
+                    "Raw_Lab": w_lab_cost, "Lab_Math": f"30kg Weights: {calculated_weights:,.0f} units x ${w_lab_rate:.2f}", 
+                    "KG": calculated_weights * w_weight_val, "Is_Marquee": False, "Discount": 0.0, "Lab_Per_Unit": w_lab_rate, "Base_Hire": w_hire_rate, "Anchoring": "", "Override_Rate": 0.0
                 }])
                 st.session_state.df = pd.concat([st.session_state.df, new_weight_df], ignore_index=True)
             st.rerun()
             
         elif s_type == "Grandstand Seating Tier":
             lab_per_seat, lab_desc = get_gs_per_seat_labour(m_q)
-            base_seat_hire = 15.00 if weeks < 4 else 7.50
+            base_seat_hire = get_catalog_item_fallback("Standard Seating Grandstand", "Unit_Rate") if weeks < 4 else get_catalog_item_fallback("Standard Seating Grandstand", "Block_Rate")
+            if isinstance(base_seat_hire, str): base_seat_hire = 15.00 if weeks < 4 else 7.50
             combined_unit_rate = base_seat_hire + lab_per_seat
+            w_grandstand = get_catalog_item_fallback("Standard Seating Grandstand", "Weight_KG")
+            if isinstance(w_grandstand, str): w_grandstand = 25.0
             
             new_gs_df = pd.DataFrame([{
                 "Qty": m_q, "Product": "Standard Seating Grandstand", "Unit Rate": combined_unit_rate, "Min_Lab": 0, 
-                "Raw_Lab": 0.0, "Lab_Math": lab_desc, "KG": m_q * 25.0, "Is_Marquee": False, "Discount": 0.0, 
+                "Raw_Lab": 0.0, "Lab_Math": lab_desc, "KG": m_q * w_grandstand, "Is_Marquee": False, "Discount": 0.0, 
                 "Lab_Per_Unit": lab_per_seat, "Base_Hire": base_seat_hire, "Anchoring": "", "Override_Rate": 0.0
             }])
             st.session_state.df = pd.concat([st.session_state.df, new_gs_df], ignore_index=True)
@@ -492,29 +534,43 @@ with col1:
                     weights_per_leg = 2 if span <= 6 else (4 if span <= 9 else (6 if span <= 12 else (8 if span <= 15 else 10)))
                         
                     calculated_weights = total_legs * weights_per_leg
-                    w_lab_cost = calculated_weights * 1.65
+                    w_lab_rate = get_catalog_item_fallback("30kg Weights", "Lab_Fix")
+                    w_hire_rate = get_catalog_item_fallback("30kg Weights", "Unit_Rate")
+                    w_weight_val = get_catalog_item_fallback("30kg Weights", "Weight_KG")
+                    w_lab_cost = calculated_weights * w_lab_rate
                     new_weight_df = pd.DataFrame([{
-                        "Qty": calculated_weights, "Product": "30kg Weights", "Unit Rate": 6.60, "Min_Lab": 0, 
-                        "Raw_Lab": w_lab_cost, "Lab_Math": f"30kg Weights: {calculated_weights:,.0f} units x $1.65", 
-                        "KG": calculated_weights * 30.0, "Is_Marquee": False, "Discount": 0.0, "Lab_Per_Unit": 1.65, "Base_Hire": 6.60, "Anchoring": "", "Override_Rate": 0.0
+                        "Qty": calculated_weights, "Product": "30kg Weights", "Unit Rate": w_hire_rate, "Min_Lab": 0, 
+                        "Raw_Lab": w_lab_cost, "Lab_Math": f"30kg Weights: {calculated_weights:,.0f} units x ${w_lab_rate:.2f}", 
+                        "KG": calculated_weights * w_weight_val, "Is_Marquee": False, "Discount": 0.0, "Lab_Per_Unit": w_lab_rate, "Base_Hire": w_hire_rate, "Anchoring": "", "Override_Rate": 0.0
                     }])
                     st.session_state.df = pd.concat([st.session_state.df, new_weight_df], ignore_index=True)
                 st.rerun()
 
 with col2:
     st.markdown("### 🪵 Flooring Catalog")
-    f_sel = st.selectbox("Flooring Type Options", list(FLOORING_CATALOG.keys()), key=f"f_pick_{st.session_state.reset_key_seed}")
+    # Pull the dropdown selectors directly from the current rows inside your CSV
+    if catalog_db is not None:
+        floor_options = catalog_db[catalog_db["Product_Group"] == "Flooring"]["Product"].tolist()
+    else:
+        floor_options = list(FLOORING_CATALOG.keys())
+        
+    f_sel = st.selectbox("Flooring Type Options", floor_options, key=f"f_pick_{st.session_state.reset_key_seed}")
     f_qty = st.number_input("Square Metre Coverage / Count", min_value=0.0, value=None, key=f"f_qty_{st.session_state.reset_key_seed}")
     if st.button("Add Flooring Component") and f_qty:
-        data = FLOORING_CATALOG[f_sel]
-        base_h = (data['block']/4) if (weeks >= 4 and 'block' in data) else data['rate']
-        raw_lab_pool = f_qty * data.get('lab_fix', 0)
-        lab_desc = f"{f_sel}: {f_qty:,.0f} sqm x ${data.get('lab_fix', 0):,.2f}"
-        eff_qty = (math.ceil(f_qty / data["sheet_sqm"]) * data["sheet_sqm"]) if "sheet_sqm" in data else f_qty
+        c_rate = get_external_catalog_item = get_catalog_item_fallback(f_sel, "Unit_Rate")
+        c_block = get_catalog_item_fallback(f_sel, "Block_Rate")
+        c_lab = get_catalog_item_fallback(f_sel, "Lab_Fix")
+        c_kg = get_catalog_item_fallback(f_sel, "Weight_KG")
+        c_sheet_sqm = get_catalog_item_fallback(f_sel, "Sheet_SQM")
+        
+        base_h = c_block if (weeks >= 4 and c_block > 0) else c_rate
+        raw_lab_pool = f_qty * c_lab
+        lab_desc = f"{f_sel}: {f_qty:,.0f} sqm x ${c_lab:,.2f}"
+        eff_qty = (math.ceil(f_qty / c_sheet_sqm) * c_sheet_sqm) if c_sheet_sqm > 0 else f_qty
         
         new_item_df = pd.DataFrame([{
             "Qty": f_qty, "Product": f_sel, "Unit Rate": base_h, "Min_Lab": 0, "Raw_Lab": raw_lab_pool, 
-            "Lab_Math": lab_desc, "KG": eff_qty * data['kg'], "Is_Marquee": False, "Discount": 0.0, 
+            "Lab_Math": lab_desc, "KG": eff_qty * c_kg, "Is_Marquee": False, "Discount": 0.0, 
             "Lab_Per_Unit": 0, "Base_Hire": base_h, "Anchoring": "", "Override_Rate": 0.0
         }])
         st.session_state.df = pd.concat([st.session_state.df, new_item_df], ignore_index=True)
@@ -545,7 +601,8 @@ if st.session_state.df is not None and not st.session_state.df.empty:
             
     for idx, row in st.session_state.df.iterrows():
         if "WOW Marquee" in row["Product"]:
-            st.session_state.df.at[idx, "Raw_Lab"] = 1411.00
+            c_marq_labour = get_catalog_item_fallback("WOW Marquee 6x3m", "Lab_Fix")
+            st.session_state.df.at[idx, "Raw_Lab"] = c_marq_labour
             st.session_state.df.at[idx, "Lab_Math"] = f"WOW Marquee: {row['Qty']:.0f} x $706 = $1,441.00"
 
     h_tot_c, h_wk1_gear, total_kg, itrac_sqm = 0.0, 0.0, 0.0, 0.0
@@ -652,10 +709,9 @@ if st.session_state.df is not None and not st.session_state.df.empty:
                 
                 if "WOW Marquee" in p_label:
                     math_hint_str = row['Lab_Math']
-                elif "Trakmat" in p_label:
-                    math_hint_str = f"default book: {row['Qty']:,.0f} units x $5.85 = ${auto_val:,.2f}"
                 else:
-                    math_hint_str = f"default book: {row['Qty']:,.0f} units x $1.65 = ${auto_val:,.2f}"
+                    c_dynamic_labour_rate = get_catalog_item_fallback(p_label, "Lab_Fix")
+                    math_hint_str = f"default book: {row['Qty']:,.0f} units x ${c_dynamic_labour_rate:.2f} = ${auto_val:,.2f}"
                 
                 saved_override_val = st.session_state.overrides_dict.get(lbl_key, -1.0)
                 active_display_val = saved_override_val if saved_override_val >= 0 else auto_val
@@ -767,7 +823,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
         structural_math_dict["DAMAGE WAIVER"].append(f"{h_wk1_gear:,.2f} * 7% = ${final_waiver_sum:,.2f}")
 
 # ==============================================================================
-# 10. SAVE & DOWNLOAD INTERACTION ZONE (WITH SAFETY OPENPYXL BYPASS PIPES)
+# 10. SAVE & DOWNLOAD INTERACTION ZONE (WITH NATIVE EXPORT STREAMS FIXED)
 # ==============================================================================
     st.markdown("")  
     action_col_1, action_col_2, action_col_3 = st.columns(3)
@@ -801,20 +857,23 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     pdf_b = create_calculation_pdf(st.session_state.proj, h_tot_c, final_labour_pool_sum, final_waiver_sum, final_cartage_sum, grand_total_calc, weeks, start_d, end_d, cleaned_pdf_items, structural_math_dict, st.session_state.status)
     action_col_2.download_button("📥 DOWNLOAD DETAILED AUDIT PDF", pdf_b, file_name=f"{st.session_state.proj}_Analysis.pdf", mime="application/pdf", use_container_width=True)
 
-    # --- DYNAMIC EXCEL TEMPLATE EXPORTER MATRIX HOOK ---
-    excel_catalog_data = {
-        "Product Group": ["Structures", "Structures", "Structures", "Flooring", "Flooring", "Flooring", "Flooring", "Ballast Accessories"],
-        "Product Name": ["Standard Frame Marquee", "WOW Marquee 6x3m", "Standard Seating Grandstand", "I-Trac (R)", "Supa-Trac (R)", "Plastorip", "Trakmat", "30kg Weights"],
-        "Quantity to Fill": ["", "", "", "", "", "", "", ""],
-        "Base Hire Rate Used ($)": ["Dynamic Sqm Logic", 1029.00, "15.00 (Wks 1-3)", 23.40, 11.55, 10.15, 23.20, 6.60],
-        "Multi-Week Block Rate ($)": ["Dynamic Sqm Logic", 1029.00, "7.50 (Wks 4+)", "46.80 (4-Wk Block)", "25.00 (4-Wk Block)", "20.30 (4-Wk Block)", "45.00 (4-Wk Block)", 6.60],
-        "Handling Weight (KG)": ["15.0 kg/sqm", "450.0 kg total", "25.0 kg/seat", "15.0 kg/sqm", "4.5 kg/sqm", "4.0 kg/sqm", "35.0 kg/sheet", "30.0 kg/block"],
-        "Default Labour Rate ($)": ["40% of Base Hire", 1441.00, "Variable Matrix", 4.65, 4.65, 3.05, 5.85, 1.65]
-    }
+    # --- DYNAMIC MEMORY EXCEL TEMPLATE EXPORTER MATRIX HOOK ---
+    # Automatically exports the actual, real-time database sheet content straight from your CSV catalog file
+    if catalog_db is not None:
+        excel_df = catalog_db.copy()
+    else:
+        # Static disaster blueprint backup array mapping
+        excel_catalog_data = {
+            "Product Group": ["Structures", "Structures", "Structures", "Flooring", "Flooring", "Flooring", "Flooring", "Ballast Accessories"],
+            "Product Name": ["Standard Frame Marquee", "WOW Marquee 6x3m", "Standard Seating Grandstand", "I-Trac (R)", "Supa-Trac (R)", "Plastorip", "Trakmat", "30kg Weights"],
+            "Quantity to Fill": ["", "", "", "", "", "", "", ""],
+            "Base Hire Rate Used ($)": ["Dynamic Sqm Logic", 1029.00, "15.00 (Wks 1-3)", 23.40, 11.55, 10.15, 23.20, 6.60],
+            "Multi-Week Block Rate ($)": ["Dynamic Sqm Logic", 1029.00, "7.50 (Wks 4+)", "46.80 (4-Wk Block)", "25.00 (4-Wk Block)", "20.30 (4-Wk Block)", "45.00 (4-Wk Block)", 6.60],
+            "Handling Weight (KG)": ["15.0 kg/sqm", "450.0 kg total", "25.0 kg/seat", "15.0 kg/sqm", "4.5 kg/sqm", "4.0 kg/sqm", "35.0 kg/sheet", "30.0 kg/block"],
+            "Default Labour Rate ($)": ["40% of Base Hire", 1441.00, "Variable Matrix", 4.65, 4.65, 3.05, 5.85, 1.65]
+        }
+        excel_df = pd.DataFrame(excel_catalog_data)
     
-    excel_df = pd.DataFrame(excel_catalog_data)
-    
-    # SAFETY PIPING BUFFER: If openpyxl dependencies are missing inside cloud engine caches, seamlessly fall back to an unbreakable standard binary stream layout format
     try:
         excel_buffer = io.BytesIO()
         with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
@@ -823,14 +882,14 @@ if st.session_state.df is not None and not st.session_state.df.empty:
         file_extension = "xlsx"
         mime_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     except:
-        # Emergency fail-safe download bypass
+        # Fallback bypass to ensure no crash occurs if dependencies fluctuate
         csv_str = excel_df.to_csv(index=False)
         excel_data_bytes = csv_str.encode('utf-8')
         file_extension = "csv"
         mime_type = "text/csv"
 
     action_col_3.download_button(
-        label=f"📊 DOWNLOAD EXCEL CATALOG TEMPLATE",
+        label="📊 DOWNLOAD EXCEL CATALOG TEMPLATE",
         data=excel_data_bytes,
         file_name=f"Louis_Master_Quoter_Template.{file_extension}",
         mime=mime_type,
