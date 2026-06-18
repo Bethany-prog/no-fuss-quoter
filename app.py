@@ -1,7 +1,6 @@
 import streamlit as st
 import math
 import pandas as pd
-from datetime import date, datetime, timedelta
 from fpdf import FPDF
 import re
 import json
@@ -15,12 +14,7 @@ from geopy.distance import geodesic
 # ==============================================================================
 st.set_page_config(page_title="Louis Master Quoter", layout="wide")
 
-VAULT_DIR = "cloud_vault"
 DEFAULT_EXCEL = "No_Fuss_Master_Rate_Template.xlsx"
-
-if not os.path.exists(VAULT_DIR):
-    os.makedirs(VAULT_DIR)
-
 DEPOT_LAT = -38.1171
 DEPOT_LON = 145.2442
 
@@ -145,25 +139,6 @@ def calculate_dynamic_grandstand_rate(seats_input):
     return 16.50, f"Standard base per-seat matrix fallback rate calculation applied"
 
 # ==============================================================================
-# 1. ACCESS CONTROL TOWER (SECURITY GATE)
-# ==============================================================================
-def check_password():
-    if "password_correct" not in st.session_state:
-        st.session_state.password_correct = False
-    if not st.session_state.password_correct:
-        st.title("🔒 Louis Quoting Tool Access")
-        password = st.text_input("Access Code", type="password")
-        if st.button("Unlock Engine"):
-            if password == "NoFuss2026":
-                st.session_state.password_correct = True
-                st.rerun()
-        return False
-    return True
-
-if not check_password():
-    st.stop()
-
-# ==============================================================================
 # 3. PDF AUDIT ENGINE (STRUCTURAL TABLE TIERS WITH UNIVERSAL BYTE STREAM FIX)
 # ==============================================================================
 def clean_text(txt):
@@ -174,15 +149,14 @@ def clean_text(txt):
         cleaned = cleaned.replace(char, rep)
     return cleaned.encode('latin-1', 'replace').decode('latin-1')
 
-def create_calculation_pdf(name, subtotal, labour, waiver, cartage, grand, weeks, start, end, items_list, structural_math_dict, status):
+def create_calculation_pdf(subtotal, labour, waiver, cartage, grand, items_list, structural_math_dict, status):
     pdf = FPDF()
     pdf.add_page()
     
     pdf.set_font("Arial", "B", 16)
     pdf.cell(0, 10, clean_text("Louis Quoting Tool - Detailed Calculation Audit"), ln=True, align="C")
     pdf.set_font("Arial", "B", 10)
-    pdf.cell(0, 7, clean_text(f"PROJECT: {name} | STATUS: {status.upper()}"), ln=True, align="C")
-    pdf.cell(0, 7, f"PERIOD: {start.strftime('%Y-%m-%d')} to {end.strftime('%Y-%m-%d')} ({weeks} Week(s))", ln=True, align="C")
+    pdf.cell(0, 7, clean_text(f"STATUS: {status.upper()}"), ln=True, align="C")
     pdf.ln(8)
 
     pdf.set_fill_color(26, 29, 45); pdf.set_text_color(255, 255, 255); pdf.set_font("Arial", "B", 11)
@@ -244,10 +218,8 @@ STAGE_COLORS = {"Quoted": "#FF9100", "Accepted": "#00E676", "Paid": "#00B8D4", "
 if 'df' not in st.session_state: 
     st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Total", "Min_Lab", "Raw_Lab", "KG", "Is_Marquee", "Discount", "Lab_Math", "Lab_Per_Unit", "Base_Hire", "Anchoring", "Override_Rate"])
 if 'status' not in st.session_state: st.session_state.status = "Quoted"
-if 'proj' not in st.session_state: st.session_state.proj = "New Project"
 if 'km' not in st.session_state: st.session_state.km = 0.0
 if 'truck_override' not in st.session_state: st.session_state.truck_override = 0
-if 'start_date_val' not in st.session_state: st.session_state.start_date_val = date.today()
 if 'reset_key_seed' not in st.session_state: st.session_state.reset_key_seed = 0
 if 'site_address_str' not in st.session_state: st.session_state.site_address_str = ""
 
@@ -256,53 +228,14 @@ if 'saved_labour_mode' not in st.session_state: st.session_state.saved_labour_mo
 if 'saved_waiver_mode' not in st.session_state: st.session_state.saved_waiver_mode = "Charge"
 if 'overrides_dict' not in st.session_state: st.session_state.overrides_dict = {}
 
-def pull_vault_archive_list():
-    try: return sorted([f.replace(".json", "") for f in os.listdir(VAULT_DIR) if f.endswith(".json")])
-    except: return []
-
-def load_project_from_vault(label_name):
-    try:
-        with open(f"{VAULT_DIR}/{label_name}.json", "r") as f:
-            d = json.load(f)
-            st.session_state.status = d.get("status", "Quoted")
-            st.session_state.proj = str(d.get("proj", label_name)).strip()
-            st.session_state.km = float(d.get("km", 0.0))
-            st.session_state.truck_override = int(d.get("truck_override", 0))
-            st.session_state.site_address_str = d.get("site_address", "")
-            st.session_state.saved_cartage_mode = d.get("cartage_mode", "Charge")
-            st.session_state.saved_labour_mode = d.get("labour_mode", "Separate")
-            st.session_state.saved_waiver_mode = d.get("waiver_mode", "Charge")
-            st.session_state.overrides_dict = d.get("overrides_dict", {})
-            st.session_state.df = pd.DataFrame(d.get("items", []))
-            st.session_state.reset_key_seed += 1
-            st.rerun()
-    except Exception as e: st.error(f"Vault Load Failure: {str(e)}")
-
-vault_jobs = pull_vault_archive_list()
-st.sidebar.title("📁 PROJECT ARCHIVE")
-if st.sidebar.button("➕ START NEW", use_container_width=True):
-    st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Total", "Min_Lab", "Raw_Lab", "KG", "Is_Marquee", "Discount", "Lab_Math", "Lab_Per_Unit", "Base_Hire", "Anchoring", "Override_Rate"])
-    st.session_state.km, st.session_state.truck_override, st.session_state.proj = 0.0, 0, "New Project"
-    st.session_state.active_filename, st.session_state.status = "", "Quoted"
-    st.session_state.site_address_str, st.session_state.overrides_dict = "", {}
-    st.session_state.reset_key_seed += 1
-    st.rerun()
-
-if vault_jobs:
-    load_choice = st.sidebar.selectbox("Cloud Project Vault retrieval", ["-- Choose Project --"] + vault_jobs)
-    if st.sidebar.button("📂 LOAD STORED QUOTE") and load_choice != "-- Choose Project --":
-        load_project_from_vault(load_choice)
-
+# ==============================================================================
+# 6. ACCESS WINDOW INITIALIZATION MODULE
+# ==============================================================================
 st.session_state.status = st.selectbox("Stage", STAGES, index=STAGES.index(st.session_state.status) if st.session_state.status in STAGES else 0)
 st.markdown(f"<div style='height: 14px; background-color: {STAGE_COLORS[st.session_state.status]}; border-radius: 6px; margin-bottom: 20px;'></div>", unsafe_allow_html=True)
 
-c1, c2, c3 = st.columns(3)
-start_d = c1.date_input("Start Date", value=st.session_state.start_date_val, key=f"sd_{st.session_state.reset_key_seed}")
-st.session_state.start_date_val = start_d
-end_d = c2.date_input("End Date", value=start_d, key=f"ed_{st.session_state.reset_key_seed}")
-weeks = math.ceil(((end_d - start_d).days) / 7) or 1
-
-input_addr = c3.text_input("🏠 Delivery Site Address", value=st.session_state.site_address_str, placeholder="Type venue address or suburb...")
+# Geocoding and Location Module
+input_addr = st.text_input("🏠 Delivery Site Address", value=st.session_state.site_address_str, placeholder="Type venue address or suburb...")
 if input_addr.strip() != st.session_state.site_address_str:
     st.session_state.site_address_str = input_addr.strip()
     try:
@@ -326,7 +259,7 @@ labour_mode = l2.segmented_control("Labour Math", ["Separate", "Include in Hire"
 waiver_mode = l3.segmented_control("Damage Waiver", ["Charge", "Free"], default=st.session_state.saved_waiver_mode)
 
 # ==============================================================================
-# 7. CATALOG HUB 
+# 7. UNIFIED COMPONENT HUB SELECTION FRAMEWORK
 # ==============================================================================
 st.divider()
 st.markdown("### ➕ CATALOG COMPONENT HUB")
@@ -503,7 +436,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
         new_disc = c4.number_input("Disc %", 0.0, 100.0, float(row["Discount"]), key=f"sd_{idx}", label_visibility="collapsed")
         if new_disc != row["Discount"]: st.session_state.df.at[idx, "Discount"] = new_disc; st.rerun()
             
-        new_override = c4b.number_input("Override", 0.0, 5000.0, value=None if float(row.get("Override_Rate", 0.0)) == 0.0 else float(row.get("Override_Rate", 0.0)), placeholder="Override...", key=f"so_{idx}", label_visibility="collapsed")
+        new_override = st.number_input("Override", 0.0, 5000.0, value=None if float(row.get("Override_Rate", 0.0)) == 0.0 else float(row.get("Override_Rate", 0.0)), placeholder="Override...", key=f"so_{idx}", label_visibility="collapsed")
         if (new_override or 0.0) != row.get("Override_Rate", 0.0): st.session_state.df.at[idx, "Override_Rate"] = new_override or 0.0; st.rerun()
         c5.markdown(f"<div style='text-align: right; font-size: 20px; font-weight: 700;'>${wk1_t:,.2f}</div>", unsafe_allow_html=True)
 
@@ -612,30 +545,16 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     structural_math_dict["DAMAGE WAIVER"].append(f"${h_wk1_gear:,.2f} gear x 7% = ${final_waiver_sum:,.2f}")
 
 # ==============================================================================
-# 10. SAVE & DOWNLOAD INTERACTION ZONE (FIXED DATABASE BACKUP POINTER v58.2)
+# 10. SAVE & DOWNLOAD INTERACTION ZONE
 # ==============================================================================
     st.markdown("")  
-    action_col_1, action_col_2, action_col_3 = st.columns(3)
-    
-    if action_col_1.button("💾 SAVE PROJECT TO CLOUD", use_container_width=True):
-        try:
-            target_label = st.session_state.proj.strip()
-            payload = {
-                "proj": target_label, "status": st.session_state.status, "km": st.session_state.km,
-                "truck_override": st.session_state.truck_override, "start_date": st.session_state.start_date_val.strftime("%Y-%m-%d"),
-                "cartage_mode": cartage_mode, "labour_mode": labour_mode, "waiver_mode": waiver_mode,
-                "site_address": st.session_state.site_address_str, "items": st.session_state.df.to_dict(orient="records"),
-                "overrides_dict": st.session_state.overrides_dict
-            }
-            with open(f"{VAULT_DIR}/{target_label}.json", "w") as f: json.dump(payload, f)
-            st.success(f"🎉 Parameters successfully synchronized!"); st.rerun()
-        except Exception as e: st.error(f"Save error: {str(e)}")
+    action_col_1, action_col_2 = st.columns(2)
             
     cleaned_pdf_items = st.session_state.df.to_dict('records')
-    pdf_b = create_calculation_pdf(st.session_state.proj, h_tot_c, final_labour_pool_sum, final_waiver_sum, final_cartage_sum, grand_total_calc, weeks, start_d, end_d, cleaned_pdf_items, structural_math_dict, st.session_state.status)
-    action_col_2.download_button("📥 DOWNLOAD DETAILED AUDIT PDF", pdf_b, file_name=f"{st.session_state.proj}_Analysis.pdf", mime="application/pdf", use_container_width=True)
+    pdf_b = create_calculation_pdf(h_tot_c, final_labour_pool_sum, final_waiver_sum, final_cartage_sum, grand_total_calc, cleaned_pdf_items, structural_math_dict, st.session_state.status)
+    action_col_1.download_button("📥 DOWNLOAD DETAILED AUDIT PDF", pdf_b, file_name="Louis_Analysis.pdf", mime="application/pdf", use_container_width=True)
 
-    # CORE FIX v58.2: Swapped out broken static string target for active struct_db component reference data stream
+    # MASTER BACKUP REPAIR: Safe direct data block reference pipeline (v58.5)
     excel_df = struct_db.copy() if struct_db is not None else pd.DataFrame([{"System Status": "Catalog Empty"}])
     try:
         excel_buffer = io.BytesIO()
@@ -645,4 +564,4 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     except:
         excel_data_bytes, ext, mt = excel_df.to_csv(index=False).encode('utf-8'), "csv", "text/csv"
 
-    action_col_3.download_button(label="📊 DOWNLOAD ACTIVE DATA BACKUP", data=excel_data_bytes, file_name=f"Louis_Current_Database_Template.{ext}", mime=mt, use_container_width=True)
+    action_col_2.download_button(label="📊 DOWNLOAD ACTIVE DATA BACKUP", data=excel_data_bytes, file_name=f"Louis_Current_Database_Template.{ext}", mime=mt, use_container_width=True)
