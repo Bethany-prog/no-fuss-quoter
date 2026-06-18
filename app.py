@@ -128,7 +128,7 @@ def calculate_dynamic_grandstand_rate(seats_input):
                     if low <= seats_input <= high:
                         total_labour_cost = float(row[target_col])
                         per_seat_rate = total_labour_cost / seats_input
-                        return round(per_seat_rate, 2), f"Seating Matrix: ${total_labour_cost:,.2f} / {seats_input} seats"
+                        return round(per_seat_rate, 2), f"Seating Matrix Flat Booking: ${total_labour_cost:,.2f} / {seats_input} seats"
             except: pass
             
     fallback_matrix = [(0, 40, 880.0), (41, 100, 1650.0), (101, 149, 2420.0), (150, 199, 3300.0), (200, 249, 3850.0), (250, 299, 5280.0), (300, 349, 5940.0), (350, 400, 6600.0)]
@@ -136,7 +136,7 @@ def calculate_dynamic_grandstand_rate(seats_input):
         if low <= seats_input <= high:
             return round(total_lab / seats_input, 2), f"Backup Matrix Bracket {low}-{high}: ${total_lab:,.2f} / {seats_input} seats"
             
-    return 16.50, f"Standard base per-seat matrix fallback rate calculation applied"
+    return 19.19, f"Standard base per-seat fallback calculation applied"
 
 # ==============================================================================
 # 3. PDF AUDIT ENGINE (STRUCTURAL TABLE TIERS WITH UNIVERSAL BYTE STREAM FIX)
@@ -382,15 +382,13 @@ elif selected_cat == "grandstands":
         if seats_input is None or seats_input <= 0:
             st.error("Please supply a valid seat capacity count first.")
         else:
-            per_seat_labour, math_desc_str = calculate_dynamic_grandstand_rate(seats_input)
-            base_seat_hire = 15.00 if weeks < 4 else 7.50
-            combined_unit_rate = base_seat_hire + per_seat_labour
+            per_seat_rate, math_desc_str = calculate_dynamic_grandstand_rate(seats_input)
             
-            # FIXED v62.0: Set Raw_Lab and Lab_Per_Unit to 0.0 because labor is completely built into the seat rate
+            # CORE FIX v63.0: Old hardcoded $15.00 equipment fee variable deleted. The total seat cost is driven entirely by the sheet lookup.
             new_df = pd.DataFrame([{
-                "Qty": seats_input, "Product": f"Standard Seating Grandstand ({seats_input} Seats)", "Unit Rate": combined_unit_rate, "Min_Lab": 0,
+                "Qty": seats_input, "Product": f"Standard Seating Grandstand ({seats_input} Seats)", "Unit Rate": per_seat_rate, "Min_Lab": 0,
                 "Raw_Lab": 0.0, "Lab_Math": math_desc_str, "KG": seats_input * 25.0, "Is_Marquee": False,
-                "Discount": 0.0, "Lab_Per_Unit": 0.0, "Base_Hire": combined_unit_rate, "Anchoring": "", "Override_Rate": 0.0
+                "Discount": 0.0, "Lab_Per_Unit": 0.0, "Base_Hire": per_seat_rate, "Anchoring": "", "Override_Rate": 0.0
             }])
             st.session_state.df = pd.concat([st.session_state.df, new_df], ignore_index=True)
             st.rerun()
@@ -402,7 +400,6 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     st.divider()
     st.subheader("📝 QUOTE SUMMARY")
     
-    # CRITICAL BUG FIX v61.5: Enforce index clean slate mapping to completely remove collision exceptions
     st.session_state.df.reset_index(drop=True, inplace=True)
     
     h_col0, h_col1, h_col2, h_col3, h_col4, h_col4b, h_col5 = st.columns([0.4, 3.2, 1.0, 1.2, 1.2, 1.2, 1.4])
@@ -460,8 +457,6 @@ if st.session_state.df is not None and not st.session_state.df.empty:
 
     raw_lab_pool = st.session_state.df["Raw_Lab"].sum()
     auto_cartage_total = trks * st.session_state.km * 4 * 3.50 if cartage_mode == "Charge" else 0
-    
-    # FIXED v62.0: Damage waiver is now derived directly from h_tot_c (the final progressive true product hire total)
     auto_waiver_total = h_tot_c * 0.07 if waiver_mode == "Charge" else 0
 
     # ==============================================================================
@@ -478,7 +473,6 @@ if st.session_state.df is not None and not st.session_state.df.empty:
 
     if labour_mode == "Separate":
         for idx, row in st.session_state.df.iterrows():
-            # FIXED v62.0: Checking strictly for non-zero separate Raw_Lab costs skips grandstands cleanly
             if row.get('Raw_Lab', 0.0) > 0.0:
                 p_label = row['Product']
                 lbl_key = f"lab_ovr_{p_label}_{idx}"
@@ -560,17 +554,14 @@ if st.session_state.df is not None and not st.session_state.df.empty:
         structural_math_dict["LABOUR"].append("Minimum Floor Buffer Adjustment top-up applied")
     structural_math_dict["LABOUR"].append(f"Total Applied = ${final_labour_pool_sum:,.2f}")
     structural_math_dict["LOGISTICS"].append(f"{trks} Trucks x {st.session_state.km}km x 4 x $3.50 = ${final_cartage_sum:,.2f}")
-    
-    # FIXED v62.0: Audit text output logs updated to capture total product hire base explicitly
     structural_math_dict["DAMAGE WAIVER"].append(f"${h_tot_c:,.2f} total product hire cost x 7% = ${final_waiver_sum:,.2f}")
 
 # ==============================================================================
-# 10. DOWNLOAD ZONE (FULLY POSITIONALLY ALIGNED v62.0)
+# 10. DOWNLOAD ZONE 
 # ==============================================================================
     st.markdown("")  
     action_col_1, action_col_2 = st.columns(2)
             
-    # FIXED v62.0: Positional variables completely matched to eliminate freevar runtime mismatch crashes
     cleaned_pdf_items = st.session_state.df.to_dict('records')
     pdf_b = create_calculation_pdf(h_tot_c, final_labour_pool_sum, final_waiver_sum, final_cartage_sum, grand_total_calc, weeks, cleaned_pdf_items, structural_math_dict, st.session_state.status)
     action_col_1.download_button("📥 DOWNLOAD DETAILED AUDIT PDF", pdf_b, file_name="Louis_Analysis.pdf", mime="application/pdf", use_container_width=True)
