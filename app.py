@@ -1,6 +1,7 @@
 import streamlit as st
 import math
 import pandas as pd
+from datetime import date, datetime, timedelta  # 🔍 FIXED: Restored missing date imports
 from fpdf import FPDF
 import re
 import json
@@ -16,7 +17,7 @@ st.set_page_config(page_title="Louis Master Quoter", layout="wide")
 
 DEFAULT_EXCEL = "No_Fuss_Master_Rate_Template.xlsx"
 DEPOT_LAT = -38.1171
-DEPOT_LON = -145.2442
+DEPOT_LON = 145.2442
 
 # ==============================================================================
 # SMART RE REGEX DIMENSION MATCHING HOOK
@@ -384,7 +385,6 @@ elif selected_cat == "grandstands":
         else:
             per_seat_rate, math_desc_str = calculate_dynamic_grandstand_rate(seats_input)
             
-            # CORE FIX v63.0: Old hardcoded $15.00 equipment fee variable deleted. The total seat cost is driven entirely by the sheet lookup.
             new_df = pd.DataFrame([{
                 "Qty": seats_input, "Product": f"Standard Seating Grandstand ({seats_input} Seats)", "Unit Rate": per_seat_rate, "Min_Lab": 0,
                 "Raw_Lab": 0.0, "Lab_Math": math_desc_str, "KG": seats_input * 25.0, "Is_Marquee": False,
@@ -557,7 +557,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     structural_math_dict["DAMAGE WAIVER"].append(f"${h_tot_c:,.2f} total product hire cost x 7% = ${final_waiver_sum:,.2f}")
 
 # ==============================================================================
-# 10. DOWNLOAD ZONE 
+# 10. DOWNLOAD ZONE
 # ==============================================================================
     st.markdown("")  
     action_col_1, action_col_2 = st.columns(2)
