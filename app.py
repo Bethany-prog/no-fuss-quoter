@@ -96,23 +96,6 @@ def parse_unified_database(uploaded_file):
             return db_out
         except Exception as e:
             st.sidebar.error(f"Excel Parse Bypass Error: {str(e)}")
-    
-    # Emergency local fallback links checks
-    fallback_files = {
-        "structures": "No_Fuss_Master_Rate_Template.xlsx - 4. Structures.csv",
-        "grandstands": "No_Fuss_Master_Rate_Template.xlsx - 5. Grandstands.csv",
-        "flooring": "No_Fuss_Master_Rate_Template.xlsx - 2. Flooring.csv",
-        "logistics": "No_Fuss_Master_Rate_Template.xlsx - 1. Logistics.csv"
-    }
-    for key, f_name in fallback_files.items():
-        if os.path.exists(f_name):
-            try:
-                df = pd.read_csv(f_name)
-                df.columns = [c.strip() for c in df.columns]
-                if "Configuration" in df.columns:
-                    df["Configuration"] = df["Configuration"].astype(str).str.strip()
-                db_out[key] = df
-            except: pass
             
     return db_out
 
@@ -140,7 +123,8 @@ def calculate_dynamic_grandstand_rate(seats_input):
         return 0.0, "0 seats allocation"
         
     if grandstand_db is not None and "Max_Seats" in grandstand_db.columns:
-        tot_col = [c for c in grandstand_db.columns if "total" in c.lower() or "labour" in c.lower() or "cost" in c.lower()]
+        # Core alignment fix: cleans headers to guarantee column match regardless of whitespace
+        tot_col = [c for c in grandstand_db.columns if "total" in c.lower() or "labour" in c.lower() or "cost" in c.lower() or "total" in c.lower()]
         target_col = tot_col[0] if tot_col else grandstand_db.columns[3]
         
         for idx, row in grandstand_db.iterrows():
@@ -154,12 +138,31 @@ def calculate_dynamic_grandstand_rate(seats_input):
                         return round(per_seat_rate, 2), f"Seating Matrix: ${total_labour_cost:,.2f} / {seats_input} seats"
             except: pass
             
-    fallback_matrix = [(0, 40, 880.0), (41, 100, 1650.0), (101, 149, 2420.0), (150, 199, 3300.0), (200, 249, 3850.0), (250, 299, 5280.0)]
+    fallback_matrix = [(0, 40, 880.0), (41, 100, 1650.0), (101, 149, 2420.0), (150, 199, 3300.0), (200, 249, 3850.0), (250, 299, 5280.0), (300, 349, 5940.0), (350, 400, 6600.0)]
     for low, high, total_lab in fallback_matrix:
         if low <= seats_input <= high:
             return round(total_lab / seats_input, 2), f"Backup Matrix Bracket {low}-{high}: ${total_lab:,.2f} / {seats_input} seats"
             
     return 16.50, f"Standard base per-seat matrix fallback rate calculation applied"
+
+# ==============================================================================
+# 1. ACCESS CONTROL TOWER (SECURITY GATE)
+# ==============================================================================
+def check_password():
+    if "password_correct" not in st.session_state:
+        st.session_state.password_correct = False
+    if not st.session_state.password_correct:
+        st.title("🔒 Louis Quoting Tool Access")
+        password = st.text_input("Access Code", type="password")
+        if st.button("Unlock Engine"):
+            if password == "NoFuss2026":
+                st.session_state.password_correct = True
+                st.rerun()
+        return False
+    return True
+
+if not check_password():
+    st.stop()
 
 # ==============================================================================
 # 3. PDF AUDIT ENGINE (STRUCTURAL TABLE TIERS WITH UNIVERSAL BYTE STREAM FIX)
@@ -324,12 +327,11 @@ labour_mode = l2.segmented_control("Labour Math", ["Separate", "Include in Hire"
 waiver_mode = l3.segmented_control("Damage Waiver", ["Charge", "Free"], default=st.session_state.saved_waiver_mode)
 
 # ==============================================================================
-# UPGRADE v57.5: SHORTENED SINGLE CATALOG ENTRY HUB CORES
+# 7. UNIFIED CATEGORY ENTRY CORE HUB SECTION
 # ==============================================================================
 st.divider()
 st.markdown("### ➕ CATALOG COMPONENT HUB")
 
-# Clean single word selector tokens layout
 selected_cat = st.selectbox("Choose Category to Load", ["marquees", "flooring", "grandstands"])
 
 if selected_cat == "marquees":
@@ -381,15 +383,12 @@ if selected_cat == "marquees":
     else: st.info("Structures master sheet catalog missing from environment context.")
 
 elif selected_cat == "flooring":
-    # Build options list from either the loaded Excel spreadsheet file or fallbacks map
     if flooring_db is not None and "Product Name" in flooring_db.columns:
         floor_options = flooring_db["Product Name"].dropna().tolist()
     else:
         floor_options = list(FLOORING_CATALOG_FALLBACK.keys())
         
     target_item = st.selectbox("Select Flooring Type Options:", floor_options, key="floor_res")
-    
-    # UPGRADE v57.5: Dimensions versus raw total SQM choice radio selectors
     f_input_method = st.radio("Input Calculation Method", ["Enter Dimensions (Width x Length)", "Enter Total SQM Directly"], horizontal=True)
     
     if f_input_method == "Enter Dimensions (Width x Length)":
@@ -400,7 +399,7 @@ elif selected_cat == "flooring":
             st.caption(f"💡 Calculated Area Coverage Target = **{calculated_sqm:,.2f} SQM**")
         cov_input = calculated_sqm
     else:
-        cov_input = st.number_input("Total Area Square Metres Coverage", min_value=0.0, value=None, placeholder="Type raw SQM area metric...", key=True)
+        cov_input = st.number_input("Total Area Square Metres Coverage", min_value=0.0, value=None, placeholder="Type raw SQM area metric...", key="floor_raw_sqm")
 
     if st.button("Add Flooring Component") and target_item:
         if cov_input is None or cov_input <= 0:
@@ -419,13 +418,12 @@ elif selected_cat == "flooring":
                 
             base_h = f_block if (weeks >= 4 and f_block > 0) else f_rate
             
-            # UPGRADE v57.5: Supa-Trac 3 SQM whole-sheet custom layout calculations matching loop logic
             final_item_label_name = target_item
             final_billing_qty = cov_input
             
             if "supa-tr" in target_item.lower() or "supat_r" in target_item.lower():
                 num_sheets_needed = math.ceil(cov_input / 3.0)
-                final_billing_qty = num_sheets_needed * 3.0  # Rounds billing metrics cleanly up to whole 3 SQM sheet increments
+                final_billing_qty = num_sheets_needed * 3.0  
                 final_item_label_name = f"{target_item} [{num_sheets_needed:,.0f} Sheets of 3 SQM]"
                 lab_desc = f"Supa-Trac Sheet Matrix: {num_sheets_needed:,.0f} Sheets ({final_billing_qty:,.0f} SQM total) x ${f_lab:.2f}"
             else:
@@ -440,8 +438,8 @@ elif selected_cat == "flooring":
             st.rerun()
 
 elif selected_cat == "grandstands":
-    # UPGRADE v57.5: Directly loads seat configuration capacities without searching alternative marquee schemas
-    seats_input = st.number_input("Total Seat Capacity Requirements Count", min_value=1, value=None, placeholder="Type total seating capacity counts...", key="gs_qty")
+    # CORE FIX v57.6: Independent capacity target module - hides conflicting query frames
+    seats_input = st.number_input("Total Seat Capacity Requirements Count", min_value=1, value=None, placeholder="Type total quantity of seats...", key="gs_qty")
     
     if st.button("Add Grandstand Configuration Layout"):
         if seats_input is None or seats_input <= 0:
@@ -452,7 +450,7 @@ elif selected_cat == "grandstands":
             combined_unit_rate = base_seat_hire + per_seat_labour
             
             new_df = pd.DataFrame([{
-                "Qty": seats_input, "Product": f"Grandstand Seating Tier ({seats_input} Seats)", "Unit Rate": combined_unit_rate, "Min_Lab": 0,
+                "Qty": seats_input, "Product": f"Standard Seating Grandstand ({seats_input} Seats)", "Unit Rate": combined_unit_rate, "Min_Lab": 0,
                 "Raw_Lab": 0.0, "Lab_Math": math_desc_str, "KG": seats_input * 25.0, "Is_Marquee": False,
                 "Discount": 0.0, "Lab_Per_Unit": per_seat_labour, "Base_Hire": base_seat_hire, "Anchoring": "", "Override_Rate": 0.0
             }])
@@ -507,7 +505,6 @@ if st.session_state.df is not None and not st.session_state.df.empty:
         new_disc = c4.number_input("Disc %", 0.0, 100.0, float(row["Discount"]), key=f"sd_{idx}", label_visibility="collapsed")
         if new_disc != row["Discount"]: st.session_state.df.at[idx, "Discount"] = new_disc; st.rerun()
             
-        # UPGRADE v57.5: Default blank cell strings placeholder logic mapping
         new_override = c4b.number_input("Override", 0.0, 5000.0, value=None if float(row.get("Override_Rate", 0.0)) == 0.0 else float(row.get("Override_Rate", 0.0)), placeholder="Override...", key=f"so_{idx}", label_visibility="collapsed")
         if (new_override or 0.0) != row.get("Override_Rate", 0.0): st.session_state.df.at[idx, "Override_Rate"] = new_override or 0.0; st.rerun()
         c5.markdown(f"<div style='text-align: right; font-size: 20px; font-weight: 700;'>${wk1_t:,.2f}</div>", unsafe_allow_html=True)
@@ -521,7 +518,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     auto_waiver_total = h_wk1_gear * 0.07 if waiver_mode == "Charge" else 0
 
     # ==============================================================================
-    # 9. MANUAL OVERRIDES GRID (BLANK FIELDS MATRIX v57.5)
+    # 9. MANUAL OVERRIDES GRID
     # ==============================================================================
     st.divider(); st.markdown("### 🛠️ MANUAL LOGISTICS OVERRIDES")
     h_adj0, h_adj1, h_adj2, h_adj3 = st.columns([0.4, 3.2, 2.2, 1.4])
@@ -545,7 +542,6 @@ if st.session_state.df is not None and not st.session_state.df.empty:
                 r_c0, r_c1, r_c2, r_c3 = st.columns([0.4, 3.2, 2.2, 1.4])
                 r_c1.markdown(f"<div class='item-text'>Labour: {p_label}</div><div class='sub-math-hint'>{math_hint_str.lower()}</div>", unsafe_allow_html=True)
                 
-                # UPGRADE v57.5: Clear blank overrides placeholders mapping
                 new_input_val = r_c2.number_input("InputL", min_value=0.0, value=None if saved_override_val < 0 else float(saved_override_val), placeholder=f"book: ${auto_val:,.2f}", key=f"f_l_{idx}", label_visibility="collapsed")
                 actual_l_val = new_input_val if new_input_val is not None else auto_val
                 r_c3.markdown(f"<div style='text-align: right; font-size: 20px; font-weight: 700;'>${actual_l_val:,.2f}</div>", unsafe_allow_html=True)
