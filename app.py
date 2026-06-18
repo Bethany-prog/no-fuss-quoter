@@ -235,7 +235,6 @@ if 'overrides_dict' not in st.session_state: st.session_state.overrides_dict = {
 st.session_state.status = st.selectbox("Stage", STAGES, index=STAGES.index(st.session_state.status) if st.session_state.status in STAGES else 0)
 st.markdown(f"<div style='height: 14px; background-color: {STAGE_COLORS[st.session_state.status]}; border-radius: 6px; margin-bottom: 20px;'></div>", unsafe_allow_html=True)
 
-# RESTORED: Hire Duration Date Picker Zone Needed for Cartage Analytics Context
 c_dt1, c_km_sep = st.columns([1, 1])
 start_d = c_dt1.date_input("Start Date", value=st.session_state.start_date_val, key=f"sd_{st.session_state.reset_key_seed}")
 st.session_state.start_date_val = start_d
@@ -266,7 +265,7 @@ labour_mode = l2.segmented_control("Labour Math", ["Separate", "Include in Hire"
 waiver_mode = l3.segmented_control("Damage Waiver", ["Charge", "Free"], default=st.session_state.saved_waiver_mode)
 
 # ==============================================================================
-# RESTORED: UNIFIED ENTRY SINGLE HUB ARCHITECTURE Stacked for scannability
+# 7. SINGLE HUB COMPONENT WORKSPACE
 # ==============================================================================
 st.divider()
 st.markdown("### ➕ CATALOG COMPONENT HUB")
@@ -318,7 +317,7 @@ if selected_cat == "marquees":
                         }])
                         st.session_state.df = pd.concat([st.session_state.df, weight_df], ignore_index=True)
                     st.rerun()
-        else: st.info("No matching configuration marquee sizes found.")
+        else: st.info("No matching configuration rows found.")
     else: st.info("Structures master sheet catalog missing from environment context.")
 
 elif selected_cat == "flooring":
@@ -557,12 +556,11 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     st.markdown("")  
     action_col_1, action_col_2 = st.columns(2)
             
-    # FIXED: Re-mapped the variables inside the PDF call block to completely resolve the crash
+    # FIXED v60.5: Matched function variables directly to eliminate the freevar crash completely
     cleaned_pdf_items = st.session_state.df.to_dict('records')
     pdf_b = create_calculation_pdf(h_tot_c, final_labour_pool_sum, final_waiver_sum, final_cartage_sum, grand_total_calc, weeks, cleaned_pdf_items, structural_math_dict, st.session_state.status)
     action_col_1.download_button("📥 DOWNLOAD DETAILED AUDIT PDF", pdf_b, file_name="Louis_Analysis.pdf", mime="application/pdf", use_container_width=True)
 
-    # Database template export block
     excel_df = struct_db.copy() if struct_db is not None else pd.DataFrame([{"System Status": "Catalog Empty"}])
     try:
         excel_buffer = io.BytesIO()
