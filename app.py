@@ -16,7 +16,7 @@ st.set_page_config(page_title="Louis Master Quoter", layout="wide")
 
 DEFAULT_EXCEL = "No_Fuss_Master_Rate_Template.xlsx"
 DEPOT_LAT = -38.1171
-DEPOT_LON = 145.2442
+DEPOT_LON = -145.2442
 
 # ==============================================================================
 # SMART RE REGEX DIMENSION MATCHING HOOK
@@ -236,9 +236,9 @@ st.session_state.status = st.selectbox("Stage", STAGES, index=STAGES.index(st.se
 st.markdown(f"<div style='height: 14px; background-color: {STAGE_COLORS[st.session_state.status]}; border-radius: 6px; margin-bottom: 20px;'></div>", unsafe_allow_html=True)
 
 c_dt1, c_km_sep = st.columns([1, 1])
-start_d = c_dt1.date_input("Start Date", value=st.session_state.start_date_val, key=f"sd_{st.session_state.reset_key_seed}")
+start_d = c_dt1.date_input("Start Date", value=st.session_state.start_date_val, key=f"sd_base_{st.session_state.reset_key_seed}")
 st.session_state.start_date_val = start_d
-end_d = c_km_sep.date_input("End Date", value=start_d, key=f"ed_{st.session_state.reset_key_seed}")
+end_d = c_km_sep.date_input("End Date", value=start_d, key=f"ed_base_{st.session_state.reset_key_seed}")
 weeks = math.ceil(((end_d - start_d).days) / 7) or 1
 
 input_addr = st.text_input("🏠 Delivery Site Address", value=st.session_state.site_address_str, placeholder="Type venue address or suburb...")
@@ -398,7 +398,12 @@ elif selected_cat == "grandstands":
 # QUOTE SUMMARY ENGINE RENDER DATA LOOPS 
 # ==============================================================================
 if st.session_state.df is not None and not st.session_state.df.empty:
-    st.divider(); st.subheader("📝 QUOTE SUMMARY")
+    st.divider()
+    st.subheader("📝 QUOTE SUMMARY")
+    
+    # CRITICAL BUG FIX v61.5: Enforce dynamic row index resetting right before rendering element widgets
+    st.session_state.df.reset_index(drop=True, inplace=True)
+    
     h_col0, h_col1, h_col2, h_col3, h_col4, h_col4b, h_col5 = st.columns([0.4, 3.2, 1.0, 1.2, 1.2, 1.2, 1.4])
     h_col1.markdown("<div class='summary-hdr'>Item Description</div>", unsafe_allow_html=True)
     h_col2.markdown("<div class='summary-hdr'>Qty (Editable)</div>", unsafe_allow_html=True)
@@ -422,7 +427,9 @@ if st.session_state.df is not None and not st.session_state.df.empty:
         
         c0, c1, c2, c3, c4, c4b, c5 = st.columns([0.4, 3.2, 1.0, 1.2, 1.2, 1.2, 1.4])
         if c0.button("🗑️", key=f"sdel_{idx}"):
-            st.session_state.df.drop(idx, inplace=True); st.session_state.df.reset_index(drop=True, inplace=True); st.rerun()
+            st.session_state.df.drop(idx, inplace=True)
+            st.session_state.df.reset_index(drop=True, inplace=True)
+            st.rerun()
             
         prod_display = str(row['Product'])
         if row.get('Anchoring'): prod_display += f" ({row['Anchoring']})"
@@ -551,17 +558,15 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     structural_math_dict["DAMAGE WAIVER"].append(f"${h_wk1_gear:,.2f} gear x 7% = ${final_waiver_sum:,.2f}")
 
 # ==============================================================================
-# 10. DOWNLOAD ZONE (FULLY ALIGNED v61.0)
+# 10. DOWNLOAD ZONE (FULLY POSITIONALLY ALIGNED)
 # ==============================================================================
     st.markdown("")  
     action_col_1, action_col_2 = st.columns(2)
             
-    # FIXED: Re-mapped the variables inside the PDF call block to completely resolve the crash
     cleaned_pdf_items = st.session_state.df.to_dict('records')
     pdf_b = create_calculation_pdf(h_tot_c, final_labour_pool_sum, final_waiver_sum, final_cartage_sum, grand_total_calc, weeks, cleaned_pdf_items, structural_math_dict, st.session_state.status)
     action_col_1.download_button("📥 DOWNLOAD DETAILED AUDIT PDF", pdf_b, file_name="Louis_Analysis.pdf", mime="application/pdf", use_container_width=True)
 
-    # Database template export block
     excel_df = struct_db.copy() if struct_db is not None else pd.DataFrame([{"System Status": "Catalog Empty"}])
     try:
         excel_buffer = io.BytesIO()
