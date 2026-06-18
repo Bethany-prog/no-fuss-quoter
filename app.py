@@ -6,7 +6,7 @@ from fpdf import FPDF
 import re
 import json
 import os
-import io
+import io  # Streamlines memory buffers for native Excel and PDF exports
 from geopy.geocoders import Nominatim
 from geopy.distance import geodesic
 
@@ -143,6 +143,25 @@ def calculate_dynamic_grandstand_rate(seats_input):
             return round(total_lab / seats_input, 2), f"Backup Matrix Bracket {low}-{high}: ${total_lab:,.2f} / {seats_input} seats"
             
     return 16.50, f"Standard base per-seat matrix fallback rate calculation applied"
+
+# ==============================================================================
+# 1. ACCESS CONTROL TOWER (SECURITY GATE)
+# ==============================================================================
+def check_password():
+    if "password_correct" not in st.session_state:
+        st.session_state.password_correct = False
+    if not st.session_state.password_correct:
+        st.title("🔒 Louis Quoting Tool Access")
+        password = st.text_input("Access Code", type="password")
+        if st.button("Unlock Engine"):
+            if password == "NoFuss2026":
+                st.session_state.password_correct = True
+                st.rerun()
+        return False
+    return True
+
+if not check_password():
+    st.stop()
 
 # ==============================================================================
 # 3. PDF AUDIT ENGINE (STRUCTURAL TABLE TIERS WITH UNIVERSAL BYTE STREAM FIX)
@@ -307,7 +326,7 @@ labour_mode = l2.segmented_control("Labour Math", ["Separate", "Include in Hire"
 waiver_mode = l3.segmented_control("Damage Waiver", ["Charge", "Free"], default=st.session_state.saved_waiver_mode)
 
 # ==============================================================================
-# 7. CATALOG HUB (UPDATED WORKFLOW AND CLEAN FIELD DEFINITIONS v57.6)
+# 7. CATALOG HUB 
 # ==============================================================================
 st.divider()
 st.markdown("### ➕ CATALOG COMPONENT HUB")
@@ -418,7 +437,6 @@ elif selected_cat == "flooring":
             st.rerun()
 
 elif selected_cat == "grandstands":
-    # CORE HUB CORRECTION v57.6: Independent capacity target module - hides conflicting query frames
     seats_input = st.number_input("Total Seat Capacity Requirements Count", min_value=1, value=None, placeholder="Type total quantity of seats...", key="gs_qty")
     
     if st.button("Add Grandstand Configuration Layout"):
@@ -485,7 +503,6 @@ if st.session_state.df is not None and not st.session_state.df.empty:
         new_disc = c4.number_input("Disc %", 0.0, 100.0, float(row["Discount"]), key=f"sd_{idx}", label_visibility="collapsed")
         if new_disc != row["Discount"]: st.session_state.df.at[idx, "Discount"] = new_disc; st.rerun()
             
-        # Clear fields parameters
         new_override = c4b.number_input("Override", 0.0, 5000.0, value=None if float(row.get("Override_Rate", 0.0)) == 0.0 else float(row.get("Override_Rate", 0.0)), placeholder="Override...", key=f"so_{idx}", label_visibility="collapsed")
         if (new_override or 0.0) != row.get("Override_Rate", 0.0): st.session_state.df.at[idx, "Override_Rate"] = new_override or 0.0; st.rerun()
         c5.markdown(f"<div style='text-align: right; font-size: 20px; font-weight: 700;'>${wk1_t:,.2f}</div>", unsafe_allow_html=True)
@@ -499,7 +516,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     auto_waiver_total = h_wk1_gear * 0.07 if waiver_mode == "Charge" else 0
 
     # ==============================================================================
-    # 9. MANUAL OVERRIDES GRID (BLANK FIELDS MATRIX)
+    # 9. MANUAL OVERRIDES GRID
     # ==============================================================================
     st.divider(); st.markdown("### 🛠️ MANUAL LOGISTICS OVERRIDES")
     h_adj0, h_adj1, h_adj2, h_adj3 = st.columns([0.4, 3.2, 2.2, 1.4])
@@ -595,7 +612,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     structural_math_dict["DAMAGE WAIVER"].append(f"${h_wk1_gear:,.2f} gear x 7% = ${final_waiver_sum:,.2f}")
 
 # ==============================================================================
-# 10. SAVE & DOWNLOAD INTERACTION ZONE
+# 10. SAVE & DOWNLOAD INTERACTION ZONE (FIXED DATABASE BACKUP POINTER v58.2)
 # ==============================================================================
     st.markdown("")  
     action_col_1, action_col_2, action_col_3 = st.columns(3)
@@ -618,6 +635,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     pdf_b = create_calculation_pdf(st.session_state.proj, h_tot_c, final_labour_pool_sum, final_waiver_sum, final_cartage_sum, grand_total_calc, weeks, start_d, end_d, cleaned_pdf_items, structural_math_dict, st.session_state.status)
     action_col_2.download_button("📥 DOWNLOAD DETAILED AUDIT PDF", pdf_b, file_name=f"{st.session_state.proj}_Analysis.pdf", mime="application/pdf", use_container_width=True)
 
+    # CORE FIX v58.2: Swapped out broken static string target for active struct_db component reference data stream
     excel_df = struct_db.copy() if struct_db is not None else pd.DataFrame([{"System Status": "Catalog Empty"}])
     try:
         excel_buffer = io.BytesIO()
