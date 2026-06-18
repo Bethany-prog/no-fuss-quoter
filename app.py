@@ -253,7 +253,7 @@ if input_addr.strip() != st.session_state.site_address_str:
             st.rerun()
     except: pass
 
-st.markdown("**🔒 Active Transport Routing Distance**")
+st.markdown("**🚛 Active Transport Routing Distance**")
 c_km1, c_km2 = st.columns([1, 4])
 new_manual_km = c_km1.number_input("One-Way KM", min_value=0.0, value=float(st.session_state.km))
 if new_manual_km != float(st.session_state.km): st.session_state.km = new_manual_km
@@ -386,11 +386,11 @@ elif selected_cat == "grandstands":
             base_seat_hire = 15.00 if weeks < 4 else 7.50
             combined_unit_rate = base_seat_hire + per_seat_labour
             
-            # NOTE: Raw_Lab is left 0.0 because the dynamic labor cost is completely built into the seat hire price
+            # FIXED v62.0: Set Raw_Lab and Lab_Per_Unit to 0.0 because labor is completely built into the seat rate
             new_df = pd.DataFrame([{
                 "Qty": seats_input, "Product": f"Standard Seating Grandstand ({seats_input} Seats)", "Unit Rate": combined_unit_rate, "Min_Lab": 0,
                 "Raw_Lab": 0.0, "Lab_Math": math_desc_str, "KG": seats_input * 25.0, "Is_Marquee": False,
-                "Discount": 0.0, "Lab_Per_Unit": per_seat_labour, "Base_Hire": base_seat_hire, "Anchoring": "", "Override_Rate": 0.0
+                "Discount": 0.0, "Lab_Per_Unit": 0.0, "Base_Hire": combined_unit_rate, "Anchoring": "", "Override_Rate": 0.0
             }])
             st.session_state.df = pd.concat([st.session_state.df, new_df], ignore_index=True)
             st.rerun()
@@ -458,11 +458,10 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     saved_trk_count = st.session_state.overrides_dict.get("logistics_truck_allocation_count_scalar", float(min_trucks))
     trks = int(saved_trk_count)
 
-    # FIX v62.0: Exclude Grandstands entirely from separate labor grid since it is already inside the unit rate
     raw_lab_pool = st.session_state.df["Raw_Lab"].sum()
     auto_cartage_total = trks * st.session_state.km * 4 * 3.50 if cartage_mode == "Charge" else 0
     
-    # FIX v62.0: Damage waiver is now derived directly from h_tot_c (the actual cumulative product hire total)
+    # FIXED v62.0: Damage waiver is now derived directly from h_tot_c (the final progressive true product hire total)
     auto_waiver_total = h_tot_c * 0.07 if waiver_mode == "Charge" else 0
 
     # ==============================================================================
@@ -479,7 +478,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
 
     if labour_mode == "Separate":
         for idx, row in st.session_state.df.iterrows():
-            # FIXED v62.0: Checking strictly for separate Raw_Lab costs skips grandstands cleanly
+            # FIXED v62.0: Checking strictly for non-zero separate Raw_Lab costs skips grandstands cleanly
             if row.get('Raw_Lab', 0.0) > 0.0:
                 p_label = row['Product']
                 lbl_key = f"lab_ovr_{p_label}_{idx}"
@@ -566,7 +565,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     structural_math_dict["DAMAGE WAIVER"].append(f"${h_tot_c:,.2f} total product hire cost x 7% = ${final_waiver_sum:,.2f}")
 
 # ==============================================================================
-# 10. DOWNLOAD ZONE (FULLY POSITIONAL SYNCHRONIZATION ALIGNED v62.0)
+# 10. DOWNLOAD ZONE (FULLY POSITIONALLY ALIGNED v62.0)
 # ==============================================================================
     st.markdown("")  
     action_col_1, action_col_2 = st.columns(2)
