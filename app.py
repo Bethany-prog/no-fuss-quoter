@@ -33,18 +33,15 @@ def matches_smart_query(config_name, query_str):
     c_clean = str(config_name).lower().replace(" ", "")
     q_clean = str(query_str).lower().replace(" ", "")
     
-    # Direct substring containing match
     if q_clean in c_clean:
         return True
         
-    # Dimension normalization pass: converts pairs like '4m x 3m' or '4x3' into uniform '4x3' tokens
     c_norm = re.sub(r'(\d+)m?x(\d+)m?', r'\1x\2', c_clean)
     q_norm = re.sub(r'(\d+)m?x(\d+)m?', r'\1x\2', q_clean)
     
     if q_norm in c_norm:
         return True
         
-    # Token extraction check (Ensures digits match sequentially)
     q_digits = re.findall(r'\d+', q_clean)
     c_digits = re.findall(r'\d+', c_clean)
     if len(q_digits) >= 2 and len(c_digits) >= 2:
@@ -231,10 +228,10 @@ def create_calculation_pdf(name, subtotal, labour, waiver, cartage, grand, weeks
         return bytes(pdf.output())
 
 FLOORING_CATALOG_FALLBACK = {
-    "I-Trac®": {"rate": 23.40, "block": 46.80, "lab_fix": 4.65, "kg": 15.0},
-    "Supa-Trac®": {"rate": 11.55, "block": 25.00, "lab_fix": 4.65, "kg": 4.5, "sheet_sqm": 3.13},
+    "I-Trac": {"rate": 23.40, "block": 46.80, "lab_fix": 4.65, "kg": 15.0},
+    "Supa-Trac": {"rate": 11.55, "block": 25.00, "lab_fix": 4.65, "kg": 4.5},
     "Plastorip": {"rate": 10.15, "block": 20.30, "lab_fix": 3.05, "kg": 4.0},
-    "Trakmat": {"rate": 23.20, "block": 45.00, "lab_fix": 5.85, "kg": 35.0}
+    "Trakmats": {"rate": 23.20, "block": 45.00, "lab_fix": 5.85, "kg": 35.0}
 }
 STAGES = ["Quoted", "Accepted", "Paid", "On Hire", "Returned", "Cancelled"]
 STAGE_COLORS = {"Quoted": "#FF9100", "Accepted": "#00E676", "Paid": "#00B8D4", "On Hire": "#D500F9", "Returned": "#757575", "Cancelled": "#263238"}
@@ -290,7 +287,7 @@ if st.sidebar.button("➕ START NEW", use_container_width=True):
     st.rerun()
 
 if vault_jobs:
-    load_choice = st.sidebar.selectbox("Stored Projects", ["-- Choose Project --"] + vault_jobs)
+    load_choice = st.sidebar.selectbox("Cloud Project Vault retrieval", ["-- Choose Project --"] + vault_jobs)
     if st.sidebar.button("📂 LOAD STORED QUOTE") and load_choice != "-- Choose Project --":
         load_project_from_vault(load_choice)
 
@@ -327,16 +324,17 @@ labour_mode = l2.segmented_control("Labour Math", ["Separate", "Include in Hire"
 waiver_mode = l3.segmented_control("Damage Waiver", ["Charge", "Free"], default=st.session_state.saved_waiver_mode)
 
 # ==============================================================================
-# UPGRADE v57.0: UNIFIED CATEGORY ENTRY CORE HUB SECTION
+# UPGRADE v57.5: SHORTENED SINGLE CATALOG ENTRY HUB CORES
 # ==============================================================================
 st.divider()
-st.markdown("### ➕ CATALOG WORKSPACE COMPONENT SELECTION GATE")
+st.markdown("### ➕ CATALOG COMPONENT HUB")
 
-selected_cat = st.selectbox("Choose Component Category to Load", ["Marquees & Layout Structures", "Flooring Options Matrix", "Grandstand Tier Seating"])
+# Clean single word selector tokens layout
+selected_cat = st.selectbox("Choose Category to Load", ["marquees", "flooring", "grandstands"])
 
-if selected_cat == "Marquees & Layout Structures":
+if selected_cat == "marquees":
     if struct_db is not None:
-        search_query = st.text_input("🔍 Smart Search Marquee Size (e.g. 4x3, 6x3, 15m):", placeholder="Type structure dimensions here...", key="marq_search_box")
+        search_query = st.text_input("🔍 Smart Search Marquee Size (e.g. 4x3, 6x3, 15x15):", placeholder="Type structure dimensions here...", key="marq_search_box")
         filtered_df = struct_db[struct_db["Type"].str.lower().str.contains("marquee", na=False) | struct_db["Type"].str.lower().str.contains("structure", na=False)]
         
         if search_query:
@@ -344,14 +342,12 @@ if selected_cat == "Marquees & Layout Structures":
             
         if not filtered_df.empty:
             target_item = st.selectbox("Discovered configuration options:", filtered_df["Configuration"].tolist(), key="marq_res")
+            qty_input = st.number_input("Structure Quantity Count", min_value=1, value=None, placeholder="Type quantity...", key="marq_qty")
+            anch_type = st.segmented_control("Anchoring Method Selection", ["Pegged", "Weighted"], default="Pegged", key="marq_anch")
             
-            # Editable value cell targets default clean blank state per user guidelines
-            qty_input = st.number_input("Structure Quantity Count", min_value=1, value=None, placeholder="Type quantity required...", key="marq_qty")
-            anch_type = st.segmented_control("Anchoring Bracing Selection", ["Pegged", "Weighted"], default="Pegged", key="marq_anch")
-            
-            if st.button("Add Structural Configuration to Summary") and target_item:
+            if st.button("Add Structural Configuration") and target_item:
                 if qty_input is None:
-                    st.error("Please insert a target quantity figure first.")
+                    st.error("Please insert a target quantity first.")
                 else:
                     b_hire = get_item_property(target_item, "Hire Unit Rate", fallback_val=0.0)
                     if b_hire <= 0: b_hire = get_item_property(target_item, "Total Hire Rate", fallback_val=198.45)
@@ -360,7 +356,7 @@ if selected_cat == "Marquees & Layout Structures":
                     
                     new_df = pd.DataFrame([{
                         "Qty": qty_input, "Product": target_item, "Unit Rate": b_hire, "Min_Lab": 350,
-                        "Raw_Lab": raw_labour_pool, "Lab_Math": f"{target_item}: Setup configuration layout cost",
+                        "Raw_Lab": raw_labour_pool * qty_input, "Lab_Math": f"{target_item}: Layout installation setup matrix",
                         "KG": total_w * qty_input, "Is_Marquee": True, "Discount": 0.0, "Lab_Per_Unit": raw_labour_pool,
                         "Base_Hire": b_hire, "Anchoring": anch_type, "Override_Rate": 0.0
                     }])
@@ -375,89 +371,96 @@ if selected_cat == "Marquees & Layout Structures":
                         calc_w = int(num_weights * qty_input)
                         weight_df = pd.DataFrame([{
                             "Qty": calc_w, "Product": f"{int(w_size)}kg Weights", "Unit Rate": w_cost, "Min_Lab": 0,
-                            "Raw_Lab": calc_w * w_lab, "Lab_Math": f"Ballast blocks stacking: {calc_w} units x ${w_lab:.2f}",
+                            "Raw_Lab": calc_w * w_lab, "Lab_Math": f"Ballast weights stacking: {calc_w} units x ${w_lab:.2f}",
                             "KG": calc_w * w_size, "Is_Marquee": False, "Discount": 0.0, "Lab_Per_Unit": w_lab,
                             "Base_Hire": w_cost, "Anchoring": "", "Override_Rate": 0.0
                         }])
                         st.session_state.df = pd.concat([st.session_state.df, weight_df], ignore_index=True)
                     st.rerun()
-        else: st.info("No matching structural elements discovered in catalog rows.")
-    else: st.info("Master spreadsheet catalog missing from GitHub environment context.")
+        else: st.info("No matching configuration rows found.")
+    else: st.info("Structures master sheet catalog missing from environment context.")
 
-elif selected_cat == "Flooring Options Matrix":
-    if flooring_db is not None:
-        search_query = st.text_input("🔍 Smart Search Flooring Options (e.g. Supa, Trakmat):", placeholder="Type floor target name here...", key="floor_search_box")
-        filtered_df = flooring_db.copy()
-        if search_query:
-            filtered_df = filtered_df[filtered_df["Product Name"].str.contains(search_query, case=False, na=False)]
-            
-        if not filtered_df.empty:
-            target_item = st.selectbox("Discovered matching options:", filtered_df["Product Name"].tolist(), key="floor_res")
-            cov_input = st.number_input("Square Metre Coverage Metric", min_value=1.0, value=None, placeholder="Type total square meters required...", key="floor_qty")
-            
-            if st.button("Add Flooring Component to Summary") and target_item:
-                if cov_input is None:
-                    st.error("Please declare required coverage area figures first.")
-                else:
-                    match_f = flooring_db[flooring_db["Product Name"] == target_item]
-                    f_rate = float(match_f.iloc[0].get("1-Week Rate ($/sqm)", 11.55))
-                    f_block = float(match_f.iloc[0].get("4-Week Block ($)", 25.00))
-                    f_lab = float(match_f.iloc[0].get("Labour ($/sqm)", 4.65))
-                    f_kg = float(match_f.iloc[0].get("Weight (kg/sqm)", 4.5))
-                    if math.isnan(f_kg): f_kg = FLOORING_CATALOG_FALLBACK.get(target_item, {}).get("kg", 4.5)
-                    f_sheet_sqm = float(match_f.iloc[0].get("Sheet Length (m)", 1.0) * match_f.iloc[0].get("Sheet Width (m)", 1.0))
-                    if math.isnan(f_sheet_sqm) or f_sheet_sqm <= 0: f_sheet_sqm = 0.0
-                    
-                    base_h = f_block if (weeks >= 4 and f_block > 0) else f_rate
-                    eff_qty = (math.ceil(cov_input / f_sheet_sqm) * f_sheet_sqm) if f_sheet_sqm > 0 else cov_input
-                    
-                    new_f_df = pd.DataFrame([{
-                        "Qty": cov_input, "Product": target_item, "Unit Rate": base_h, "Min_Lab": 0, "Raw_Lab": cov_input * f_lab,
-                        "Lab_Math": f"{target_item}: {cov_input:,.0f} sqm x ${f_lab:.2f}", "KG": eff_qty * f_kg, "Is_Marquee": False,
-                        "Discount": 0.0, "Lab_Per_Unit": 0, "Base_Hire": base_h, "Anchoring": "", "Override_Rate": 0.0
-                    }])
-                    st.session_state.df = pd.concat([st.session_state.df, new_f_df], ignore_index=True)
-                    st.rerun()
+elif selected_cat == "flooring":
+    # Build options list from either the loaded Excel spreadsheet file or fallbacks map
+    if flooring_db is not None and "Product Name" in flooring_db.columns:
+        floor_options = flooring_db["Product Name"].dropna().tolist()
     else:
-        # Fallback to dictionary keys if flooring_db is completely offline
-        f_sel = st.selectbox("Flooring Alternative Selector options:", list(FLOORING_CATALOG_FALLBACK.keys()))
-        cov_input = st.number_input("Square Metre Coverage Metric", min_value=1.0, value=None, placeholder="Type square meters...")
-        if st.button("Add Flooring Component to Summary") and cov_input:
-            fd = FLOORING_CATALOG_FALLBACK[f_sel]
-            base_h = fd['block'] if (weeks >= 4 and fd.get('block', 0) > 0) else fd['rate']
+        floor_options = list(FLOORING_CATALOG_FALLBACK.keys())
+        
+    target_item = st.selectbox("Select Flooring Type Options:", floor_options, key="floor_res")
+    
+    # UPGRADE v57.5: Dimensions versus raw total SQM choice radio selectors
+    f_input_method = st.radio("Input Calculation Method", ["Enter Dimensions (Width x Length)", "Enter Total SQM Directly"], horizontal=True)
+    
+    if f_input_method == "Enter Dimensions (Width x Length)":
+        f_w_input = st.number_input("Width (m)", min_value=0.0, value=None, placeholder="Type width in meters...", key="f_width_cell")
+        f_l_input = st.number_input("Length (m)", min_value=0.0, value=None, placeholder="Type length in meters...", key="f_length_cell")
+        calculated_sqm = (f_w_input * f_l_input) if (f_w_input and f_l_input) else None
+        if calculated_sqm:
+            st.caption(f"💡 Calculated Area Coverage Target = **{calculated_sqm:,.2f} SQM**")
+        cov_input = calculated_sqm
+    else:
+        cov_input = st.number_input("Total Area Square Metres Coverage", min_value=0.0, value=None, placeholder="Type raw SQM area metric...", key=True)
+
+    if st.button("Add Flooring Component") and target_item:
+        if cov_input is None or cov_input <= 0:
+            st.error("Please input width/length metrics or total SQM figures first.")
+        else:
+            if flooring_db is not None:
+                match_f = flooring_db[flooring_db["Product Name"] == target_item]
+                f_rate = float(match_f.iloc[0].get("1-Week Rate ($/sqm)", 11.55))
+                f_block = float(match_f.iloc[0].get("4-Week Block ($)", 25.00))
+                f_lab = float(match_f.iloc[0].get("Labour ($/sqm)", 4.65))
+                f_kg = float(match_f.iloc[0].get("Weight (kg/sqm)", 4.5))
+                if math.isnan(f_kg): f_kg = FLOORING_CATALOG_FALLBACK.get(target_item, {}).get("kg", 4.5)
+            else:
+                fd = FLOORING_CATALOG_FALLBACK.get(target_item, {"rate": 11.55, "block": 25.00, "lab_fix": 4.65, "kg": 4.5})
+                f_rate, f_block, f_lab, f_kg = fd["rate"], fd.get("block", 0), fd["lab_fix"], fd["kg"]
+                
+            base_h = f_block if (weeks >= 4 and f_block > 0) else f_rate
+            
+            # UPGRADE v57.5: Supa-Trac 3 SQM whole-sheet custom layout calculations matching loop logic
+            final_item_label_name = target_item
+            final_billing_qty = cov_input
+            
+            if "supa-tr" in target_item.lower() or "supat_r" in target_item.lower():
+                num_sheets_needed = math.ceil(cov_input / 3.0)
+                final_billing_qty = num_sheets_needed * 3.0  # Rounds billing metrics cleanly up to whole 3 SQM sheet increments
+                final_item_label_name = f"{target_item} [{num_sheets_needed:,.0f} Sheets of 3 SQM]"
+                lab_desc = f"Supa-Trac Sheet Matrix: {num_sheets_needed:,.0f} Sheets ({final_billing_qty:,.0f} SQM total) x ${f_lab:.2f}"
+            else:
+                lab_desc = f"{target_item}: {cov_input:,.0f} SQM area x ${f_lab:.2f}"
+                
             new_f_df = pd.DataFrame([{
-                "Qty": cov_input, "Product": f_sel, "Unit Rate": base_h, "Min_Lab": 0, "Raw_Lab": cov_input * fd['lab_fix'],
-                "Lab_Math": f"{f_sel}: {cov_input:,.0f} sqm x ${fd['lab_fix']:.2f}", "KG": cov_input * fd['kg'], "Is_Marquee": False,
+                "Qty": final_billing_qty, "Product": final_item_label_name, "Unit Rate": base_h, "Min_Lab": 0, "Raw_Lab": final_billing_qty * f_lab,
+                "Lab_Math": lab_desc, "KG": final_billing_qty * f_kg, "Is_Marquee": False,
                 "Discount": 0.0, "Lab_Per_Unit": 0, "Base_Hire": base_h, "Anchoring": "", "Override_Rate": 0.0
             }])
             st.session_state.df = pd.concat([st.session_state.df, new_f_df], ignore_index=True)
             st.rerun()
 
-elif selected_cat == "Grandstand Tier Seating":
-    if struct_db is not None:
-        filtered_df = struct_db[struct_db["Type"].str.lower().str.contains("grandstand", na=False) | struct_db["Configuration"].str.lower().str.contains("grandstand", na=False)]
-        if not filtered_df.empty:
-            target_item = st.selectbox("Grandstand Variant selection options:", filtered_df["Configuration"].tolist(), key="gs_res")
-            seats_input = st.number_input("Total Seat Capacity Requirements Count", min_value=1, value=None, placeholder="Type total quantity of seats...", key="gs_qty")
+elif selected_cat == "grandstands":
+    # UPGRADE v57.5: Directly loads seat configuration capacities without searching alternative marquee schemas
+    seats_input = st.number_input("Total Seat Capacity Requirements Count", min_value=1, value=None, placeholder="Type total seating capacity counts...", key="gs_qty")
+    
+    if st.button("Add Grandstand Configuration Layout"):
+        if seats_input is None or seats_input <= 0:
+            st.error("Please supply a valid seat capacity count first.")
+        else:
+            per_seat_labour, math_desc_str = calculate_dynamic_grandstand_rate(seats_input)
+            base_seat_hire = 15.00 if weeks < 4 else 7.50
+            combined_unit_rate = base_seat_hire + per_seat_labour
             
-            if st.button("Add Grandstand Layout Configuration") and target_item:
-                if seats_input is None:
-                    st.error("Please provide expected seating tier counts first.")
-                else:
-                    per_seat_labour, math_desc_str = calculate_dynamic_grandstand_rate(seats_input)
-                    base_seat_hire = 15.00 if weeks < 4 else 7.50
-                    combined_unit_rate = base_seat_hire + per_seat_labour
-                    
-                    new_df = pd.DataFrame([{
-                        "Qty": seats_input, "Product": target_item, "Unit Rate": combined_unit_rate, "Min_Lab": 0,
-                        "Raw_Lab": 0.0, "Lab_Math": math_desc_str, "KG": seats_input * 25.0, "Is_Marquee": False,
-                        "Discount": 0.0, "Lab_Per_Unit": per_seat_labour, "Base_Hire": base_seat_hire, "Anchoring": "", "Override_Rate": 0.0
-                    }])
-                    st.session_state.df = pd.concat([st.session_state.df, new_df], ignore_index=True)
-                    st.rerun()
+            new_df = pd.DataFrame([{
+                "Qty": seats_input, "Product": f"Grandstand Seating Tier ({seats_input} Seats)", "Unit Rate": combined_unit_rate, "Min_Lab": 0,
+                "Raw_Lab": 0.0, "Lab_Math": math_desc_str, "KG": seats_input * 25.0, "Is_Marquee": False,
+                "Discount": 0.0, "Lab_Per_Unit": per_seat_labour, "Base_Hire": base_seat_hire, "Anchoring": "", "Override_Rate": 0.0
+            }])
+            st.session_state.df = pd.concat([st.session_state.df, new_df], ignore_index=True)
+            st.rerun()
 
 # ==============================================================================
-# QUOTE SUMMARY ENGINE DATA LOOP INTERFACES RENDER
+# QUOTE SUMMARY ENGINE RENDER DATA LOOPS 
 # ==============================================================================
 if st.session_state.df is not None and not st.session_state.df.empty:
     st.divider(); st.subheader("📝 QUOTE SUMMARY")
@@ -504,7 +507,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
         new_disc = c4.number_input("Disc %", 0.0, 100.0, float(row["Discount"]), key=f"sd_{idx}", label_visibility="collapsed")
         if new_disc != row["Discount"]: st.session_state.df.at[idx, "Discount"] = new_disc; st.rerun()
             
-        # Editable cells are left completely empty per user requirements updates layout targets
+        # UPGRADE v57.5: Default blank cell strings placeholder logic mapping
         new_override = c4b.number_input("Override", 0.0, 5000.0, value=None if float(row.get("Override_Rate", 0.0)) == 0.0 else float(row.get("Override_Rate", 0.0)), placeholder="Override...", key=f"so_{idx}", label_visibility="collapsed")
         if (new_override or 0.0) != row.get("Override_Rate", 0.0): st.session_state.df.at[idx, "Override_Rate"] = new_override or 0.0; st.rerun()
         c5.markdown(f"<div style='text-align: right; font-size: 20px; font-weight: 700;'>${wk1_t:,.2f}</div>", unsafe_allow_html=True)
@@ -518,7 +521,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     auto_waiver_total = h_wk1_gear * 0.07 if waiver_mode == "Charge" else 0
 
     # ==============================================================================
-    # 9. MANUAL OVERRIDES GRID
+    # 9. MANUAL OVERRIDES GRID (BLANK FIELDS MATRIX v57.5)
     # ==============================================================================
     st.divider(); st.markdown("### 🛠️ MANUAL LOGISTICS OVERRIDES")
     h_adj0, h_adj1, h_adj2, h_adj3 = st.columns([0.4, 3.2, 2.2, 1.4])
@@ -542,6 +545,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
                 r_c0, r_c1, r_c2, r_c3 = st.columns([0.4, 3.2, 2.2, 1.4])
                 r_c1.markdown(f"<div class='item-text'>Labour: {p_label}</div><div class='sub-math-hint'>{math_hint_str.lower()}</div>", unsafe_allow_html=True)
                 
+                # UPGRADE v57.5: Clear blank overrides placeholders mapping
                 new_input_val = r_c2.number_input("InputL", min_value=0.0, value=None if saved_override_val < 0 else float(saved_override_val), placeholder=f"book: ${auto_val:,.2f}", key=f"f_l_{idx}", label_visibility="collapsed")
                 actual_l_val = new_input_val if new_input_val is not None else auto_val
                 r_c3.markdown(f"<div style='text-align: right; font-size: 20px; font-weight: 700;'>${actual_l_val:,.2f}</div>", unsafe_allow_html=True)
@@ -588,7 +592,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
 
     if has_changes_detected: st.rerun()
 
-    # Footer metric cards
+    # Footer metric cards Display
     st.divider(); m = st.columns(6)
     m[0].metric("HIRE COST", f"${round(h_tot_c, 2):,}")
     m[1].metric("LABOUR", f"${round(final_labour_pool_sum, 2):,}")
@@ -600,7 +604,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     grand_total_calc = h_tot_c + final_labour_pool_sum + final_waiver_sum + final_cartage_sum
     st.markdown(f"<div class='gt-banner'>GRAND TOTAL (EX GST): ${grand_total_calc:,.2f}</div>", unsafe_allow_html=True)
     
-    # Document compilation text list matrices mappings
+    # Document compilation lines text mapping for black header PDF logs
     structural_math_dict = {"LABOUR": [], "LOGISTICS": [], "DAMAGE WAIVER": []}
     for idx, row in st.session_state.df.iterrows():
         lbl_key = f"lab_ovr_{row['Product']}_{idx}"
@@ -647,4 +651,3 @@ if st.session_state.df is not None and not st.session_state.df.empty:
         excel_data_bytes, ext, mt = excel_df.to_csv(index=False).encode('utf-8'), "csv", "text/csv"
 
     action_col_3.download_button(label="📊 DOWNLOAD ACTIVE DATA BACKUP", data=excel_data_bytes, file_name=f"Louis_Current_Database_Template.{ext}", mime=mt, use_container_width=True)
-    
