@@ -6,7 +6,7 @@ from fpdf import FPDF
 import re
 import json
 import os
-import io  # Streamlines memory buffers for native Excel and PDF exports
+import io
 from geopy.geocoders import Nominatim
 from geopy.distance import geodesic
 
@@ -66,10 +66,10 @@ def parse_unified_database(uploaded_file):
             xl = pd.ExcelFile(target_file)
             sheets = xl.sheet_names
             
-            s_sheet = [s for s in sheets if "structure" in s.lower()]
-            g_sheet = [s for s in sheets if "grandstand" in s.lower()]
-            f_sheet = [s for s in sheets if "floor" in s.lower()]
-            l_sheet = [s for s in sheets if "logis" in s.lower()]
+            s_sheet = [s for s in sheets if "structure" in s.lower() or "4." in s.lower()]
+            g_sheet = [s for s in sheets if "grandstand" in s.lower() or "5." in s.lower()]
+            f_sheet = [s for s in sheets if "floor" in s.lower() or "2." in s.lower()]
+            l_sheet = [s for s in sheets if "logis" in s.lower() or "1." in s.lower()]
             
             if s_sheet:
                 df = xl.parse(s_sheet[0])
@@ -123,8 +123,7 @@ def calculate_dynamic_grandstand_rate(seats_input):
         return 0.0, "0 seats allocation"
         
     if grandstand_db is not None and "Max_Seats" in grandstand_db.columns:
-        # Core alignment fix: cleans headers to guarantee column match regardless of whitespace
-        tot_col = [c for c in grandstand_db.columns if "total" in c.lower() or "labour" in c.lower() or "cost" in c.lower() or "total" in c.lower()]
+        tot_col = [c for c in grandstand_db.columns if "total" in c.lower() or "labour" in c.lower() or "cost" in c.lower()]
         target_col = tot_col[0] if tot_col else grandstand_db.columns[3]
         
         for idx, row in grandstand_db.iterrows():
@@ -144,25 +143,6 @@ def calculate_dynamic_grandstand_rate(seats_input):
             return round(total_lab / seats_input, 2), f"Backup Matrix Bracket {low}-{high}: ${total_lab:,.2f} / {seats_input} seats"
             
     return 16.50, f"Standard base per-seat matrix fallback rate calculation applied"
-
-# ==============================================================================
-# 1. ACCESS CONTROL TOWER (SECURITY GATE)
-# ==============================================================================
-def check_password():
-    if "password_correct" not in st.session_state:
-        st.session_state.password_correct = False
-    if not st.session_state.password_correct:
-        st.title("🔒 Louis Quoting Tool Access")
-        password = st.text_input("Access Code", type="password")
-        if st.button("Unlock Engine"):
-            if password == "NoFuss2026":
-                st.session_state.password_correct = True
-                st.rerun()
-        return False
-    return True
-
-if not check_password():
-    st.stop()
 
 # ==============================================================================
 # 3. PDF AUDIT ENGINE (STRUCTURAL TABLE TIERS WITH UNIVERSAL BYTE STREAM FIX)
@@ -327,7 +307,7 @@ labour_mode = l2.segmented_control("Labour Math", ["Separate", "Include in Hire"
 waiver_mode = l3.segmented_control("Damage Waiver", ["Charge", "Free"], default=st.session_state.saved_waiver_mode)
 
 # ==============================================================================
-# 7. UNIFIED CATEGORY ENTRY CORE HUB SECTION
+# 7. CATALOG HUB (UPDATED WORKFLOW AND CLEAN FIELD DEFINITIONS v57.6)
 # ==============================================================================
 st.divider()
 st.markdown("### ➕ CATALOG COMPONENT HUB")
@@ -438,7 +418,7 @@ elif selected_cat == "flooring":
             st.rerun()
 
 elif selected_cat == "grandstands":
-    # CORE FIX v57.6: Independent capacity target module - hides conflicting query frames
+    # CORE HUB CORRECTION v57.6: Independent capacity target module - hides conflicting query frames
     seats_input = st.number_input("Total Seat Capacity Requirements Count", min_value=1, value=None, placeholder="Type total quantity of seats...", key="gs_qty")
     
     if st.button("Add Grandstand Configuration Layout"):
@@ -505,6 +485,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
         new_disc = c4.number_input("Disc %", 0.0, 100.0, float(row["Discount"]), key=f"sd_{idx}", label_visibility="collapsed")
         if new_disc != row["Discount"]: st.session_state.df.at[idx, "Discount"] = new_disc; st.rerun()
             
+        # Clear fields parameters
         new_override = c4b.number_input("Override", 0.0, 5000.0, value=None if float(row.get("Override_Rate", 0.0)) == 0.0 else float(row.get("Override_Rate", 0.0)), placeholder="Override...", key=f"so_{idx}", label_visibility="collapsed")
         if (new_override or 0.0) != row.get("Override_Rate", 0.0): st.session_state.df.at[idx, "Override_Rate"] = new_override or 0.0; st.rerun()
         c5.markdown(f"<div style='text-align: right; font-size: 20px; font-weight: 700;'>${wk1_t:,.2f}</div>", unsafe_allow_html=True)
@@ -518,7 +499,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     auto_waiver_total = h_wk1_gear * 0.07 if waiver_mode == "Charge" else 0
 
     # ==============================================================================
-    # 9. MANUAL OVERRIDES GRID
+    # 9. MANUAL OVERRIDES GRID (BLANK FIELDS MATRIX)
     # ==============================================================================
     st.divider(); st.markdown("### 🛠️ MANUAL LOGISTICS OVERRIDES")
     h_adj0, h_adj1, h_adj2, h_adj3 = st.columns([0.4, 3.2, 2.2, 1.4])
