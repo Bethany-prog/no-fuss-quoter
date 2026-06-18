@@ -6,55 +6,87 @@ from fpdf import FPDF
 import re
 import json
 import os
-import io  # Streamlines memory buffers for native Excel and PDF exports
+import io
 from geopy.geocoders import Nominatim
 from geopy.distance import geodesic
 
 # ==============================================================================
-# 0. INITIAL GLOBAL CONFIG & LOCAL CLOUD VAULT ARCHITECTURE
+# 0. INITIAL CONFIG & LOCAL DATA PATH VAULTS
 # ==============================================================================
 st.set_page_config(page_title="Louis Master Quoter", layout="wide")
 
 VAULT_DIR = "cloud_vault"
-CATALOG_FILE = "master_catalog.csv"
+STRUCTURES_FILE = "master_structures.csv"
+GRANDSTANDS_FILE = "master_grandstands.csv"
 
 if not os.path.exists(VAULT_DIR):
     os.makedirs(VAULT_DIR)
 
-# SOURCE FACTORY DEPOT LOCK: 9 Battery Crt, Cranbourne West VIC 3977
 DEPOT_LAT = -38.1171
 DEPOT_LON = 145.2442
 
 # ==============================================================================
-# DATAFRAME PARSING ENGINE: Dynamic linkage matching your exact Excel columns
+# DATAFRAME LOADING ENGINE: Parses your exact Excel tab schemas dynamically
 # ==============================================================================
-@st.cache_data(ttl=15)  # Fast cache refresh to instantly scan manual csv uploads
-def load_external_catalog():
-    if os.path.exists(CATALOG_FILE):
+@st.cache_data(ttl=15)
+def load_structures_catalog():
+    if os.path.exists(STRUCTURES_FILE):
         try:
-            cat_df = pd.read_csv(CATALOG_FILE)
-            # Strip whitespace out of all column header keys to prevent matching drops
-            cat_df.columns = [c.strip() for c in cat_df.columns]
-            if "Configuration" in cat_df.columns:
-                cat_df["Configuration"] = cat_df["Configuration"].astype(str).str.strip()
-            return cat_df
+            df = pd.read_csv(STRUCTURES_FILE)
+            df.columns = [c.strip() for c in df.columns]
+            if "Configuration" in df.columns:
+                df["Configuration"] = df["Configuration"].astype(str).str.strip()
+            return df
         except Exception as e:
-            st.error(f"Catalog Parse Failure: {str(e)}")
-            return None
+            st.error(f"Error loading structures: {str(e)}")
     return None
 
-catalog_db = load_external_catalog()
+@st.cache_data(ttl=15)
+def load_grandstands_matrix():
+    if os.path.exists(GRANDSTANDS_FILE):
+        try:
+            df = pd.read_csv(GRANDSTANDS_FILE)
+            df.columns = [c.strip() for c in df.columns]
+            return df
+        except Exception as e:
+            st.error(f"Error loading grandstands: {str(e)}")
+    return None
 
-def get_item_property(config_name, column_target, fallback_val=0.0):
-    if catalog_db is not None:
-        matched_row = catalog_db[catalog_db["Configuration"] == str(config_name).strip()]
-        if not matched_row.empty:
-            val = matched_row.iloc[0].get(column_target, fallback_val)
+struct_db = load_structures_catalog()
+grandstand_db = load_grandstands_matrix()
+
+# ==============================================================================
+# 2. SEATING BRACKET ENGINE: Parses Grandstands.csv row by row dynamically
+# ==============================================================================
+def calculate_dynamic_grandstand_rate(seats_input):
+    if seats_input <= 0:
+        return 0.0, "0 seats"
+    
+    if grandstand_db is not None and "Max_Seats" in grandstand_db.columns:
+        for idx, row in grandstand_db.iterrows():
             try:
-                return float(val) if not pd.isna(val) else fallback_val
+                bracket_str = str(row["Max_Seats"]).strip()
+                # Parse format like '41-100' or '0-40'
+                if '-' in bracket_str:
+                    low, high = map(int, bracket_str.split('-'))
+                    if low <= seats_input <= high:
+                        total_labour = float(row["Total"])
+                        per_seat_cost = total_labour / seats_input
+                        return round(per_seat_cost, 2), f"Bracket {bracket_str}: ${total_labour:,.2f} / {seats_input} seats"
             except:
-                return val if not pd.isna(val) else fallback_val
-    return fallback_val
+                pass
+                
+    # Direct safety textbook standard backup in case CSV goes offline
+    fallback_matrix = [
+        (0, 40, 880.0), (41, 100, 1650.0), (101, 149, 2420.0),
+        (150, 199, 3300.0), (200, 249, 3850.0), (250, 299, 5280.0),
+        (300, 349, 5940.0), (350, 400, 6600.0)
+    ]
+    for low, high, total_lab in fallback_matrix:
+        if low <= seats_input <= high:
+            return round(total_lab / seats_input, 2), f"Fallback Bracket {low}-{high}: ${total_lab:,.2f} / {seats_input} seats"
+            
+    return 16.50, f"Standard Base Matrix Fallback Allocation applied"
 
 # ==============================================================================
 # 1. ACCESS CONTROL TOWER (SECURITY GATE)
@@ -76,7 +108,7 @@ if not check_password():
     st.stop()
 
 # ==============================================================================
-# 3. PDF AUDIT ENGINE (STRUCTURAL TABLE TIERS WITH UNIVERSAL BYTE STREAM FIX)
+# 3. PDF AUDIT ENGINE 
 # ==============================================================================
 def clean_text(txt):
     if not txt: return ""
@@ -97,13 +129,12 @@ def create_calculation_pdf(name, subtotal, labour, waiver, cartage, grand, weeks
     pdf.cell(0, 7, f"PERIOD: {start.strftime('%Y-%m-%d')} to {end.strftime('%Y-%m-%d')} ({weeks} Week(s))", ln=True, align="C")
     pdf.ln(8)
 
-    # Section 1: Structured Hire Grid Schedule
+    # Section 1: Schedule Grid
     pdf.set_fill_color(26, 29, 45); pdf.set_text_color(255, 255, 255); pdf.set_font("Arial", "B", 11)
     pdf.cell(0, 10, " 1. HIRE CALCULATIONS SCHEDULE", 0, 1, "L", True)
     
     pdf.set_fill_color(240, 242, 245); pdf.set_text_color(50, 50, 50); pdf.set_font("Arial", "B", 9)
     col_w = [85, 20, 28, 22, 35]
-    
     pdf.cell(col_w[0], 8, " Item Description", 1, 0, "L", True)
     pdf.cell(col_w[1], 8, "Qty", 1, 0, "C", True)
     pdf.cell(col_w[2], 8, "Unit Rate Used", 1, 0, "R", True)
@@ -111,34 +142,17 @@ def create_calculation_pdf(name, subtotal, labour, waiver, cartage, grand, weeks
     pdf.cell(col_w[4], 8, "Weekly Total", 1, 1, "R", True)
     
     pdf.set_text_color(0, 0, 0); pdf.set_font("Arial", "", 9)
-    
     for item in items_list:
         dm = (1 - (item.get('Discount', 0.0)/100))
         display_unit_rate = item.get('Override_Rate', 0.0) if item.get('Override_Rate', 0.0) > 0 else item['Unit Rate']
         w1_total = (item['Qty'] * display_unit_rate) * dm
-        prod_label = item['Product']
-        if item.get('Override_Rate', 0.0) > 0:
-            prod_label += f" [Book Price: ${item['Unit Rate']:,.2f}]"
-        if 'Anchoring' in item and item['Anchoring']:
-            prod_label += f" ({item['Anchoring']})"
-            
-        pdf.cell(col_w[0], 8, clean_text(f" {prod_label} (Wk 1 Base)"), 1, 0, "L")
+        pdf.cell(col_w[0], 8, clean_text(f" {item['Product']} (Wk 1 Base)"), 1, 0, "L")
         pdf.cell(col_w[1], 8, f"{item['Qty']:,.0f}", 1, 0, "C")
         pdf.cell(col_w[2], 8, f"${display_unit_rate:,.2f}", 1, 0, "R")
         pdf.cell(col_w[3], 8, f"{item.get('Discount', 0.0):.1f}%", 1, 0, "C")
         pdf.cell(col_w[4], 8, f"${w1_total:,.2f}", 1, 1, "R")
-        
-        if weeks > 1:
-            r_rate = display_unit_rate * 0.5 if item['Is_Marquee'] else display_unit_rate
-            r_total = (item['Qty'] * r_rate * (weeks-1)) * dm
-            
-            pdf.cell(col_w[0], 8, clean_text(f"   └ Recurring Hire (x{weeks-1} wks)"), 1, 0, "L")
-            pdf.cell(col_w[1], 8, f"{item['Qty']:,.0f}", 1, 0, "C")
-            pdf.cell(col_w[2], 8, f"${r_rate:,.2f}", 1, 0, "R")
-            pdf.cell(col_w[3], 8, f"{item.get('Discount', 0.0):.1f}%", 1, 0, "C")
-            pdf.cell(col_w[4], 8, f"${r_total:,.2f}", 1, 1, "R")
 
-    # Section 2: Pure Calculation Sections
+    # Section 2: Calculation Sections
     pdf.ln(5)
     categories = ["LABOUR", "LOGISTICS", "DAMAGE WAIVER"]
     for cat in categories:
@@ -161,7 +175,6 @@ def create_calculation_pdf(name, subtotal, labour, waiver, cartage, grand, weeks
     except:
         return bytes(pdf.output())
 
-# Static fallback flooring options dictionary blocks
 FLOORING_CATALOG = {
     "I-Trac®": {"rate": 23.40, "block": 46.80, "lab_fix": 4.65, "kg": 15.0},
     "Supa-Trac®": {"rate": 11.55, "block": 25.00, "lab_fix": 4.65, "kg": 4.5, "sheet_sqm": 3.13},
@@ -216,30 +229,23 @@ def load_project_from_vault(label_name):
     except Exception as e: st.error(f"Vault Load Failure: {str(e)}")
 
 # ==============================================================================
-# 6. VISUAL CSS LOOK & FEEL (FRONT-OF-HOUSE)
+# MAIN VIEW WORKSPACE MOUNT
 # ==============================================================================
-st.markdown("""<style>
-    .main { background-color: #F4F7F9 !important; }
-    .stAppDeployButton { display:none !important; }
-    h1 { color: #1A1D2D !important; font-size: 52px !important; font-weight: 900 !important; }
-    h3 { color: #FFFFFF !important; border-left: 10px solid #00E676; padding: 40px; background-color: #1A1D2D; border-radius: 0 12px 12px 0; font-size: 24px !important; margin-bottom: 15px; }
-    div.stMetric { background-color: #FFFFFF !important; padding: 15px !important; border-radius: 12px !important; border: 2px solid #3D5AFE !important; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
-    div[data-testid="stMetricValue"] { color: #3D5AFE !important; font-size: 30px !important; font-weight: 800 !important; }
-    .item-text { font-size: 20px !important; font-weight: 700 !important; color: #1A1D2D; margin-top: 10px; }
-    .sub-math-hint { font-size: 13px !important; color: #5C6BC0 !important; font-style: italic; font-weight: 600; display: block; margin-top: -4px; margin-bottom: 8px; }
-    .gt-banner { background: #1A1D2D; color: #00E676; padding: 40px; border-radius: 20px; text-align: right; font-size: 44px !important; font-weight: 900; margin-top: 30px; border: 6px solid #00E676; box-shadow: 0 10px 20px rgba(0,0,0,0.2); }
-    .summary-hdr { font-weight: 800 !important; color: #1A1D2D !important; font-size: 15px !important; text-transform: uppercase !important; border-bottom: 2px solid #1A1D2D; padding-bottom: 5px; }
-</style>""", unsafe_allow_html=True)
-
-# ==============================================================================
-# 7. MAIN INTERFACE WORKSPACE MOUNTING MATRIX
-# ==============================================================================
-st.title("Louis Master Quoter")
-
 vault_jobs = pull_vault_archive_list()
+st.sidebar.title("📁 PROJECT ARCHIVE")
+if st.sidebar.button("➕ START NEW", use_container_width=True):
+    st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Total", "Min_Lab", "Raw_Lab", "KG", "Is_Marquee", "Discount", "Lab_Math", "Lab_Per_Unit", "Base_Hire", "Anchoring", "Override_Rate"])
+    st.session_state.km, st.session_state.truck_override, st.session_state.proj = 0.0, 0, "New Project"
+    st.session_state.active_filename, st.session_state.rename_mode, st.session_state.status = "", False, "Quoted"
+    st.session_state.site_address_str, st.session_state.overrides_dict = "", {}
+    st.session_state.reset_key_seed += 1
+    st.rerun()
 
-# CORE WORKSPACE CONTROLS
-st.markdown(f"### 📍 Active Workspace: {st.session_state.proj}")
+if vault_jobs:
+    load_choice = st.sidebar.selectbox("Stored Projects", ["-- Choose Project --"] + vault_jobs)
+    if st.sidebar.button("📂 LOAD PROJECT") and load_choice != "-- Choose Project --":
+        load_project_from_vault(load_choice)
+
 st.session_state.status = st.selectbox("Stage", STAGES, index=STAGES.index(st.session_state.status) if st.session_state.status in STAGES else 0)
 st.markdown(f"<div style='height: 14px; background-color: {STAGE_COLORS[st.session_state.status]}; border-radius: 6px; margin-bottom: 20px;'></div>", unsafe_allow_html=True)
 
@@ -249,11 +255,11 @@ st.session_state.start_date_val = start_d
 end_d = c2.date_input("End Date", value=start_d, key=f"ed_{st.session_state.reset_key_seed}")
 weeks = math.ceil(((end_d - start_d).days) / 7) or 1
 
-input_addr = c3.text_input("🏠 Delivery Site Address", value=st.session_state.site_address_str, placeholder="Type full address or reserve suburb name...")
+input_addr = c3.text_input("🏠 Delivery Site Address", value=st.session_state.site_address_str)
 if input_addr.strip() != st.session_state.site_address_str:
     st.session_state.site_address_str = input_addr.strip()
     try:
-        geolocator = Nominatim(user_agent="louis_quoter_v55", timeout=5)
+        geolocator = Nominatim(user_agent="louis_quoter_v56", timeout=5)
         loc_data = geolocator.geocode(input_addr.strip() + ", Victoria, Australia")
         if loc_data:
             st.session_state.km = round(geodesic((DEPOT_LAT, DEPOT_LON), (loc_data.latitude, loc_data.longitude)).kilometers * 1.15, 1)
@@ -261,14 +267,11 @@ if input_addr.strip() != st.session_state.site_address_str:
             st.rerun()
     except: pass
 
-st.markdown("**🚛 Active Routing Distance**")
 c_km1, c_km2 = st.columns([1, 4])
 new_manual_km = c_km1.number_input("One-Way KM", min_value=0.0, value=float(st.session_state.km))
-if new_manual_km != float(st.session_state.km):
-    st.session_state.km = new_manual_km
+if new_manual_km != float(st.session_state.km): st.session_state.km = new_manual_km
 c_km2.info(f"Routing calculations locked at **{st.session_state.km} One-Way KM** from Cranbourne West depot.")
 
-# Multi-Segment Toggle Rules
 l1, l2, l3 = st.columns(3)
 cartage_mode = l1.segmented_control("Cartage Math", ["Charge", "Free"], default=st.session_state.saved_cartage_mode)
 labour_mode = l2.segmented_control("Labour Math", ["Separate", "Include in Hire", "Free"], default=st.session_state.saved_labour_mode)
@@ -276,50 +279,71 @@ waiver_mode = l3.segmented_control("Damage Waiver", ["Charge", "Free"], default=
 
 st.divider(); col1, col2 = st.columns(2)
 with col1:
-    st.markdown("### ⚡ Dynamic Configuration Catalog")
-    if catalog_db is not None:
-        # Pull configurations straight out of your spreadsheet rows dynamically
-        options_list = catalog_db["Configuration"].tolist()
-        selected_item = st.selectbox("Select Marquee Setup Variant (CSV Powered)", options_list)
-        qty_input = st.number_input("Quantity Box", min_value=1, value=1)
-        anchoring_type = st.segmented_control("Anchoring Method", ["Pegged", "Weighted"], default="Pegged")
+    st.markdown("### ⚡ SEARCH CATALOG ARCHIVE")
+    if struct_db is not None:
+        # UPGRADE v56.0: Search-As-You-Type Input Module
+        search_query = st.text_input("🔍 Type name or size identifier to filter catalog (e.g. 3x3, 10m, Grandstand)", placeholder="Type size here...")
         
-        if st.button("Add Item Configuration") and selected_item:
-            # FIX v55.6: Map columns to your exact spreadsheet properties
-            b_hire = get_item_property(selected_item, "Hire Unit Rate", fallback_val=0.0)
-            if b_hire <= 0:
-                b_hire = get_item_property(selected_item, "Total Hire Rate", fallback_val=198.45)
-                
-            raw_labour_pool = get_item_property(selected_item, "Labour Total ", fallback_val=350.0)
-            total_w = get_item_property(selected_item, "Total Weight (kg)", fallback_val=480.0)
+        filtered_df = struct_db.copy()
+        if search_query:
+            filtered_df = filtered_df[filtered_df["Configuration"].str.contains(search_query, case=False, na=False)]
             
-            new_df = pd.DataFrame([{
-                "Qty": qty_input, "Product": selected_item, "Unit Rate": b_hire, "Min_Lab": 350,
-                "Raw_Lab": raw_labour_pool, "Lab_Math": f"{selected_item}: Base Matrix allocation applied",
-                "KG": total_w * qty_input, "Is_Marquee": True, "Discount": 0.0, "Lab_Per_Unit": raw_labour_pool,
-                "Base_Hire": b_hire, "Anchoring": anchoring_type, "Override_Rate": 0.0
-            }])
-            st.session_state.df = pd.concat([st.session_state.df, new_df], ignore_index=True)
+        if not filtered_df.empty:
+            selected_item = st.selectbox("Matching Inventory Rows:", filtered_df["Configuration"].tolist())
+            qty_input = st.number_input("Quantity Target Count", min_value=1, value=1)
+            anchoring_type = st.segmented_control("Anchoring Style", ["Pegged", "Weighted"], default="Pegged")
             
-            # Auto-append link weights blocks natively matching your columns layout properties
-            if anchoring_type == "Weighted":
-                num_weights = get_item_property(selected_item, "Total Number of weights ", fallback_val=16.0)
-                w_size = get_item_property(selected_item, "Weight Size (KG) ", fallback_val=30.0)
-                w_cost = get_item_property(selected_item, "Cost per weight ", fallback_val=6.60)
-                w_lab = get_item_property(selected_item, "Labour Per Weight ", fallback_val=1.65)
+            if st.button("Add Selected Configuration") and selected_item:
+                b_type = str(filtered_df[filtered_df["Configuration"] == selected_item].iloc[0].get("Type", "")).lower()
                 
-                calculated_weights = int(num_weights * qty_input)
+                # UPGRADE v56.0: Dynamic conditional grandstand processing loop block
+                if "grandstand" in selected_item.lower() or "grandstand" in b_type:
+                    per_seat_labour, math_desc_str = calculate_dynamic_grandstand_rate(qty_input)
+                    base_seat_hire = 15.00 if weeks < 4 else 7.50
+                    combined_unit_rate = base_seat_hire + per_seat_labour
+                    w_factor = 25.0
+                    
+                    new_df = pd.DataFrame([{
+                        "Qty": qty_input, "Product": selected_item, "Unit Rate": combined_unit_rate, "Min_Lab": 0,
+                        "Raw_Lab": 0.0, "Lab_Math": math_desc_str, "KG": qty_input * w_factor, "Is_Marquee": False,
+                        "Discount": 0.0, "Lab_Per_Unit": per_seat_labour, "Base_Hire": base_seat_hire, "Anchoring": "", "Override_Rate": 0.0
+                    }])
+                else:
+                    # Marquee component matching loops standard pathways
+                    b_hire = get_item_property(selected_item, "Hire Unit Rate", fallback_val=0.0)
+                    if b_hire <= 0: b_hire = get_item_property(selected_item, "Total Hire Rate", fallback_val=198.45)
+                    raw_labour_pool = get_item_property(selected_item, "Labour Total ", fallback_val=350.0)
+                    total_w = get_item_property(selected_item, "Total Weight (kg)", fallback_val=480.0)
+                    
+                    new_df = pd.DataFrame([{
+                        "Qty": qty_input, "Product": selected_item, "Unit Rate": b_hire, "Min_Lab": 350,
+                        "Raw_Lab": raw_labour_pool, "Lab_Math": f"{selected_item}: Base Matrix allocation applied",
+                        "KG": total_w * qty_input, "Is_Marquee": True, "Discount": 0.0, "Lab_Per_Unit": raw_labour_pool,
+                        "Base_Hire": b_hire, "Anchoring": anchoring_type, "Override_Rate": 0.0
+                    }])
+                    
+                st.session_state.df = pd.concat([st.session_state.df, new_df], ignore_index=True)
                 
-                weight_item_df = pd.DataFrame([{
-                    "Qty": calculated_weights, "Product": f"{int(w_size)}kg Weights", "Unit Rate": w_cost, "Min_Lab": 0,
-                    "Raw_Lab": calculated_weights * w_lab, "Lab_Math": f"{int(w_size)}kg Weights: {calculated_weights} units x ${w_lab:.2f}",
-                    "KG": calculated_weights * w_size, "Is_Marquee": False, "Discount": 0.0, "Lab_Per_Unit": w_lab,
-                    "Base_Hire": w_cost, "Anchoring": "", "Override_Rate": 0.0
-                }])
-                st.session_state.df = pd.concat([st.session_state.df, weight_item_df], ignore_index=True)
-            st.rerun()
+                # Auto-append link blocks anchoring weights matrices
+                if "grandstand" not in selected_item.lower() and anchoring_type == "Weighted":
+                    num_weights = get_item_property(selected_item, "Total Number of weights ", fallback_val=16.0)
+                    w_size = get_item_property(selected_item, "Weight Size (KG) ", fallback_val=30.0)
+                    w_cost = get_item_property(selected_item, "Cost per weight ", fallback_val=6.60)
+                    w_lab = get_item_property(selected_item, "Labour Per Weight ", fallback_val=1.65)
+                    
+                    calculated_weights = int(num_weights * qty_input)
+                    weight_item_df = pd.DataFrame([{
+                        "Qty": calculated_weights, "Product": f"{int(w_size)}kg Weights", "Unit Rate": w_cost, "Min_Lab": 0,
+                        "Raw_Lab": calculated_weights * w_lab, "Lab_Math": f"{int(w_size)}kg Weights: {calculated_weights} units x ${w_lab:.2f}",
+                        "KG": calculated_weights * w_size, "Is_Marquee": False, "Discount": 0.0, "Lab_Per_Unit": w_lab,
+                        "Base_Hire": w_cost, "Anchoring": "", "Override_Rate": 0.0
+                    }])
+                    st.session_state.df = pd.concat([st.session_state.df, weight_item_df], ignore_index=True)
+                st.rerun()
+        else:
+            st.info("No matching configuration sizes found in sheet rows.")
     else:
-        st.info("⚠️ 'master_catalog.csv' not found. Please upload your test file to GitHub to unlock selection dropdown cards.")
+        st.info("Please commit 'master_structures.csv' to run the text search catalog tool engine.")
 
 with col2:
     st.markdown("### 🪵 Core Flooring Components")
@@ -337,7 +361,7 @@ with col2:
         st.rerun()
 
 # ==============================================================================
-# 8. LIVE DATA SCHEDULE BUILDER ZONE
+# QUOTE SUMMARY GRID VIEWER GENERATORS
 # ==============================================================================
 if st.session_state.df is not None and not st.session_state.df.empty:
     st.divider(); st.subheader("📝 QUOTE SUMMARY")
@@ -358,8 +382,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
         qty, brate, dm = row["Qty"], active_base, (1 - (row["Discount"]/100))
         total_kg += row["KG"]
         h_wk1_gear += (qty * active_hire_base)
-        if row["Product"] == "I-Trac®": has_itrac = True
-            
+        
         wk1_t = (qty * brate + row["Raw_Lab"]) * dm if labour_mode == "Include in Hire" else (qty * brate) * dm
         h_tot_c += wk1_t
         
@@ -375,7 +398,6 @@ if st.session_state.df is not None and not st.session_state.df.empty:
         if new_qty != float(qty):
             st.session_state.df.at[idx, "Qty"] = new_qty
             if row["Is_Marquee"]:
-                # Synchronize and adjust connected linked configuration properties dynamically
                 for w_idx, w_row in st.session_state.df.iterrows():
                     if "Weights" in w_row["Product"]:
                         num_weights_factor = get_item_property(row["Product"], "Total Number of weights ", fallback_val=16.0)
@@ -390,7 +412,6 @@ if st.session_state.df is not None and not st.session_state.df.empty:
         if new_override != row.get("Override_Rate", 0.0): st.session_state.df.at[idx, "Override_Rate"] = new_override; st.rerun()
         c5.markdown(f"<div style='text-align: right; font-size: 20px; font-weight: 700;'>${wk1_t:,.2f}</div>", unsafe_allow_html=True)
 
-    # Logistics metrics logic maps
     min_trucks = math.ceil(total_kg / 6000) or 1
     saved_trk_count = st.session_state.overrides_dict.get("logistics_truck_allocation_count_scalar", float(min_trucks))
     trks = int(saved_trk_count)
@@ -400,7 +421,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     auto_waiver_total = h_wk1_gear * 0.07 if waiver_mode == "Charge" else 0
 
     # ==============================================================================
-    # 9. MANUAL OVERRIDES GRID
+    # 9. MANUAL OVERRIDES WORKSPACE GRID
     # ==============================================================================
     st.divider(); st.markdown("### 🛠️ MANUAL LOGISTICS OVERRIDES")
     h_adj0, h_adj1, h_adj2, h_adj3 = st.columns([0.4, 3.2, 2.2, 1.4])
@@ -413,10 +434,10 @@ if st.session_state.df is not None and not st.session_state.df.empty:
 
     if labour_mode == "Separate":
         for idx, row in st.session_state.df.iterrows():
-            if row.get('Raw_Lab', 0.0) > 0.0:
+            if row.get('Raw_Lab', 0.0) > 0.0 or row.get('Lab_Per_Unit', 0.0) > 0.0:
                 p_label = row['Product']
                 lbl_key = f"lab_ovr_{p_label}_{idx}"
-                auto_val = float(row['Raw_Lab'])
+                auto_val = float(row['Raw_Lab']) if row['Raw_Lab'] > 0 else float(row['Qty'] * row['Lab_Per_Unit'])
                 math_hint_str = row['Lab_Math']
                 
                 saved_override_val = st.session_state.overrides_dict.get(lbl_key, -1.0)
@@ -480,11 +501,10 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     grand_total_calc = h_tot_c + final_labour_pool_sum + final_waiver_sum + final_cartage_sum
     st.markdown(f"<div class='gt-banner'>GRAND TOTAL (EX GST): ${grand_total_calc:,.2f}</div>", unsafe_allow_html=True)
     
-    # Document calculation text logs lines mappings
+    # Compile text logs strings fields mapping directly to black headers PDF layout components
     structural_math_dict = {"LABOUR": [], "LOGISTICS": [], "DAMAGE WAIVER": []}
     for idx, row in st.session_state.df.iterrows():
-        if row.get('Raw_Lab', 0.0) > 0.0:
-            structural_math_dict["LABOUR"].append(f"{row['Product']} = ${row['Raw_Lab']:,.2f}")
+        structural_math_dict["LABOUR"].append(f"{row['Product']} = ${row['Raw_Lab'] if row['Raw_Lab'] > 0 else row['Qty']*row['Lab_Per_Unit']:,.2f}")
     structural_math_dict["LABOUR"].append(f"Total Applied = ${final_labour_pool_sum:,.2f}")
     structural_math_dict["LOGISTICS"].append(f"{trks} Trucks x {st.session_state.km}km x 4 x $3.50 = ${final_cartage_sum:,.2f}")
     structural_math_dict["DAMAGE WAIVER"].append(f"${h_wk1_gear:,.2f} value * 7% = ${final_waiver_sum:,.2f}")
@@ -506,18 +526,18 @@ if st.session_state.df is not None and not st.session_state.df.empty:
                 "overrides_dict": st.session_state.overrides_dict
             }
             with open(f"{VAULT_DIR}/{target_label}.json", "w") as f: json.dump(payload, f)
-            st.success(f"🎉 Updated quote saved successfully!"); st.rerun()
+            st.success(f"🎉 Updated project file synchronization complete!"); st.rerun()
         except Exception as e: st.error(f"Save error: {str(e)}")
             
     cleaned_pdf_items = st.session_state.df.to_dict('records')
     pdf_b = create_calculation_pdf(st.session_state.proj, h_tot_c, final_labour_pool_sum, final_waiver_sum, final_cartage_sum, grand_total_calc, weeks, start_d, end_d, cleaned_pdf_items, structural_math_dict, st.session_state.status)
     action_col_2.download_button("📥 DOWNLOAD DETAILED AUDIT PDF", pdf_b, file_name=f"{st.session_state.proj}_Analysis.pdf", mime="application/pdf", use_container_width=True)
 
-    excel_df = catalog_db.copy() if catalog_db is not None else pd.DataFrame([{"System Status": "Catalog Empty"}])
+    excel_df = struct_db.copy() if struct_db is not None else pd.DataFrame([{"System Status": "Catalog Empty"}])
     try:
         excel_buffer = io.BytesIO()
         with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
-            excel_df.to_excel(writer, index=False, sheet_name='Audit_Database_Matrix')
+            excel_df.to_excel(writer, index=False, sheet_name='Structures_Matrix')
         excel_data_bytes, ext, mt = excel_buffer.getvalue(), "xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     except:
         excel_data_bytes, ext, mt = excel_df.to_csv(index=False).encode('utf-8'), "csv", "text/csv"
