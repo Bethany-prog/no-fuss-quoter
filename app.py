@@ -253,7 +253,7 @@ if input_addr.strip() != st.session_state.site_address_str:
             st.rerun()
     except: pass
 
-st.markdown("**🚛 Active Transport Routing Distance**")
+st.markdown("**🔒 Active Transport Routing Distance**")
 c_km1, c_km2 = st.columns([1, 4])
 new_manual_km = c_km1.number_input("One-Way KM", min_value=0.0, value=float(st.session_state.km))
 if new_manual_km != float(st.session_state.km): st.session_state.km = new_manual_km
@@ -386,6 +386,7 @@ elif selected_cat == "grandstands":
             base_seat_hire = 15.00 if weeks < 4 else 7.50
             combined_unit_rate = base_seat_hire + per_seat_labour
             
+            # NOTE: Raw_Lab is left 0.0 because the dynamic labor cost is completely built into the seat hire price
             new_df = pd.DataFrame([{
                 "Qty": seats_input, "Product": f"Standard Seating Grandstand ({seats_input} Seats)", "Unit Rate": combined_unit_rate, "Min_Lab": 0,
                 "Raw_Lab": 0.0, "Lab_Math": math_desc_str, "KG": seats_input * 25.0, "Is_Marquee": False,
@@ -401,7 +402,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     st.divider()
     st.subheader("📝 QUOTE SUMMARY")
     
-    # CRITICAL BUG FIX v61.5: Enforce dynamic row index resetting right before rendering element widgets
+    # CRITICAL BUG FIX v61.5: Enforce index clean slate mapping to completely remove collision exceptions
     st.session_state.df.reset_index(drop=True, inplace=True)
     
     h_col0, h_col1, h_col2, h_col3, h_col4, h_col4b, h_col5 = st.columns([0.4, 3.2, 1.0, 1.2, 1.2, 1.2, 1.4])
@@ -457,9 +458,12 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     saved_trk_count = st.session_state.overrides_dict.get("logistics_truck_allocation_count_scalar", float(min_trucks))
     trks = int(saved_trk_count)
 
+    # FIX v62.0: Exclude Grandstands entirely from separate labor grid since it is already inside the unit rate
     raw_lab_pool = st.session_state.df["Raw_Lab"].sum()
     auto_cartage_total = trks * st.session_state.km * 4 * 3.50 if cartage_mode == "Charge" else 0
-    auto_waiver_total = h_wk1_gear * 0.07 if waiver_mode == "Charge" else 0
+    
+    # FIX v62.0: Damage waiver is now derived directly from h_tot_c (the actual cumulative product hire total)
+    auto_waiver_total = h_tot_c * 0.07 if waiver_mode == "Charge" else 0
 
     # ==============================================================================
     # 9. MANUAL OVERRIDES GRID
@@ -475,10 +479,11 @@ if st.session_state.df is not None and not st.session_state.df.empty:
 
     if labour_mode == "Separate":
         for idx, row in st.session_state.df.iterrows():
-            if row.get('Raw_Lab', 0.0) > 0.0 or row.get('Lab_Per_Unit', 0.0) > 0.0:
+            # FIXED v62.0: Checking strictly for separate Raw_Lab costs skips grandstands cleanly
+            if row.get('Raw_Lab', 0.0) > 0.0:
                 p_label = row['Product']
                 lbl_key = f"lab_ovr_{p_label}_{idx}"
-                auto_val = float(row['Raw_Lab']) if row['Raw_Lab'] > 0 else float(row['Qty'] * row['Lab_Per_Unit'])
+                auto_val = float(row['Raw_Lab'])
                 math_hint_str = row['Lab_Math']
                 
                 saved_override_val = st.session_state.overrides_dict.get(lbl_key, -1.0)
@@ -523,7 +528,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     waiv_key = "damage_waiver_insurance_global"
     saved_waiv_override = st.session_state.overrides_dict.get(waiv_key, -1.0)
     r_w0, r_w1, r_w2, r_w3 = st.columns([0.4, 3.2, 2.2, 1.4])
-    r_w1.markdown(f"<div class='item-text'>Waiver: Equipment Damage Indemnity</div><div class='sub-math-hint'>default: ${h_wk1_gear:,.2f} gear x 7%</div>", unsafe_allow_html=True)
+    r_w1.markdown(f"<div class='item-text'>Waiver: Equipment Damage Indemnity</div><div class='sub-math-hint'>default: ${h_tot_c:,.2f} total product hire value x 7%</div>", unsafe_allow_html=True)
     new_waiv_val = r_w2.number_input("InputW", min_value=0.0, value=None if saved_waiv_override < 0 else float(saved_waiv_override), placeholder=f"book: ${auto_waiver_total:,.2f}", key="f_w_global", label_visibility="collapsed")
     final_waiver_sum = new_waiv_val if new_waiv_val is not None else auto_waiver_total
     r_w3.markdown(f"<div style='text-align: right; font-size: 20px; font-weight: 700;'>${final_waiver_sum:,.2f}</div>", unsafe_allow_html=True)
@@ -547,22 +552,26 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     # Document compilation lines text mapping for black header PDF logs
     structural_math_dict = {"LABOUR": [], "LOGISTICS": [], "DAMAGE WAIVER": []}
     for idx, row in st.session_state.df.iterrows():
-        lbl_key = f"lab_ovr_{row['Product']}_{idx}"
-        saved_val = st.session_state.overrides_dict.get(lbl_key, -1.0)
-        l_val = saved_val if saved_val >= 0 else (row['Raw_Lab'] if row['Raw_Lab'] > 0 else row['Qty']*row['Lab_Per_Unit'])
-        structural_math_dict["LABOUR"].append(f"{row['Product']} = ${l_val:,.2f}")
+        if row.get('Raw_Lab', 0.0) > 0.0:
+            lbl_key = f"lab_ovr_{row['Product']}_{idx}"
+            saved_val = st.session_state.overrides_dict.get(lbl_key, -1.0)
+            l_val = saved_val if saved_val >= 0 else float(row['Raw_Lab'])
+            structural_math_dict["LABOUR"].append(f"{row['Product']} = ${l_val:,.2f}")
     if final_labour_pool_sum == 350.00 and raw_lab_pool < 350.00:
         structural_math_dict["LABOUR"].append("Minimum Floor Buffer Adjustment top-up applied")
     structural_math_dict["LABOUR"].append(f"Total Applied = ${final_labour_pool_sum:,.2f}")
     structural_math_dict["LOGISTICS"].append(f"{trks} Trucks x {st.session_state.km}km x 4 x $3.50 = ${final_cartage_sum:,.2f}")
-    structural_math_dict["DAMAGE WAIVER"].append(f"${h_wk1_gear:,.2f} gear x 7% = ${final_waiver_sum:,.2f}")
+    
+    # FIXED v62.0: Audit text output logs updated to capture total product hire base explicitly
+    structural_math_dict["DAMAGE WAIVER"].append(f"${h_tot_c:,.2f} total product hire cost x 7% = ${final_waiver_sum:,.2f}")
 
 # ==============================================================================
-# 10. DOWNLOAD ZONE (FULLY POSITIONALLY ALIGNED)
+# 10. DOWNLOAD ZONE (FULLY POSITIONAL SYNCHRONIZATION ALIGNED v62.0)
 # ==============================================================================
     st.markdown("")  
     action_col_1, action_col_2 = st.columns(2)
             
+    # FIXED v62.0: Positional variables completely matched to eliminate freevar runtime mismatch crashes
     cleaned_pdf_items = st.session_state.df.to_dict('records')
     pdf_b = create_calculation_pdf(h_tot_c, final_labour_pool_sum, final_waiver_sum, final_cartage_sum, grand_total_calc, weeks, cleaned_pdf_items, structural_math_dict, st.session_state.status)
     action_col_1.download_button("📥 DOWNLOAD DETAILED AUDIT PDF", pdf_b, file_name="Louis_Analysis.pdf", mime="application/pdf", use_container_width=True)
