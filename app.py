@@ -1,7 +1,7 @@
 import streamlit as st
 import math
 import pandas as pd
-from datetime import date, datetime, timedelta  # 🔍 FIXED: Restored missing date imports
+from datetime import date, datetime, timedelta
 from fpdf import FPDF
 import re
 import json
@@ -217,7 +217,7 @@ STAGE_COLORS = {"Quoted": "#FF9100", "Accepted": "#00E676", "Paid": "#00B8D4", "
 # 5. STREAMLIT INTERNAL STORAGE PERSISTENCE
 # ==============================================================================
 if 'df' not in st.session_state: 
-    st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Total", "Min_Lab", "Raw_Lab", "KG", "Is_Marquee", "Discount", "Lab_Math", "Lab_Per_Unit", "Base_Hire", "Anchoring", "Override_Rate"])
+    st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Total", "Min_Lab", "Raw_Lab", "KG", "Is_Marquee", "Discount", "Lab_Math", "Lab_Per_Unit", "Base_Hire", "Anchoring", "Override_Rate", "Is_Flooring", "Base_1Wk_Rate", "Base_Block_Rate"])
 if 'status' not in st.session_state: st.session_state.status = "Quoted"
 if 'km' not in st.session_state: st.session_state.km = 0.0
 if 'truck_override' not in st.session_state: st.session_state.truck_override = 0
@@ -299,7 +299,8 @@ if selected_cat == "marquees":
                         "Qty": qty_input, "Product": target_item, "Unit Rate": b_hire, "Min_Lab": 350,
                         "Raw_Lab": raw_labour_pool * qty_input, "Lab_Math": f"{target_item}: Layout installation setup matrix",
                         "KG": total_w * qty_input, "Is_Marquee": True, "Discount": 0.0, "Lab_Per_Unit": raw_labour_pool,
-                        "Base_Hire": b_hire, "Anchoring": anch_type, "Override_Rate": 0.0
+                        "Base_Hire": b_hire, "Anchoring": anch_type, "Override_Rate": 0.0, "Is_Flooring": False,
+                        "Base_1Wk_Rate": b_hire, "Base_Block_Rate": b_hire
                     }])
                     st.session_state.df = pd.concat([st.session_state.df, new_df], ignore_index=True)
                     
@@ -314,7 +315,8 @@ if selected_cat == "marquees":
                             "Qty": calc_w, "Product": f"{int(w_size)}kg Weights", "Unit Rate": w_cost, "Min_Lab": 0,
                             "Raw_Lab": calc_w * w_lab, "Lab_Math": f"Ballast weights stacking: {calc_w} units x ${w_lab:.2f}",
                             "KG": calc_w * w_size, "Is_Marquee": False, "Discount": 0.0, "Lab_Per_Unit": w_lab,
-                            "Base_Hire": w_cost, "Anchoring": "", "Override_Rate": 0.0
+                            "Base_Hire": w_cost, "Anchoring": "", "Override_Rate": 0.0, "Is_Flooring": False,
+                            "Base_1Wk_Rate": w_cost, "Base_Block_Rate": w_cost
                         }])
                         st.session_state.df = pd.concat([st.session_state.df, weight_df], ignore_index=True)
                     st.rerun()
@@ -354,8 +356,6 @@ elif selected_cat == "flooring":
             else:
                 fd = FLOORING_CATALOG_FALLBACK.get(target_item, {"rate": 11.55, "block": 25.00, "lab_fix": 4.65, "kg": 4.5})
                 f_rate, f_block, f_lab, f_kg = fd["rate"], fd.get("block", 0), fd["lab_fix"], fd["kg"]
-                
-            base_h = f_block if (weeks >= 4 and f_block > 0) else f_rate
             
             final_item_label_name = target_item
             final_billing_qty = cov_input
@@ -369,9 +369,10 @@ elif selected_cat == "flooring":
                 lab_desc = f"{target_item}: {cov_input:,.0f} SQM area x ${f_lab:.2f}"
                 
             new_f_df = pd.DataFrame([{
-                "Qty": final_billing_qty, "Product": final_item_label_name, "Unit Rate": base_h, "Min_Lab": 0, "Raw_Lab": final_billing_qty * f_lab,
+                "Qty": final_billing_qty, "Product": final_item_label_name, "Unit Rate": f_rate, "Min_Lab": 0, "Raw_Lab": final_billing_qty * f_lab,
                 "Lab_Math": lab_desc, "KG": final_billing_qty * f_kg, "Is_Marquee": False,
-                "Discount": 0.0, "Lab_Per_Unit": 0, "Base_Hire": base_h, "Anchoring": "", "Override_Rate": 0.0
+                "Discount": 0.0, "Lab_Per_Unit": 0, "Base_Hire": f_rate, "Anchoring": "", "Override_Rate": 0.0, "Is_Flooring": True,
+                "Base_1Wk_Rate": f_rate, "Base_Block_Rate": f_block
             }])
             st.session_state.df = pd.concat([st.session_state.df, new_f_df], ignore_index=True)
             st.rerun()
@@ -388,7 +389,8 @@ elif selected_cat == "grandstands":
             new_df = pd.DataFrame([{
                 "Qty": seats_input, "Product": f"Standard Seating Grandstand ({seats_input} Seats)", "Unit Rate": per_seat_rate, "Min_Lab": 0,
                 "Raw_Lab": 0.0, "Lab_Math": math_desc_str, "KG": seats_input * 25.0, "Is_Marquee": False,
-                "Discount": 0.0, "Lab_Per_Unit": 0.0, "Base_Hire": per_seat_rate, "Anchoring": "", "Override_Rate": 0.0
+                "Discount": 0.0, "Lab_Per_Unit": 0.0, "Base_Hire": per_seat_rate, "Anchoring": "", "Override_Rate": 0.0, "Is_Flooring": False,
+                "Base_1Wk_Rate": per_seat_rate, "Base_Block_Rate": per_seat_rate
             }])
             st.session_state.df = pd.concat([st.session_state.df, new_df], ignore_index=True)
             st.rerun()
@@ -413,14 +415,27 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     h_tot_c, h_wk1_gear, total_kg = 0.0, 0.0, 0.0
     for idx, row in st.session_state.df.iterrows():
         override = row.get("Override_Rate", 0.0)
-        active_base = override if override > 0 else row["Unit Rate"]
-        active_hire_base = override if override > 0 else row["Base_Hire"]
-        
-        qty, brate, dm = row["Qty"], active_base, (1 - (row["Discount"]/100))
+        qty, dm = row["Qty"], (1 - (row["Discount"]/100))
         total_kg += row["KG"]
-        h_wk1_gear += (qty * active_hire_base)
-            
-        wk1_t = (qty * brate + row["Raw_Lab"]) * dm if labour_mode == "Include in Hire" else (qty * brate) * dm
+        
+        # UPGRADE v64.0: Adaptive time execution calculation maps for long term jobs
+        if override > 0:
+            active_base_rate = override
+            wk1_t = (qty * override) * dm
+        elif row.get("Is_Flooring") and weeks >= 4 and row.get("Base_Block_Rate", 0) > 0:
+            # Applies the 4-week block billing formula natively: (SQM * Block Rate * (Weeks / 4))
+            block_multiplier = weeks / 4.0
+            active_base_rate = row["Base_Block_Rate"]
+            wk1_t = (qty * row["Base_Block_Rate"] * block_multiplier) * dm
+        else:
+            # Standard single week recurring loop pathways
+            active_base_rate = row["Unit Rate"]
+            if row["Is_Marquee"] and weeks > 1:
+                wk1_t = (qty * row["Unit Rate"] + (qty * (row["Unit Rate"] * 0.5) * (weeks - 1))) * dm
+            else:
+                wk1_t = (qty * row["Unit Rate"] * weeks) * dm
+
+        h_wk1_gear += (qty * active_base_rate)
         h_tot_c += wk1_t
         
         c0, c1, c2, c3, c4, c4b, c5 = st.columns([0.4, 3.2, 1.0, 1.2, 1.2, 1.2, 1.4])
@@ -443,7 +458,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
                         st.session_state.df.at[w_idx, "Qty"] = int(num_weights_factor * new_qty)
             st.rerun()
             
-        c3.write(f"${row['Unit Rate']:,.2f}")
+        c3.write(f"${active_base_rate:,.2f}")
         new_disc = c4.number_input("Disc %", 0.0, 100.0, float(row["Discount"]), key=f"sd_{idx}", label_visibility="collapsed")
         if new_disc != row["Discount"]: st.session_state.df.at[idx, "Discount"] = new_disc; st.rerun()
             
