@@ -13,7 +13,6 @@ import io
 # ==============================================================================
 st.set_page_config(page_title="Louis Master Quoter", layout="wide")
 
-# 🔍 FIXED: Restored precise Victoria depot geographic coordinates to fix routing distance math
 DEPOT_LAT = -38.1171
 DEPOT_LON = 145.2442
 
@@ -208,7 +207,6 @@ def create_calculation_pdf(subtotal, labour, waiver, cartage, grand, weeks, item
 # ==============================================================================
 if 'df' not in st.session_state: 
     st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Total", "Min_Lab", "Raw_Lab", "KG", "Is_Marquee", "Discount", "Lab_Math", "Lab_Per_Unit", "Base_Hire", "Anchoring", "Override_Rate", "Is_Flooring", "Base_1Wk_Rate", "Base_Block_Rate"])
-if 'status' not in st.session_state: st.session_state.status = "Quoted"
 if 'km' not in st.session_state: st.session_state.km = 0.0
 if 'truck_override' not in st.session_state: st.session_state.truck_override = 0
 if 'start_date_val' not in st.session_state: st.session_state.start_date_val = date.today()
@@ -231,14 +229,15 @@ st.session_state.start_date_val = start_d
 end_d = c_km_sep.date_input("End Date", value=start_d, key=f"ed_base_{st.session_state.reset_key_seed}")
 weeks = math.ceil(((end_d - start_d).days) / 7) or 1
 
-input_addr = st.text_input("🏠 Delivery Site Address", value=st.session_state.site_address_str, placeholder="Type venue address or suburb...")
-if input_addr.strip() != st.session_state.site_address_str:
-    st.session_state.site_address_str = input_addr.strip()
+# 🔍 FIXED UPGRADE v67.5: Re-engineered text state trigger routing logic to avoid Streamlit Cloud rerun cache trap
+input_addr = st.text_input("🏠 Delivery Site Address", placeholder="Type venue address or suburb (e.g. St Kilda, Victoria)...", key="address_input_box")
+if input_addr and input_addr.strip() != st.session_state.site_address_str:
     try:
         geolocator = Nominatim(user_agent="louis_quoter_v57", timeout=5)
         loc_data = geolocator.geocode(input_addr.strip() + ", Victoria, Australia")
         if loc_data:
             st.session_state.km = round(geodesic((DEPOT_LAT, DEPOT_LON), (loc_data.latitude, loc_data.longitude)).kilometers * 1.15, 1)
+            st.session_state.site_address_str = input_addr.strip()
             st.toast(f"📍 Target verified: {st.session_state.km} KM", icon="✅")
             st.rerun()
     except: pass
@@ -246,7 +245,9 @@ if input_addr.strip() != st.session_state.site_address_str:
 st.markdown("**🚛 Active Transport Routing Distance**")
 c_km1, c_km2 = st.columns([1, 4])
 new_manual_km = c_km1.number_input("One-Way KM", min_value=0.0, value=float(st.session_state.km))
-if new_manual_km != float(st.session_state.km): st.session_state.km = new_manual_km
+if new_manual_km != float(st.session_state.km): 
+    st.session_state.km = new_manual_km
+    st.session_state.site_address_str = "Custom Set Coordinate"
 c_km2.info(f"Routing evaluations active at **{st.session_state.km} One-Way KM** tracing from source depot. Duration: {weeks} Week(s).")
 
 l1, l2, l3 = st.columns(3)
