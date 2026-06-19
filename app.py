@@ -67,10 +67,18 @@ NATIVE_GRANDSTANDS = [
     {"Low": 350, "High": 400, "Total": 6600.0}
 ]
 
+# UPGRADED v66.5: Fully updated flooring catalogue section matrix
 NATIVE_FLOORING = [
     {"Product Name": "I-Trac", "1-Week Rate": 23.40, "4-Week Block": 46.80, "Labour": 4.65, "Weight": 15.0},
+    {"Product Name": "I-Trac Ramps (1.07 x1.18)", "1-Week Rate": 42.00, "4-Week Block": 84.00, "Labour": 0.00, "Weight": 0.0},
     {"Product Name": "Supa-Trac", "1-Week Rate": 11.55, "4-Week Block": 25.00, "Labour": 4.65, "Weight": 4.5},
+    {"Product Name": "Supa-Trac Edging", "1-Week Rate": 6.70, "4-Week Block": 0.00, "Labour": 0.00, "Weight": 0.0},
     {"Product Name": "Plastorip", "1-Week Rate": 10.15, "4-Week Block": 20.30, "Labour": 3.05, "Weight": 4.0},
+    {"Product Name": "Plastorip Edging", "1-Week Rate": 1.65, "4-Week Block": 0.00, "Labour": 0.00, "Weight": 0.0},
+    {"Product Name": "Plastorip Corner", "1-Week Rate": 0.00, "4-Week Block": 0.00, "Labour": 0.00, "Weight": 0.0},
+    {"Product Name": "Rollout Flooring", "1-Week Rate": 7.10, "4-Week Block": 15.00, "Labour": 3.05, "Weight": 0.0},
+    {"Product Name": "Rollout Flooring - Ramps", "1-Week Rate": 6.60, "4-Week Block": 0.00, "Labour": 0.00, "Weight": 0.0},
+    {"Product Name": "Rollout Flooring - joiners", "1-Week Rate": 6.60, "4-Week Block": 0.00, "Labour": 0.00, "Weight": 0.0},
     {"Product Name": "Trakmats", "1-Week Rate": 23.20, "4-Week Block": 45.00, "Labour": 5.85, "Weight": 35.0}
 ]
 
@@ -329,7 +337,7 @@ elif selected_cat == "flooring":
             final_item_label_name = target_item
             final_billing_qty = cov_input
             
-            if "supa" in target_item.lower():
+            if "supa" in target_item.lower() and "edging" not in target_item.lower():
                 num_sheets_needed = math.ceil(cov_input / 3.0)
                 final_billing_qty = num_sheets_needed * 3.0  
                 final_item_label_name = f"{target_item} [{num_sheets_needed:,.0f} Sheets of 3 SQM]"
@@ -387,22 +395,18 @@ if st.session_state.df is not None and not st.session_state.df.empty:
         qty, dm = row["Qty"], (1 - (row["Discount"]/100))
         total_kg += row["KG"]
         
-        # FIXED UPGRADE v66.0: Implemented your exact weekly adaptive scaling parameters
         if override > 0:
             active_base_rate = override
             wk1_t = (qty * override) * dm
         elif row.get("Is_Flooring"):
             if weeks >= 4 and row.get("Base_Block_Rate", 0) > 0:
-                # If duration is 4 weeks or longer, select the 4-week block rate context divided by 4
                 calculated_weekly_rate = row["Base_Block_Rate"] / 4.0
                 active_base_rate = calculated_weekly_rate
                 wk1_t = (qty * calculated_weekly_rate * weeks) * dm
             else:
-                # Billed at full 1-week rate per week for weeks 1, 2, and 3
                 active_base_rate = row["Base_1Wk_Rate"]
                 wk1_t = (qty * row["Base_1Wk_Rate"] * weeks) * dm
         else:
-            # Traditional structural setup pathways
             active_base_rate = row["Unit Rate"]
             if row["Is_Marquee"] and weeks > 1:
                 wk1_t = (qty * row["Unit Rate"] + (qty * (row["Unit Rate"] * 0.5) * (weeks - 1))) * dm
