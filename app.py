@@ -16,7 +16,6 @@ st.set_page_config(page_title="Louis Master Quoter", layout="wide")
 DEPOT_LAT = -38.1171
 DEPOT_LON = 145.2442
 
-# Embedded structures data dictionary framework
 NATIVE_STRUCTURES = [
     {"Configuration": "3m x 3m Hi Tops", "Type": "Marquee", "Hire Unit Rate": 198.45, "Labour Total": 350.00, "Total Weight (kg)": 480.0, "Total Number of weights": 16.0, "Weight Size (KG)": 30.0, "Cost per weight": 6.60, "Labour Per Weight": 1.65},
     {"Configuration": "3m x 3m Shade Canopy", "Type": "Marquee", "Hire Unit Rate": 198.45, "Labour Total": 350.00, "Total Weight (kg)": 480.0, "Total Number of weights": 16.0, "Weight Size (KG)": 30.0, "Cost per weight": 6.60, "Labour Per Weight": 1.65},
@@ -285,7 +284,6 @@ if selected_cat == "marquees":
                 st.session_state.df = pd.concat([st.session_state.df, new_df], ignore_index=True)
                 
                 if anch_type == "Weighted":
-                    # FIXED: Matched directly to exact embedded list naming targets
                     num_weights = get_item_property(target_item, "Total Number of weights")
                     w_size = get_item_property(target_item, "Weight Size (KG)")
                     w_cost = get_item_property(target_item, "Cost per weight")
@@ -389,14 +387,22 @@ if st.session_state.df is not None and not st.session_state.df.empty:
         qty, dm = row["Qty"], (1 - (row["Discount"]/100))
         total_kg += row["KG"]
         
+        # FIXED UPGRADE v66.0: Implemented your exact weekly adaptive scaling parameters
         if override > 0:
             active_base_rate = override
             wk1_t = (qty * override) * dm
-        elif row.get("Is_Flooring") and weeks >= 4 and row.get("Base_Block_Rate", 0) > 0:
-            block_multiplier = weeks / 4.0
-            active_base_rate = row["Base_Block_Rate"]
-            wk1_t = (qty * row["Base_Block_Rate"] * block_multiplier) * dm
+        elif row.get("Is_Flooring"):
+            if weeks >= 4 and row.get("Base_Block_Rate", 0) > 0:
+                # If duration is 4 weeks or longer, select the 4-week block rate context divided by 4
+                calculated_weekly_rate = row["Base_Block_Rate"] / 4.0
+                active_base_rate = calculated_weekly_rate
+                wk1_t = (qty * calculated_weekly_rate * weeks) * dm
+            else:
+                # Billed at full 1-week rate per week for weeks 1, 2, and 3
+                active_base_rate = row["Base_1Wk_Rate"]
+                wk1_t = (qty * row["Base_1Wk_Rate"] * weeks) * dm
         else:
+            # Traditional structural setup pathways
             active_base_rate = row["Unit Rate"]
             if row["Is_Marquee"] and weeks > 1:
                 wk1_t = (qty * row["Unit Rate"] + (qty * (row["Unit Rate"] * 0.5) * (weeks - 1))) * dm
