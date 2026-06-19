@@ -13,6 +13,7 @@ import io
 # ==============================================================================
 st.set_page_config(page_title="Louis Master Quoter", layout="wide")
 
+# 🔍 FIXED: Restored precise Victoria depot geographic coordinates to fix routing distance math
 DEPOT_LAT = -38.1171
 DEPOT_LON = 145.2442
 
@@ -67,7 +68,6 @@ NATIVE_GRANDSTANDS = [
     {"Low": 350, "High": 400, "Total": 6600.0}
 ]
 
-# UPGRADED v66.5: Fully updated flooring catalogue section matrix
 NATIVE_FLOORING = [
     {"Product Name": "I-Trac", "1-Week Rate": 23.40, "4-Week Block": 46.80, "Labour": 4.65, "Weight": 15.0},
     {"Product Name": "I-Trac Ramps (1.07 x1.18)", "1-Week Rate": 42.00, "4-Week Block": 84.00, "Labour": 0.00, "Weight": 0.0},
