@@ -5,6 +5,7 @@ from datetime import date, datetime, timedelta
 from fpdf import FPDF
 import re
 import json
+import os
 import io
 
 # ==============================================================================
@@ -17,17 +18,43 @@ DEPOT_LON = 145.2442
 
 # Embedded structures data dictionary framework
 NATIVE_STRUCTURES = [
-    {"Configuration": "3m x 3m Hi Tops", "Type": "Marquee", "Hire Unit Rate": 198.45, "Labour Total": 350.0, "Total Weight (kg)": 480.0, "Total Number of weights": 16.0, "Weight Size (KG)": 30.0, "Cost per weight": 6.60, "Labour Per Weight": 1.65},
-    {"Configuration": "3m x 3m Shade Canopy", "Type": "Marquee", "Hire Unit Rate": 198.45, "Labour Total": 350.0, "Total Weight (kg)": 480.0, "Total Number of weights": 16.0, "Weight Size (KG)": 30.0, "Cost per weight": 6.60, "Labour Per Weight": 1.65},
-    {"Configuration": "3m x 6m Shade Canopy", "Type": "Marquee", "Hire Unit Rate": 396.90, "Labour Total": 350.0, "Total Weight (kg)": 720.0, "Total Number of weights": 24.0, "Weight Size (KG)": 30.0, "Cost per weight": 6.60, "Labour Per Weight": 1.65},
-    {"Configuration": "4m x 3m", "Type": "Marquee", "Hire Unit Rate": 264.60, "Labour Total": 350.0, "Total Weight (kg)": 480.0, "Total Number of weights": 16.0, "Weight Size (KG)": 30.0, "Cost per weight": 6.60, "Labour Per Weight": 1.65},
-    {"Configuration": "6m x 3m", "Type": "Marquee", "Hire Unit Rate": 396.90, "Labour Total": 350.0, "Total Weight (kg)": 480.0, "Total Number of weights": 16.0, "Weight Size (KG)": 30.0, "Cost per weight": 6.60, "Labour Per Weight": 1.65},
-    {"Configuration": "6m x 6m", "Type": "Marquee", "Hire Unit Rate": 793.80, "Labour Total": 450.0, "Total Weight (kg)": 840.0, "Total Number of weights": 24.0, "Weight Size (KG)": 30.0, "Cost per weight": 6.60, "Labour Per Weight": 1.65},
-    {"Configuration": "6m x 9m", "Type": "Marquee", "Hire Unit Rate": 1190.70, "Labour Total": 550.0, "Total Weight (kg)": 1120.0, "Total Number of weights": 32.0, "Weight Size (KG)": 30.0, "Cost per weight": 6.60, "Labour Per Weight": 1.65},
-    {"Configuration": "10m x 10m", "Type": "Structure", "Hire Unit Rate": 1820.00, "Labour Total": 728.0, "Total Weight (kg)": 3375.0, "Total Number of weights": 32.0, "Weight Size (KG)": 30.0, "Cost per weight": 6.60, "Labour Per Weight": 1.65},
-    {"Configuration": "10m x 15m", "Type": "Structure", "Hire Unit Rate": 2730.00, "Labour Total": 1092.0, "Total Weight (kg)": 5062.5, "Total Number of weights": 40.0, "Weight Size (KG)": 30.0, "Cost per weight": 6.60, "Labour Per Weight": 1.65},
-    {"Configuration": "15m x 15m", "Type": "Structure", "Hire Unit Rate": 3476.25, "Labour Total": 1390.5, "Total Weight (kg)": 9600.0, "Total Number of weights": 8.0, "Weight Size (KG)": 1200.0, "Cost per weight": 88.20, "Labour Per Weight": 22.05},
-    {"Configuration": "15m x 20m", "Type": "Structure", "Hire Unit Rate": 4635.00, "Labour Total": 1854.0, "Total Weight (kg)": 12000.0, "Total Number of weights": 10.0, "Weight Size (KG)": 1200.0, "Cost per weight": 88.20, "Labour Per Weight": 22.05}
+    {"Configuration": "3m x 3m Hi Tops", "Type": "Marquee", "Hire Unit Rate": 198.45, "Labour Total": 350.00, "Total Weight (kg)": 480.0, "Total Number of weights": 16.0, "Weight Size (KG)": 30.0, "Cost per weight": 6.60, "Labour Per Weight": 1.65},
+    {"Configuration": "3m x 3m Shade Canopy", "Type": "Marquee", "Hire Unit Rate": 198.45, "Labour Total": 350.00, "Total Weight (kg)": 480.0, "Total Number of weights": 16.0, "Weight Size (KG)": 30.0, "Cost per weight": 6.60, "Labour Per Weight": 1.65},
+    {"Configuration": "3m x 6m Shade Canopy", "Type": "Marquee", "Hire Unit Rate": 396.90, "Labour Total": 350.00, "Total Weight (kg)": 720.0, "Total Number of weights": 24.0, "Weight Size (KG)": 30.0, "Cost per weight": 6.60, "Labour Per Weight": 1.65},
+    {"Configuration": "4m x 3m", "Type": "Structure", "Hire Unit Rate": 276.00, "Labour Total": 350.00, "Total Weight (kg)": 480.0, "Total Number of weights": 16.0, "Weight Size (KG)": 30.0, "Cost per weight": 6.60, "Labour Per Weight": 1.65},
+    {"Configuration": "4m x 6m", "Type": "Structure", "Hire Unit Rate": 436.80, "Labour Total": 350.00, "Total Weight (kg)": 720.0, "Total Number of weights": 36.0, "Weight Size (KG)": 30.0, "Cost per weight": 6.60, "Labour Per Weight": 1.65},
+    {"Configuration": "4m x 9m", "Type": "Structure", "Hire Unit Rate": 655.20, "Labour Total": 350.00, "Total Weight (kg)": 1120.0, "Total Number of weights": 48.0, "Weight Size (KG)": 30.0, "Cost per weight": 6.60, "Labour Per Weight": 1.65},
+    {"Configuration": "4m x 12m", "Type": "Structure", "Hire Unit Rate": 873.60, "Labour Total": 350.00, "Total Weight (kg)": 1500.0, "Total Number of weights": 60.0, "Weight Size (KG)": 30.0, "Cost per weight": 6.60, "Labour Per Weight": 1.65},
+    {"Configuration": "4m x 15m", "Type": "Structure", "Hire Unit Rate": 1092.00, "Labour Total": 436.80, "Total Weight (kg)": 2000.0, "Total Number of weights": 72.0, "Weight Size (KG)": 30.0, "Cost per weight": 6.60, "Labour Per Weight": 1.65},
+    {"Configuration": "4m x 18m", "Type": "Structure", "Hire Unit Rate": 1310.40, "Labour Total": 524.16, "Total Weight (kg)": 2400.0, "Total Number of weights": 72.0, "Weight Size (KG)": 30.0, "Cost per weight": 6.60, "Labour Per Weight": 1.65},
+    {"Configuration": "4m x 21m", "Type": "Structure", "Hire Unit Rate": 1528.80, "Labour Total": 611.52, "Total Weight (kg)": 2800.0, "Total Number of weights": 96.0, "Weight Size (KG)": 30.0, "Cost per weight": 6.60, "Labour Per Weight": 1.65},
+    {"Configuration": "4m x 24m", "Type": "Structure", "Hire Unit Rate": 1747.20, "Labour Total": 698.88, "Total Weight (kg)": 3200.0, "Total Number of weights": 108.0, "Weight Size (KG)": 30.0, "Cost per weight": 6.60, "Labour Per Weight": 1.65},
+    {"Configuration": "6m x 3m", "Type": "Structure", "Hire Unit Rate": 414.00, "Labour Total": 350.00, "Total Weight (kg)": 480.0, "Total Number of weights": 48.0, "Weight Size (KG)": 30.0, "Cost per weight": 6.60, "Labour Per Weight": 1.65},
+    {"Configuration": "6m x 4m", "Type": "Structure", "Hire Unit Rate": 436.80, "Labour Total": 350.00, "Total Weight (kg)": 720.0, "Total Number of weights": 48.0, "Weight Size (KG)": 30.0, "Cost per weight": 6.60, "Labour Per Weight": 1.65},
+    {"Configuration": "6m x 8m", "Type": "Structure", "Hire Unit Rate": 873.60, "Labour Total": 350.00, "Total Weight (kg)": 1120.0, "Total Number of weights": 64.0, "Weight Size (KG)": 30.0, "Cost per weight": 6.60, "Labour Per Weight": 1.65},
+    {"Configuration": "6m x 12m", "Type": "Structure", "Hire Unit Rate": 1310.40, "Labour Total": 524.16, "Total Weight (kg)": 1500.0, "Total Number of weights": 80.0, "Weight Size (KG)": 30.0, "Cost per weight": 6.60, "Labour Per Weight": 1.65},
+    {"Configuration": "6m x 16m", "Type": "Structure", "Hire Unit Rate": 1747.20, "Labour Total": 698.88, "Total Weight (kg)": 2000.0, "Total Number of weights": 96.0, "Weight Size (KG)": 30.0, "Cost per weight": 6.60, "Labour Per Weight": 1.65},
+    {"Configuration": "6m x 20m", "Type": "Structure", "Hire Unit Rate": 2184.00, "Labour Total": 873.60, "Total Weight (kg)": 3375.0, "Total Number of weights": 112.0, "Weight Size (KG)": 30.0, "Cost per weight": 6.60, "Labour Per Weight": 1.65},
+    {"Configuration": "6m x 24m", "Type": "Structure", "Hire Unit Rate": 2620.80, "Labour Total": 1048.32, "Total Weight (kg)": 4000.0, "Total Number of weights": 128.0, "Weight Size (KG)": 30.0, "Cost per weight": 6.60, "Labour Per Weight": 1.65},
+    {"Configuration": "6m x 28m", "Type": "Structure", "Hire Unit Rate": 3057.60, "Labour Total": 1223.04, "Total Weight (kg)": 4800.0, "Total Number of weights": 144.0, "Weight Size (KG)": 30.0, "Cost per weight": 6.60, "Labour Per Weight": 1.65},
+    {"Configuration": "6m x 32m", "Type": "Structure", "Hire Unit Rate": 3494.40, "Labour Total": 1397.76, "Total Weight (kg)": 5400.0, "Total Number of weights": 160.0, "Weight Size (KG)": 30.0, "Cost per weight": 6.60, "Labour Per Weight": 1.65},
+    {"Configuration": "9m x 3m", "Type": "Structure", "Hire Unit Rate": 621.00, "Labour Total": 350.00, "Total Weight (kg)": 840.0, "Total Number of weights": 80.0, "Weight Size (KG)": 30.0, "Cost per weight": 6.60, "Labour Per Weight": 1.65},
+    {"Configuration": "9m x 6m", "Type": "Structure", "Hire Unit Rate": 982.80, "Labour Total": 393.12, "Total Weight (kg)": 1120.0, "Total Number of weights": 100.0, "Weight Size (KG)": 30.0, "Cost per weight": 6.60, "Labour Per Weight": 1.65},
+    {"Configuration": "9m x 9m", "Type": "Structure", "Hire Unit Rate": 1474.20, "Labour Total": 589.68, "Total Weight (kg)": 1500.0, "Total Number of weights": 120.0, "Weight Size (KG)": 30.0, "Cost per weight": 6.60, "Labour Per Weight": 1.65},
+    {"Configuration": "15m x 5m", "Type": "Structure", "Hire Unit Rate": 1725.00, "Labour Total": 948.75, "Total Weight (kg)": 5062.5, "Total Number of weights": 4.0, "Weight Size (KG)": 1200.0, "Cost per weight": 88.20, "Labour Per Weight": 22.05},
+    {"Configuration": "15m x 10m", "Type": "Structure", "Hire Unit Rate": 2317.50, "Labour Total": 927.00, "Total Weight (kg)": 9600.0, "Total Number of weights": 6.0, "Weight Size (KG)": 1200.0, "Cost per weight": 88.20, "Labour Per Weight": 22.05},
+    {"Configuration": "15m x 15m", "Type": "Structure", "Hire Unit Rate": 3476.25, "Labour Total": 1390.50, "Total Weight (kg)": 9600.0, "Total Number of weights": 8.0, "Weight Size (KG)": 1200.0, "Cost per weight": 88.20, "Labour Per Weight": 22.05},
+    {"Configuration": "15m x 20m", "Type": "Structure", "Hire Unit Rate": 4635.00, "Labour Total": 1854.00, "Total Weight (kg)": 12000.0, "Total Number of weights": 10.0, "Weight Size (KG)": 1200.0, "Cost per weight": 88.20, "Labour Per Weight": 22.05},
+    {"Configuration": "15m x 25m", "Type": "Structure", "Hire Unit Rate": 5793.75, "Labour Total": 2317.50, "Total Weight (kg)": 14400.0, "Total Number of weights": 12.0, "Weight Size (KG)": 1200.0, "Cost per weight": 88.20, "Labour Per Weight": 22.05},
+    {"Configuration": "15m x 30m", "Type": "Structure", "Hire Unit Rate": 6952.50, "Labour Total": 2781.00, "Total Weight (kg)": 16000.0, "Total Number of weights": 14.0, "Weight Size (KG)": 1200.0, "Cost per weight": 88.20, "Labour Per Weight": 22.05},
+    {"Configuration": "20m x 5m", "Type": "Structure", "Hire Unit Rate": 2300.00, "Labour Total": 1265.00, "Total Weight (kg)": 6000.0, "Total Number of weights": 28.0, "Weight Size (KG)": 88.20, "Cost per weight": 88.20, "Labour Per Weight": 22.05},
+    {"Configuration": "20m x 10m", "Type": "Structure", "Hire Unit Rate": 3990.00, "Labour Total": 1596.00, "Total Weight (kg)": 8000.0, "Total Number of weights": 32.0, "Weight Size (KG)": 88.20, "Cost per weight": 88.20, "Labour Per Weight": 22.05},
+    {"Configuration": "20m x 15m", "Type": "Structure", "Hire Unit Rate": 5985.00, "Labour Total": 2394.00, "Total Weight (kg)": 10000.0, "Total Number of weights": 36.0, "Weight Size (KG)": 88.20, "Cost per weight": 88.20, "Labour Per Weight": 22.05},
+    {"Configuration": "20m x 20m", "Type": "Structure", "Hire Unit Rate": 7980.00, "Labour Total": 3192.00, "Total Weight (kg)": 12000.0, "Total Number of weights": 40.0, "Weight Size (KG)": 88.20, "Cost per weight": 88.20, "Labour Per Weight": 22.05},
+    {"Configuration": "20m x 25m", "Type": "Structure", "Hire Unit Rate": 9975.00, "Labour Total": 3990.00, "Total Weight (kg)": 14000.0, "Total Number of weights": 44.0, "Weight Size (KG)": 88.20, "Cost per weight": 88.20, "Labour Per Weight": 22.05},
+    {"Configuration": "20m x 30m", "Type": "Structure", "Hire Unit Rate": 11970.00, "Labour Total": 4788.00, "Total Weight (kg)": 16000.0, "Total Number of weights": 48.0, "Weight Size (KG)": 88.20, "Cost per weight": 88.20, "Labour Per Weight": 22.05},
+    {"Configuration": "20m x 35m", "Type": "Structure", "Hire Unit Rate": 13965.00, "Labour Total": 5586.00, "Total Weight (kg)": 18000.0, "Total Number of weights": 52.0, "Weight Size (KG)": 88.20, "Cost per weight": 88.20, "Labour Per Weight": 22.05},
+    {"Configuration": "20m x 40m", "Type": "Structure", "Hire Unit Rate": 15960.00, "Labour Total": 6384.00, "Total Weight (kg)": 20000.0, "Total Number of weights": 56.0, "Weight Size (KG)": 88.20, "Cost per weight": 88.20, "Labour Per Weight": 22.05}
 ]
 
 NATIVE_GRANDSTANDS = [
@@ -48,50 +75,64 @@ NATIVE_FLOORING = [
     {"Product Name": "Trakmats", "1-Week Rate": 23.20, "4-Week Block": 45.00, "Labour": 5.85, "Weight": 35.0}
 ]
 
-# Convert internal dictionaries directly to clean tracking pandas DataFrames
 struct_db = pd.DataFrame(NATIVE_STRUCTURES)
 grandstand_db = pd.DataFrame(NATIVE_GRANDSTANDS)
 flooring_db = pd.DataFrame(NATIVE_FLOORING)
 
 # ==============================================================================
-# SMART FUZZY DIMENSION MATCHING ENGINE
+# SMART RE REGEX DIMENSION MATCHING HOOK
 # ==============================================================================
 def matches_smart_query(config_name, query_str):
     if not query_str:
         return True
     c_clean = str(config_name).lower().replace(" ", "")
     q_clean = str(query_str).lower().replace(" ", "")
+    
     if q_clean in c_clean:
         return True
+        
     c_norm = re.sub(r'(\d+)m?x(\d+)m?', r'\1x\2', c_clean)
     q_norm = re.sub(r'(\d+)m?x(\d+)m?', r'\1x\2', q_clean)
+    
     if q_norm in c_norm:
         return True
+        
     q_digits = re.findall(r'\d+', q_clean)
     c_digits = re.findall(r'\d+', c_clean)
     if len(q_digits) >= 2 and len(c_digits) >= 2:
         if q_digits[0] == c_digits[0] and q_digits[1] == c_digits[1]:
             return True
+            
     return False
 
 def get_item_property(config_name, column_target, fallback_val=0.0):
     matched_row = struct_db[struct_db["Configuration"] == str(config_name).strip()]
     if not matched_row.empty:
         val = matched_row.iloc[0].get(column_target, fallback_val)
-        return float(val) if not pd.isna(val) else fallback_val
+        try:
+            return float(val) if not pd.isna(val) else fallback_val
+        except:
+            return val if not pd.isna(val) else fallback_val
     return fallback_val
 
 def calculate_dynamic_grandstand_rate(seats_input):
     if seats_input <= 0:
         return 0.0, "0 seats allocation"
+        
     for idx, row in grandstand_db.iterrows():
-        if int(row["Low"]) <= seats_input <= int(row["High"]):
-            total_labour_cost = float(row["Total"])
-            return round(total_labour_cost / seats_input, 2), f"Seating Matrix Flat Booking: ${total_labour_cost:,.2f} / {seats_input} seats"
+        try:
+            low = int(row["Low"])
+            high = int(row["High"])
+            if low <= seats_input <= high:
+                total_labour_cost = float(row["Total"])
+                per_seat_rate = total_labour_cost / seats_input
+                return round(per_seat_rate, 2), f"Seating Matrix Flat Booking: ${total_labour_cost:,.2f} / {seats_input} seats"
+        except: pass
+            
     return 19.19, f"Standard base per-seat fallback calculation applied"
 
 # ==============================================================================
-# 3. PDF AUDIT ENGINE
+# 3. PDF AUDIT ENGINE (STRUCTURAL TABLE TIERS WITH UNIVERSAL BYTE STREAM FIX)
 # ==============================================================================
 def clean_text(txt):
     if not txt: return ""
@@ -101,13 +142,14 @@ def clean_text(txt):
         cleaned = cleaned.replace(char, rep)
     return cleaned.encode('latin-1', 'replace').decode('latin-1')
 
-def create_calculation_pdf(subtotal, labour, waiver, cartage, grand, weeks, item_items_list, structural_math_dict, job_name):
+def create_calculation_pdf(subtotal, labour, waiver, cartage, grand, weeks, item_items_list, structural_math_dict, status, job_name):
     pdf = FPDF()
     pdf.add_page()
+    
     pdf.set_font("Arial", "B", 16)
-    pdf.cell(0, 10, clean_text(f"Louis Quoting Tool - Calculation Audit Summary"), ln=True, align="C")
-    pdf.set_font("Arial", "B", 11)
-    pdf.cell(0, 7, clean_text(f"JOB TARGET NAME: {job_name.upper()} | DURATION: {weeks} Week(s)"), ln=True, align="C")
+    pdf.cell(0, 10, clean_text("Louis Quoting Tool - Detailed Calculation Audit"), ln=True, align="C")
+    pdf.set_font("Arial", "B", 10)
+    pdf.cell(0, 7, clean_text(f"JOB REF NAME: {job_name.upper()} | STATUS: {status.upper()} | DURATION: {weeks} Week(s)"), ln=True, align="C")
     pdf.ln(8)
 
     pdf.set_fill_color(26, 29, 45); pdf.set_text_color(255, 255, 255); pdf.set_font("Arial", "B", 11)
@@ -133,7 +175,8 @@ def create_calculation_pdf(subtotal, labour, waiver, cartage, grand, weeks, item
         pdf.cell(col_w[4], 8, f"${w1_total:,.2f}", 1, 1, "R")
 
     pdf.ln(5)
-    for cat in ["LABOUR", "LOGISTICS", "DAMAGE WAIVER"]:
+    categories = ["LABOUR", "LOGISTICS", "DAMAGE WAIVER"]
+    for cat in categories:
         if cat in structural_math_dict and structural_math_dict[cat]:
             pdf.set_fill_color(26, 29, 45); pdf.set_text_color(255, 255, 255); pdf.set_font("Arial", "B", 11)
             pdf.cell(0, 9, f" {cat}", 0, 1, "L", True)
@@ -145,13 +188,20 @@ def create_calculation_pdf(subtotal, labour, waiver, cartage, grand, weeks, item
     pdf.ln(5); pdf.set_fill_color(0, 230, 118); pdf.set_text_color(26, 29, 45); pdf.set_font("Arial", "B", 13)
     pdf.cell(0, 14, f" GRAND TOTAL (EX GST): ${grand:,.2f} ", 0, 1, "R", True)
     
-    return bytes(pdf.output(dest='S')) if isinstance(pdf.output(dest='S'), bytes) else pdf.output(dest='S').encode('latin-1', 'replace')
+    try:
+        raw_pdf_data = pdf.output(dest='S')
+        if isinstance(raw_pdf_data, str):
+            return raw_pdf_data.encode('latin-1', 'replace')
+        return bytes(raw_pdf_data)
+    except:
+        return bytes(pdf.output())
 
 # ==============================================================================
 # 5. STREAMLIT INTERNAL STORAGE PERSISTENCE
 # ==============================================================================
 if 'df' not in st.session_state: 
     st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Total", "Min_Lab", "Raw_Lab", "KG", "Is_Marquee", "Discount", "Lab_Math", "Lab_Per_Unit", "Base_Hire", "Anchoring", "Override_Rate", "Is_Flooring", "Base_1Wk_Rate", "Base_Block_Rate"])
+if 'status' not in st.session_state: st.session_state.status = "Quoted"
 if 'km' not in st.session_state: st.session_state.km = 0.0
 if 'truck_override' not in st.session_state: st.session_state.truck_override = 0
 if 'start_date_val' not in st.session_state: st.session_state.start_date_val = date.today()
@@ -164,9 +214,9 @@ if 'saved_waiver_mode' not in st.session_state: st.session_state.saved_waiver_mo
 if 'overrides_dict' not in st.session_state: st.session_state.overrides_dict = {}
 
 # ==============================================================================
-# UPGRADE v65.0: JOB LABEL FIELD HEADER (REPLACED STAGE SELECTOR DROPDOWN)
+# 6. GLOBAL BASE CONTROLS MOUNT (UPGRADED JOB FIELD HEADER)
 # ==============================================================================
-job_name_input = st.text_input("📝 Active Project / Job Name", value="New Project Estimate", placeholder="Type client reference or project code here...")
+job_name_input = st.text_input("📝 Active Project / Job Name Reference", value="New Project Estimate", placeholder="Type reference label name...")
 
 c_dt1, c_km_sep = st.columns([1, 1])
 start_d = c_dt1.date_input("Start Date", value=st.session_state.start_date_val, key=f"sd_base_{st.session_state.reset_key_seed}")
@@ -174,7 +224,6 @@ st.session_state.start_date_val = start_d
 end_d = c_km_sep.date_input("End Date", value=start_d, key=f"ed_base_{st.session_state.reset_key_seed}")
 weeks = math.ceil(((end_d - start_d).days) / 7) or 1
 
-# Transport Routing Modules
 input_addr = st.text_input("🏠 Delivery Site Address", value=st.session_state.site_address_str, placeholder="Type venue address or suburb...")
 if input_addr.strip() != st.session_state.site_address_str:
     st.session_state.site_address_str = input_addr.strip()
@@ -191,7 +240,7 @@ st.markdown("**🚛 Active Transport Routing Distance**")
 c_km1, c_km2 = st.columns([1, 4])
 new_manual_km = c_km1.number_input("One-Way KM", min_value=0.0, value=float(st.session_state.km))
 if new_manual_km != float(st.session_state.km): st.session_state.km = new_manual_km
-c_km2.info(f"Routing evaluations active at **{st.session_state.km} One-Way KM** from depot. Duration: {weeks} Week(s).")
+c_km2.info(f"Routing evaluations active at **{st.session_state.km} One-Way KM** tracing from source depot. Duration: {weeks} Week(s).")
 
 l1, l2, l3 = st.columns(3)
 cartage_mode = l1.segmented_control("Cartage Math", ["Charge", "Free"], default=st.session_state.saved_cartage_mode)
@@ -199,7 +248,7 @@ labour_mode = l2.segmented_control("Labour Math", ["Separate", "Include in Hire"
 waiver_mode = l3.segmented_control("Damage Waiver", ["Charge", "Free"], default=st.session_state.saved_waiver_mode)
 
 # ==============================================================================
-# 7. MAIN INTERACTION COMPONENT CORE ENTRY HUB
+# 7. SINGLE HUB COMPONENT WORKSPACE
 # ==============================================================================
 st.divider()
 st.markdown("### ➕ CATALOG COMPONENT HUB")
@@ -207,8 +256,9 @@ st.markdown("### ➕ CATALOG COMPONENT HUB")
 selected_cat = st.selectbox("Choose Category to Load", ["marquees", "flooring", "grandstands"])
 
 if selected_cat == "marquees":
-    search_query = st.text_input("🔍 Smart Search Marquee Size (e.g. 4x3, 6x3, 15x15):", placeholder="Type dimensions...", key="marq_search_box")
+    search_query = st.text_input("🔍 Smart Search Marquee Size (e.g. 4x3, 6x3, 15x15):", placeholder="Type structure dimensions here...", key="marq_search_box")
     filtered_df = struct_db.copy()
+    
     if search_query:
         filtered_df = filtered_df[filtered_df["Configuration"].apply(lambda x: matches_smart_query(x, search_query))]
         
@@ -227,7 +277,7 @@ if selected_cat == "marquees":
                 
                 new_df = pd.DataFrame([{
                     "Qty": qty_input, "Product": target_item, "Unit Rate": b_hire, "Min_Lab": 350,
-                    "Raw_Lab": raw_labour_pool * qty_input, "Lab_Math": f"{target_item}: Setup labor applied",
+                    "Raw_Lab": raw_labour_pool * qty_input, "Lab_Math": f"{target_item}: Layout installation setup matrix",
                     "KG": total_w * qty_input, "Is_Marquee": True, "Discount": 0.0, "Lab_Per_Unit": raw_labour_pool,
                     "Base_Hire": b_hire, "Anchoring": anch_type, "Override_Rate": 0.0, "Is_Flooring": False,
                     "Base_1Wk_Rate": b_hire, "Base_Block_Rate": b_hire
@@ -250,6 +300,7 @@ if selected_cat == "marquees":
                     }])
                     st.session_state.df = pd.concat([st.session_state.df, weight_df], ignore_index=True)
                 st.rerun()
+    else: st.info("No matching configuration marquee sizes found.")
 
 elif selected_cat == "flooring":
     floor_options = flooring_db["Product Name"].tolist()
@@ -298,11 +349,13 @@ elif selected_cat == "flooring":
 
 elif selected_cat == "grandstands":
     seats_input = st.number_input("Total Seat Capacity Requirements Count", min_value=1, value=None, placeholder="Type total quantity of seats...", key="gs_qty")
+    
     if st.button("Add Grandstand Configuration Layout"):
         if seats_input is None or seats_input <= 0:
             st.error("Please supply a valid seat capacity count first.")
         else:
             per_seat_rate, math_desc_str = calculate_dynamic_grandstand_rate(seats_input)
+            
             new_df = pd.DataFrame([{
                 "Qty": seats_input, "Product": f"Standard Seating Grandstand ({seats_input} Seats)", "Unit Rate": per_seat_rate, "Min_Lab": 0,
                 "Raw_Lab": 0.0, "Lab_Math": math_desc_str, "KG": seats_input * 25.0, "Is_Marquee": False,
@@ -313,7 +366,7 @@ elif selected_cat == "grandstands":
             st.rerun()
 
 # ==============================================================================
-# QUOTE SUMMARY GRID ENGINE 
+# QUOTE SUMMARY ENGINE RENDER DATA LOOPS 
 # ==============================================================================
 if st.session_state.df is not None and not st.session_state.df.empty:
     st.divider()
@@ -335,7 +388,6 @@ if st.session_state.df is not None and not st.session_state.df.empty:
         qty, dm = row["Qty"], (1 - (row["Discount"]/100))
         total_kg += row["KG"]
         
-        # Long term duration calculations matrix engine
         if override > 0:
             active_base_rate = override
             wk1_t = (qty * override) * dm
@@ -460,7 +512,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
 
     if has_changes_detected: st.rerun()
 
-    # Metrics Display Dashboard Cards
+    # Footer metric cards Display
     st.divider(); m = st.columns(6)
     m[0].metric("HIRE COST", f"${round(h_tot_c, 2):,}")
     m[1].metric("LABOUR", f"${round(final_labour_pool_sum, 2):,}")
@@ -472,7 +524,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     grand_total_calc = h_tot_c + final_labour_pool_sum + final_waiver_sum + final_cartage_sum
     st.markdown(f"<div class='gt-banner'>GRAND TOTAL (EX GST): ${grand_total_calc:,.2f}</div>", unsafe_allow_html=True)
     
-    # Audit log strings lines map references
+    # Document compilation lines text mapping for black header PDF logs
     structural_math_dict = {"LABOUR": [], "LOGISTICS": [], "DAMAGE WAIVER": []}
     for idx, row in st.session_state.df.iterrows():
         if row.get('Raw_Lab', 0.0) > 0.0:
@@ -487,14 +539,13 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     structural_math_dict["DAMAGE WAIVER"].append(f"${h_tot_c:,.2f} total product hire cost x 7% = ${final_waiver_sum:,.2f}")
 
 # ==============================================================================
-# 10. DOWNLOAD ENGINE PIOK ZONE (UPGRADED JOB REF LINKAGE)
+# 10. DOWNLOAD ZONE (INTEGRATED JOB NAME VARIABLE REF TO PDF ARGS MATRIX)
 # ==============================================================================
     st.markdown("")  
     action_col_1, action_col_2 = st.columns(2)
             
     cleaned_pdf_items = st.session_state.df.to_dict('records')
-    # UPGRADE v65.0: Job name input maps securely to the native audit PDF stream target
-    pdf_b = create_calculation_pdf(h_tot_c, final_labour_pool_sum, final_waiver_sum, final_cartage_sum, grand_total_calc, weeks, cleaned_pdf_items, structural_math_dict, job_name_input)
+    pdf_b = create_calculation_pdf(h_tot_c, final_labour_pool_sum, final_waiver_sum, final_cartage_sum, grand_total_calc, weeks, cleaned_pdf_items, structural_math_dict, st.session_state.status, job_name_input)
     action_col_1.download_button("📥 DOWNLOAD DETAILED AUDIT PDF", pdf_b, file_name=f"{job_name_input.replace(' ', '_')}_Analysis.pdf", mime="application/pdf", use_container_width=True)
 
     excel_df = struct_db.copy()
@@ -506,4 +557,4 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     except:
         excel_data_bytes, ext, mt = excel_df.to_csv(index=False).encode('utf-8'), "csv", "text/csv"
 
-    action_col_2.download_button(label="📊 DOWNLOAD ACTIVE DATA BACKUP", data=excel_data_bytes, file_name="Louis_Current_Database_Template.xlsx", mime=mt, use_container_width=True)
+    action_col_2.download_button(label="📊 DOWNLOAD NATIVE DATA ARCHIVE", data=excel_data_bytes, file_name="Louis_Current_Database_Template.xlsx", mime=mt, use_container_width=True)
