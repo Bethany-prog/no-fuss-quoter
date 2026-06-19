@@ -21,7 +21,7 @@ NATIVE_STRUCTURES = [
     {"Configuration": "3m x 3m Hi Tops", "Type": "Marquee", "Hire Unit Rate": 198.45, "Labour Total": 350.00, "Total Weight (kg)": 480.0, "Total Number of weights": 16.0, "Weight Size (KG)": 30.0, "Cost per weight": 6.60, "Labour Per Weight": 1.65},
     {"Configuration": "3m x 3m Shade Canopy", "Type": "Marquee", "Hire Unit Rate": 198.45, "Labour Total": 350.00, "Total Weight (kg)": 480.0, "Total Number of weights": 16.0, "Weight Size (KG)": 30.0, "Cost per weight": 6.60, "Labour Per Weight": 1.65},
     {"Configuration": "3m x 6m Shade Canopy", "Type": "Marquee", "Hire Unit Rate": 396.90, "Labour Total": 350.00, "Total Weight (kg)": 720.0, "Total Number of weights": 24.0, "Weight Size (KG)": 30.0, "Cost per weight": 6.60, "Labour Per Weight": 1.65},
-    {"Configuration": "4m x 3m", "Type": "Structure", "Hire Unit Rate": 276.00, "Labour Total": 350.00, "Total Weight (kg)": 480.0, "Total Number of weights": 16.0, "Weight Size (KG)": 30.0, "Cost per weight": 6.60, "Labour Per Weight": 1.65},
+    {"Configuration": "4m x 3m", "Type": "Structure", "Hire Unit Rate": 276.00, "Labour Total": 350.00, "Total Weight (kg)": 480.0, "Total Number of weights": 24.0, "Weight Size (KG)": 30.0, "Cost per weight": 6.60, "Labour Per Weight": 1.65},
     {"Configuration": "4m x 6m", "Type": "Structure", "Hire Unit Rate": 436.80, "Labour Total": 350.00, "Total Weight (kg)": 720.0, "Total Number of weights": 36.0, "Weight Size (KG)": 30.0, "Cost per weight": 6.60, "Labour Per Weight": 1.65},
     {"Configuration": "4m x 9m", "Type": "Structure", "Hire Unit Rate": 655.20, "Labour Total": 350.00, "Total Weight (kg)": 1120.0, "Total Number of weights": 48.0, "Weight Size (KG)": 30.0, "Cost per weight": 6.60, "Labour Per Weight": 1.65},
     {"Configuration": "4m x 12m", "Type": "Structure", "Hire Unit Rate": 873.60, "Labour Total": 350.00, "Total Weight (kg)": 1500.0, "Total Number of weights": 60.0, "Weight Size (KG)": 30.0, "Cost per weight": 6.60, "Labour Per Weight": 1.65},
@@ -47,14 +47,14 @@ NATIVE_STRUCTURES = [
     {"Configuration": "15m x 20m", "Type": "Structure", "Hire Unit Rate": 4635.00, "Labour Total": 1854.00, "Total Weight (kg)": 12000.0, "Total Number of weights": 10.0, "Weight Size (KG)": 1200.0, "Cost per weight": 88.20, "Labour Per Weight": 22.05},
     {"Configuration": "15m x 25m", "Type": "Structure", "Hire Unit Rate": 5793.75, "Labour Total": 2317.50, "Total Weight (kg)": 14400.0, "Total Number of weights": 12.0, "Weight Size (KG)": 1200.0, "Cost per weight": 88.20, "Labour Per Weight": 22.05},
     {"Configuration": "15m x 30m", "Type": "Structure", "Hire Unit Rate": 6952.50, "Labour Total": 2781.00, "Total Weight (kg)": 16000.0, "Total Number of weights": 14.0, "Weight Size (KG)": 1200.0, "Cost per weight": 88.20, "Labour Per Weight": 22.05},
-    {"Configuration": "20m x 5m", "Type": "Structure", "Hire Unit Rate": 2300.00, "Labour Total": 1265.00, "Total Weight (kg)": 6000.0, "Total Number of weights": 28.0, "Weight Size (KG)": 88.20, "Cost per weight": 88.20, "Labour Per Weight": 22.05},
-    {"Configuration": "20m x 10m", "Type": "Structure", "Hire Unit Rate": 3990.00, "Labour Total": 1596.00, "Total Weight (kg)": 8000.0, "Total Number of weights": 32.0, "Weight Size (KG)": 88.20, "Cost per weight": 88.20, "Labour Per Weight": 22.05},
-    {"Configuration": "20m x 15m", "Type": "Structure", "Hire Unit Rate": 5985.00, "Labour Total": 2394.00, "Total Weight (kg)": 10000.0, "Total Number of weights": 36.0, "Weight Size (KG)": 88.20, "Cost per weight": 88.20, "Labour Per Weight": 22.05},
-    {"Configuration": "20m x 20m", "Type": "Structure", "Hire Unit Rate": 7980.00, "Labour Total": 3192.00, "Total Weight (kg)": 12000.0, "Total Number of weights": 40.0, "Weight Size (KG)": 88.20, "Cost per weight": 88.20, "Labour Per Weight": 22.05},
-    {"Configuration": "20m x 25m", "Type": "Structure", "Hire Unit Rate": 9975.00, "Labour Total": 3990.00, "Total Weight (kg)": 14000.0, "Total Number of weights": 44.0, "Weight Size (KG)": 88.20, "Cost per weight": 88.20, "Labour Per Weight": 22.05},
-    {"Configuration": "20m x 30m", "Type": "Structure", "Hire Unit Rate": 11970.00, "Labour Total": 4788.00, "Total Weight (kg)": 16000.0, "Total Number of weights": 48.0, "Weight Size (KG)": 88.20, "Cost per weight": 88.20, "Labour Per Weight": 22.05},
-    {"Configuration": "20m x 35m", "Type": "Structure", "Hire Unit Rate": 13965.00, "Labour Total": 5586.00, "Total Weight (kg)": 18000.0, "Total Number of weights": 52.0, "Weight Size (KG)": 88.20, "Cost per weight": 88.20, "Labour Per Weight": 22.05},
-    {"Configuration": "20m x 40m", "Type": "Structure", "Hire Unit Rate": 15960.00, "Labour Total": 6384.00, "Total Weight (kg)": 20000.0, "Total Number of weights": 56.0, "Weight Size (KG)": 88.20, "Cost per weight": 88.20, "Labour Per Weight": 22.05}
+    {"Configuration": "20m x 5m", "Type": "Structure", "Hire Unit Rate": 2300.00, "Labour Total": 1265.00, "Total Weight (kg)": 6000.0, "Total Number of weights": 28.0, "Weight Size (KG)": 1200.0, "Cost per weight": 88.20, "Labour Per Weight": 22.05},
+    {"Configuration": "20m x 10m", "Type": "Structure", "Hire Unit Rate": 3990.00, "Labour Total": 1596.00, "Total Weight (kg)": 8000.0, "Total Number of weights": 32.0, "Weight Size (KG)": 1200.0, "Cost per weight": 88.20, "Labour Per Weight": 22.05},
+    {"Configuration": "20m x 15m", "Type": "Structure", "Hire Unit Rate": 5985.00, "Labour Total": 2394.00, "Total Weight (kg)": 10000.0, "Total Number of weights": 36.0, "Weight Size (KG)": 1200.0, "Cost per weight": 88.20, "Labour Per Weight": 22.05},
+    {"Configuration": "20m x 20m", "Type": "Structure", "Hire Unit Rate": 7980.00, "Labour Total": 3192.00, "Total Weight (kg)": 12000.0, "Total Number of weights": 40.0, "Weight Size (KG)": 1200.0, "Cost per weight": 88.20, "Labour Per Weight": 22.05},
+    {"Configuration": "20m x 25m", "Type": "Structure", "Hire Unit Rate": 9975.00, "Labour Total": 3990.00, "Total Weight (kg)": 14000.0, "Total Number of weights": 44.0, "Weight Size (KG)": 1200.0, "Cost per weight": 88.20, "Labour Per Weight": 22.05},
+    {"Configuration": "20m x 30m", "Type": "Structure", "Hire Unit Rate": 11970.00, "Labour Total": 4788.00, "Total Weight (kg)": 16000.0, "Total Number of weights": 48.0, "Weight Size (KG)": 1200.0, "Cost per weight": 88.20, "Labour Per Weight": 22.05},
+    {"Configuration": "20m x 35m", "Type": "Structure", "Hire Unit Rate": 13965.00, "Labour Total": 5586.00, "Total Weight (kg)": 18000.0, "Total Number of weights": 52.0, "Weight Size (KG)": 1200.0, "Cost per weight": 88.20, "Labour Per Weight": 22.05},
+    {"Configuration": "20m x 40m", "Type": "Structure", "Hire Unit Rate": 15960.00, "Labour Total": 6384.00, "Total Weight (kg)": 20000.0, "Total Number of weights": 56.0, "Weight Size (KG)": 1200.0, "Cost per weight": 88.20, "Labour Per Weight": 22.05}
 ]
 
 NATIVE_GRANDSTANDS = [
@@ -214,7 +214,7 @@ if 'saved_waiver_mode' not in st.session_state: st.session_state.saved_waiver_mo
 if 'overrides_dict' not in st.session_state: st.session_state.overrides_dict = {}
 
 # ==============================================================================
-# 6. GLOBAL BASE CONTROLS MOUNT (UPGRADED JOB FIELD HEADER)
+# 6. GLOBAL BASE CONTROLS MOUNT
 # ==============================================================================
 job_name_input = st.text_input("📝 Active Project / Job Name Reference", value="New Project Estimate", placeholder="Type reference label name...")
 
@@ -285,10 +285,11 @@ if selected_cat == "marquees":
                 st.session_state.df = pd.concat([st.session_state.df, new_df], ignore_index=True)
                 
                 if anch_type == "Weighted":
-                    num_weights = get_item_property(target_item, "Total Number of weights ")
-                    w_size = get_item_property(target_item, "Weight Size (KG) ")
-                    w_cost = get_item_property(target_item, "Cost per weight ")
-                    w_lab = get_item_property(target_item, "Labour Per Weight ")
+                    # FIXED: Matched directly to exact embedded list naming targets
+                    num_weights = get_item_property(target_item, "Total Number of weights")
+                    w_size = get_item_property(target_item, "Weight Size (KG)")
+                    w_cost = get_item_property(target_item, "Cost per weight")
+                    w_lab = get_item_property(target_item, "Labour Per Weight")
                     
                     calc_w = int(num_weights * qty_input)
                     weight_df = pd.DataFrame([{
@@ -421,7 +422,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
             if row["Is_Marquee"]:
                 for w_idx, w_row in st.session_state.df.iterrows():
                     if "Weights" in w_row["Product"]:
-                        num_weights_factor = get_item_property(row["Product"], "Total Number of weights ")
+                        num_weights_factor = get_item_property(row["Product"], "Total Number of weights")
                         st.session_state.df.at[w_idx, "Qty"] = int(num_weights_factor * new_qty)
             st.rerun()
             
@@ -539,7 +540,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     structural_math_dict["DAMAGE WAIVER"].append(f"${h_tot_c:,.2f} total product hire cost x 7% = ${final_waiver_sum:,.2f}")
 
 # ==============================================================================
-# 10. DOWNLOAD ZONE (INTEGRATED JOB NAME VARIABLE REF TO PDF ARGS MATRIX)
+# 10. DOWNLOAD ZONE
 # ==============================================================================
     st.markdown("")  
     action_col_1, action_col_2 = st.columns(2)
