@@ -57,14 +57,14 @@ NATIVE_STRUCTURES = [
 ]
 
 NATIVE_GRANDSTANDS = [
-   {"Low": 0, "High": 40, "Total": 2000.0},
-    {"Low": 41, "High": 100, "Total": 3300.0},
-    {"Low": 101, "High": 149, "Total": 4840.0},
-    {"Low": 150, "High": 199, "Total": 6600.0},
-    {"Low": 200, "High": 249, "Total": 7700.0},
-    {"Low": 250, "High": 299, "Total": 10560.0},
-    {"Low": 300, "High": 349, "Total": 11880.0},
-    {"Low": 350, "High": 400, "Total": 13200.0}
+    {"Low": 0, "High": 40, "Total": 880.0},
+    {"Low": 41, "High": 100, "Total": 1650.0},
+    {"Low": 101, "High": 149, "Total": 2420.0},
+    {"Low": 150, "High": 199, "Total": 3300.0},
+    {"Low": 200, "High": 249, "Total": 3850.0},
+    {"Low": 250, "High": 299, "Total": 5280.0},
+    {"Low": 300, "High": 349, "Total": 5940.0},
+    {"Low": 350, "High": 400, "Total": 6600.0}
 ]
 
 NATIVE_FLOORING = [
@@ -93,17 +93,22 @@ def matches_smart_query(config_name, query_str):
         return True
     c_clean = str(config_name).lower().replace(" ", "")
     q_clean = str(query_str).lower().replace(" ", "")
+    
     if q_clean in c_clean:
         return True
+        
     c_norm = re.sub(r'(\d+)m?x(\d+)m?', r'\1x\2', c_clean)
     q_norm = re.sub(r'(\d+)m?x(\d+)m?', r'\1x\2', q_clean)
+    
     if q_norm in c_norm:
         return True
+        
     q_digits = re.findall(r'\d+', q_clean)
     c_digits = re.findall(r'\d+', c_clean)
     if len(q_digits) >= 2 and len(c_digits) >= 2:
         if q_digits[0] == c_digits[0] and q_digits[1] == c_digits[1]:
             return True
+            
     return False
 
 def get_item_property(config_name, column_target, fallback_val=0.0):
@@ -119,6 +124,7 @@ def get_item_property(config_name, column_target, fallback_val=0.0):
 def calculate_dynamic_grandstand_rate(seats_input):
     if seats_input <= 0:
         return 0.0, "0 seats allocation"
+        
     for idx, row in grandstand_db.iterrows():
         try:
             low = int(row["Low"])
@@ -128,10 +134,11 @@ def calculate_dynamic_grandstand_rate(seats_input):
                 per_seat_rate = total_labour_cost / seats_input
                 return round(per_seat_rate, 2), f"Seating Matrix Flat Booking: ${total_labour_cost:,.2f} / {seats_input} seats"
         except: pass
+            
     return 19.19, f"Standard base per-seat fallback calculation applied"
 
 # ==============================================================================
-# 3. PDF AUDIT ENGINE 
+# 3. PDF AUDIT ENGINE
 # ==============================================================================
 def clean_text(txt):
     if not txt: return ""
@@ -141,13 +148,15 @@ def clean_text(txt):
         cleaned = cleaned.replace(char, rep)
     return cleaned.encode('latin-1', 'replace').decode('latin-1')
 
-def create_calculation_pdf(subtotal, labour, waiver, cartage, grand, weeks, item_items_list, structural_math_dict, status, job_name):
+# FIXED UPGRADE v71.0: Removed all remnants of the old "status" variable from the function signature and header print
+def create_calculation_pdf(subtotal, labour, waiver, cartage, grand, weeks, item_items_list, structural_math_dict, job_name):
     pdf = FPDF()
     pdf.add_page()
+    
     pdf.set_font("Arial", "B", 16)
     pdf.cell(0, 10, clean_text("Louis Quoting Tool - Detailed Calculation Audit"), ln=True, align="C")
     pdf.set_font("Arial", "B", 10)
-    pdf.cell(0, 7, clean_text(f"JOB REF NAME: {job_name.upper()} | STATUS: {status.upper()} | DURATION: {weeks} Week(s)"), ln=True, align="C")
+    pdf.cell(0, 7, clean_text(f"JOB REF NAME: {job_name.upper()} | DURATION: {weeks} Week(s)"), ln=True, align="C")
     pdf.ln(8)
 
     pdf.set_fill_color(26, 29, 45); pdf.set_text_color(255, 255, 255); pdf.set_font("Arial", "B", 11)
@@ -328,7 +337,6 @@ elif selected_cat == "flooring":
             f_lab = float(match_f.iloc[0]["Labour"])
             f_kg = float(match_f.iloc[0]["Weight"])
             
-            # FIXED UPGRADE v70.0: Correct SQM rate preservation logic for physical footprint matching
             if "supa" in target_item.lower() and "edging" not in target_item.lower():
                 num_sheets_needed = math.ceil(cov_input / 3.0)
                 actual_supplied_sqm = num_sheets_needed * 3.0  
@@ -546,13 +554,14 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     structural_math_dict["DAMAGE WAIVER"].append(f"${h_tot_c:,.2f} total product hire cost x 7% = ${final_waiver_sum:,.2f}")
 
 # ==============================================================================
-# 10. DOWNLOAD ZONE
+# 10. DOWNLOAD ZONE (FIXED v71.0)
 # ==============================================================================
     st.markdown("")  
     action_col_1, action_col_2 = st.columns(2)
             
+    # FIXED: Function definition completely aligns with execution mapping
     cleaned_pdf_items = st.session_state.df.to_dict('records')
-    pdf_b = create_calculation_pdf(h_tot_c, final_labour_pool_sum, final_waiver_sum, final_cartage_sum, grand_total_calc, weeks, cleaned_pdf_items, structural_math_dict, st.session_state.status, job_name_input)
+    pdf_b = create_calculation_pdf(h_tot_c, final_labour_pool_sum, final_waiver_sum, final_cartage_sum, grand_total_calc, weeks, cleaned_pdf_items, structural_math_dict, job_name_input)
     action_col_1.download_button("📥 DOWNLOAD DETAILED AUDIT PDF", pdf_b, file_name=f"{job_name_input.replace(' ', '_')}_Analysis.pdf", mime="application/pdf", use_container_width=True)
 
     excel_df = struct_db.copy()
