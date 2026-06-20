@@ -57,14 +57,14 @@ NATIVE_STRUCTURES = [
 ]
 
 NATIVE_GRANDSTANDS = [
-    {"Low": 0, "High": 40, "Total": 880.0},
-    {"Low": 41, "High": 100, "Total": 1650.0},
-    {"Low": 101, "High": 149, "Total": 2420.0},
-    {"Low": 150, "High": 199, "Total": 3300.0},
-    {"Low": 200, "High": 249, "Total": 3850.0},
-    {"Low": 250, "High": 299, "Total": 5280.0},
-    {"Low": 300, "High": 349, "Total": 5940.0},
-    {"Low": 350, "High": 400, "Total": 6600.0}
+    {"Low": 0, "High": 40, "Total": 2000.0},
+    {"Low": 41, "High": 100, "Total": 3300.0},
+    {"Low": 101, "High": 149, "Total": 4840.0},
+    {"Low": 150, "High": 199, "Total": 6600.0},
+    {"Low": 200, "High": 249, "Total": 7700.0},
+    {"Low": 250, "High": 299, "Total": 10560.0},
+    {"Low": 300, "High": 349, "Total": 11880.0},
+    {"Low": 350, "High": 400, "Total": 13200.0}
 ]
 
 NATIVE_FLOORING = [
