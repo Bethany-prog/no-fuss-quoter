@@ -148,7 +148,6 @@ def clean_text(txt):
         cleaned = cleaned.replace(char, rep)
     return cleaned.encode('latin-1', 'replace').decode('latin-1')
 
-# FIXED UPGRADE v71.0: Removed all remnants of the old "status" variable from the function signature and header print
 def create_calculation_pdf(subtotal, labour, waiver, cartage, grand, weeks, item_items_list, structural_math_dict, job_name):
     pdf = FPDF()
     pdf.add_page()
@@ -337,24 +336,38 @@ elif selected_cat == "flooring":
             f_lab = float(match_f.iloc[0]["Labour"])
             f_kg = float(match_f.iloc[0]["Weight"])
             
+            # FIXED UPGRADE v70.0: Precision Sheet-based Pricing Formula for Supa-Trac
             if "supa" in target_item.lower() and "edging" not in target_item.lower():
                 num_sheets_needed = math.ceil(cov_input / 3.0)
                 actual_supplied_sqm = num_sheets_needed * 3.0  
                 
-                final_billing_qty = actual_supplied_sqm
-                final_item_label_name = f"{target_item} [Rounded to {num_sheets_needed:,.0f} Sheets]"
-                lab_desc = f"Supa-Trac Matrix: {num_sheets_needed:,.0f} Sheets ({final_billing_qty:,.0f} SQM total) x ${f_lab:.2f}"
+                # Charge math: (Supplied SQM * Rate) / Number of Sheets
+                per_sheet_1wk = (actual_supplied_sqm * f_rate) / num_sheets_needed
+                per_sheet_block = (actual_supplied_sqm * f_block) / num_sheets_needed
+                per_sheet_lab = (actual_supplied_sqm * f_lab) / num_sheets_needed
+                per_sheet_kg = (actual_supplied_sqm * f_kg) / num_sheets_needed
+                
+                final_billing_qty = num_sheets_needed
+                final_item_label_name = f"{target_item} (3 SQM Sheets)"
+                lab_desc = f"{num_sheets_needed:,.0f} Sheets (supplying {actual_supplied_sqm:,.2f} SQM) x ${per_sheet_lab:.2f}/sheet"
+                
+                new_f_df = pd.DataFrame([{
+                    "Qty": final_billing_qty, "Product": final_item_label_name, "Unit Rate": per_sheet_1wk, "Min_Lab": 0, "Raw_Lab": final_billing_qty * per_sheet_lab,
+                    "Lab_Math": lab_desc, "KG": final_billing_qty * per_sheet_kg, "Is_Marquee": False,
+                    "Discount": 0.0, "Lab_Per_Unit": 0, "Base_Hire": per_sheet_1wk, "Anchoring": "", "Override_Rate": 0.0, "Is_Flooring": True,
+                    "Base_1Wk_Rate": per_sheet_1wk, "Base_Block_Rate": per_sheet_block
+                }])
             else:
                 final_billing_qty = cov_input
                 final_item_label_name = target_item
                 lab_desc = f"{target_item}: {cov_input:,.0f} SQM area x ${f_lab:.2f}"
                 
-            new_f_df = pd.DataFrame([{
-                "Qty": final_billing_qty, "Product": final_item_label_name, "Unit Rate": f_rate, "Min_Lab": 0, "Raw_Lab": final_billing_qty * f_lab,
-                "Lab_Math": lab_desc, "KG": final_billing_qty * f_kg, "Is_Marquee": False,
-                "Discount": 0.0, "Lab_Per_Unit": 0, "Base_Hire": f_rate, "Anchoring": "", "Override_Rate": 0.0, "Is_Flooring": True,
-                "Base_1Wk_Rate": f_rate, "Base_Block_Rate": f_block
-            }])
+                new_f_df = pd.DataFrame([{
+                    "Qty": final_billing_qty, "Product": final_item_label_name, "Unit Rate": f_rate, "Min_Lab": 0, "Raw_Lab": final_billing_qty * f_lab,
+                    "Lab_Math": lab_desc, "KG": final_billing_qty * f_kg, "Is_Marquee": False,
+                    "Discount": 0.0, "Lab_Per_Unit": 0, "Base_Hire": f_rate, "Anchoring": "", "Override_Rate": 0.0, "Is_Flooring": True,
+                    "Base_1Wk_Rate": f_rate, "Base_Block_Rate": f_block
+                }])
             st.session_state.df = pd.concat([st.session_state.df, new_f_df], ignore_index=True)
             st.rerun()
 
@@ -546,31 +559,28 @@ if st.session_state.df is not None and not st.session_state.df.empty:
             lbl_key = f"lab_ovr_{row['Product']}_{idx}"
             saved_val = st.session_state.overrides_dict.get(lbl_key, -1.0)
             l_val = saved_val if saved_val >= 0 else float(row['Raw_Lab'])
-            structural_math_dict["LABOUR"].append(f"{row['Product']} = ${l_val:,.2f}")
+            # FIXED UPGRADE v70.0: Appends the detailed math equation hints directly to the exported PDF document lines
+            math_hint = row.get("Lab_Math", "")
+            if math_hint:
+                structural_math_dict["LABOUR"].append(f"{row['Product']} | {math_hint} = ${l_val:,.2f}")
+            else:
+                structural_math_dict["LABOUR"].append(f"{row['Product']} = ${l_val:,.2f}")
+                
     if final_labour_pool_sum == 350.00 and raw_lab_pool < 350.00:
         structural_math_dict["LABOUR"].append("Minimum Floor Buffer Adjustment top-up applied")
     structural_math_dict["LABOUR"].append(f"Total Applied = ${final_labour_pool_sum:,.2f}")
     structural_math_dict["LOGISTICS"].append(f"{trks} Trucks x {st.session_state.km}km x 4 x $3.50 = ${final_cartage_sum:,.2f}")
-    structural_math_dict["DAMAGE WAIVER"].append(f"${h_tot_c:,.2f} total product hire cost x 7% = ${final_waiver_sum:,.2f}")
+    # FIXED UPGRADE v70.0: Damage Waiver phrasing simplified cleanly for the PDF output block
+    structural_math_dict["DAMAGE WAIVER"].append(f"${h_tot_c:,.2f} x 7% = ${final_waiver_sum:,.2f}")
 
 # ==============================================================================
-# 10. DOWNLOAD ZONE (FIXED v71.0)
+# 10. DOWNLOAD ZONE
 # ==============================================================================
     st.markdown("")  
     action_col_1, action_col_2 = st.columns(2)
             
-    # FIXED: Function definition completely aligns with execution mapping
     cleaned_pdf_items = st.session_state.df.to_dict('records')
     pdf_b = create_calculation_pdf(h_tot_c, final_labour_pool_sum, final_waiver_sum, final_cartage_sum, grand_total_calc, weeks, cleaned_pdf_items, structural_math_dict, job_name_input)
     action_col_1.download_button("📥 DOWNLOAD DETAILED AUDIT PDF", pdf_b, file_name=f"{job_name_input.replace(' ', '_')}_Analysis.pdf", mime="application/pdf", use_container_width=True)
 
-    excel_df = struct_db.copy()
-    try:
-        excel_buffer = io.BytesIO()
-        with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
-            excel_df.to_excel(writer, index=False, sheet_name='Database_Backup')
-        excel_data_bytes, ext, mt = excel_buffer.getvalue(), "xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    except:
-        excel_data_bytes, ext, mt = excel_df.to_csv(index=False).encode('utf-8'), "csv", "text/csv"
-
-    action_col_2.download_button(label="📊 DOWNLOAD NATIVE DATA ARCHIVE", data=excel_data_bytes, file_name="Louis_Current_Database_Template.xlsx", mime=mt, use_container_width=True)
+    excel
