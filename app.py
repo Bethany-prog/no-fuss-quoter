@@ -56,15 +56,16 @@ NATIVE_STRUCTURES = [
     {"Configuration": "20m x 40m", "Type": "Structure", "Hire Unit Rate": 15960.00, "Labour Total": 6384.00, "Total Weight (kg)": 20000.0, "Total Number of weights": 56.0, "Weight Size (KG)": 1200.0, "Cost per weight": 88.20, "Labour Per Weight": 22.05}
 ]
 
+# UPGRADED v73.0: New Updated Grandstands Matrix
 NATIVE_GRANDSTANDS = [
-    {"Low": 0, "High": 40, "Total": 880.0},
-    {"Low": 41, "High": 100, "Total": 1650.0},
-    {"Low": 101, "High": 149, "Total": 2420.0},
-    {"Low": 150, "High": 199, "Total": 3300.0},
-    {"Low": 200, "High": 249, "Total": 3850.0},
-    {"Low": 250, "High": 299, "Total": 5280.0},
-    {"Low": 300, "High": 349, "Total": 5940.0},
-    {"Low": 350, "High": 400, "Total": 6600.0}
+    {"Low": 0, "High": 40, "Total": 2000.0},
+    {"Low": 41, "High": 100, "Total": 3300.0},
+    {"Low": 101, "High": 149, "Total": 4840.0},
+    {"Low": 150, "High": 199, "Total": 6600.0},
+    {"Low": 200, "High": 249, "Total": 7700.0},
+    {"Low": 250, "High": 299, "Total": 10560.0},
+    {"Low": 300, "High": 349, "Total": 11880.0},
+    {"Low": 350, "High": 400, "Total": 13200.0}
 ]
 
 NATIVE_FLOORING = [
@@ -98,7 +99,7 @@ def matches_smart_query(config_name, query_str):
         return True
         
     c_norm = re.sub(r'(\d+)m?x(\d+)m?', r'\1x\2', c_clean)
-    q_norm = re.sub(r'(\d+)m?x(\d+)m?', r'\1x\2', q_clean)
+    q_norm = re.sub(r'(\d+)m?x(\d+)m?', r'\1x\2', q_norm)
     
     if q_norm in c_norm:
         return True
@@ -336,12 +337,10 @@ elif selected_cat == "flooring":
             f_lab = float(match_f.iloc[0]["Labour"])
             f_kg = float(match_f.iloc[0]["Weight"])
             
-            # FIXED UPGRADE v70.0: Precision Sheet-based Pricing Formula for Supa-Trac
             if "supa" in target_item.lower() and "edging" not in target_item.lower():
                 num_sheets_needed = math.ceil(cov_input / 3.0)
                 actual_supplied_sqm = num_sheets_needed * 3.0  
                 
-                # Charge math: (Supplied SQM * Rate) / Number of Sheets
                 per_sheet_1wk = (actual_supplied_sqm * f_rate) / num_sheets_needed
                 per_sheet_block = (actual_supplied_sqm * f_block) / num_sheets_needed
                 per_sheet_lab = (actual_supplied_sqm * f_lab) / num_sheets_needed
@@ -559,7 +558,6 @@ if st.session_state.df is not None and not st.session_state.df.empty:
             lbl_key = f"lab_ovr_{row['Product']}_{idx}"
             saved_val = st.session_state.overrides_dict.get(lbl_key, -1.0)
             l_val = saved_val if saved_val >= 0 else float(row['Raw_Lab'])
-            # FIXED UPGRADE v70.0: Appends the detailed math equation hints directly to the exported PDF document lines
             math_hint = row.get("Lab_Math", "")
             if math_hint:
                 structural_math_dict["LABOUR"].append(f"{row['Product']} | {math_hint} = ${l_val:,.2f}")
@@ -570,11 +568,10 @@ if st.session_state.df is not None and not st.session_state.df.empty:
         structural_math_dict["LABOUR"].append("Minimum Floor Buffer Adjustment top-up applied")
     structural_math_dict["LABOUR"].append(f"Total Applied = ${final_labour_pool_sum:,.2f}")
     structural_math_dict["LOGISTICS"].append(f"{trks} Trucks x {st.session_state.km}km x 4 x $3.50 = ${final_cartage_sum:,.2f}")
-    # FIXED UPGRADE v70.0: Damage Waiver phrasing simplified cleanly for the PDF output block
     structural_math_dict["DAMAGE WAIVER"].append(f"${h_tot_c:,.2f} x 7% = ${final_waiver_sum:,.2f}")
 
 # ==============================================================================
-# 10. DOWNLOAD ZONE
+# 10. DOWNLOAD ZONE (FIXED PDF TARGET MAP ARGUMENTS)
 # ==============================================================================
     st.markdown("")  
     action_col_1, action_col_2 = st.columns(2)
@@ -583,4 +580,13 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     pdf_b = create_calculation_pdf(h_tot_c, final_labour_pool_sum, final_waiver_sum, final_cartage_sum, grand_total_calc, weeks, cleaned_pdf_items, structural_math_dict, job_name_input)
     action_col_1.download_button("📥 DOWNLOAD DETAILED AUDIT PDF", pdf_b, file_name=f"{job_name_input.replace(' ', '_')}_Analysis.pdf", mime="application/pdf", use_container_width=True)
 
-    excel
+    excel_df = struct_db.copy()
+    try:
+        excel_buffer = io.BytesIO()
+        with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
+            excel_df.to_excel(writer, index=False, sheet_name='Database_Backup')
+        excel_data_bytes, ext, mt = excel_buffer.getvalue(), "xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    except:
+        excel_data_bytes, ext, mt = excel_df.to_csv(index=False).encode('utf-8'), "csv", "text/csv"
+
+    action_col_2.download_button(label="📊 DOWNLOAD NATIVE DATA ARCHIVE", data=excel_data_bytes, file_name="Louis_Current_Database_Template.xlsx", mime=mt, use_container_width=True)
