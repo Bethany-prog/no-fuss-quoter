@@ -131,7 +131,7 @@ def calculate_dynamic_grandstand_rate(seats_input):
     return 19.19, f"Standard base per-seat fallback calculation applied"
 
 # ==============================================================================
-# 3. PDF AUDIT ENGINE (UPGRADED LINE RENDERER v74.0)
+# 3. PDF AUDIT ENGINE
 # ==============================================================================
 def clean_text(txt):
     if not txt: return ""
@@ -160,7 +160,7 @@ def create_calculation_pdf(subtotal, labour, waiver, cartage, grand, weeks, fina
     pdf.cell(col_w[1], 8, "Qty", 1, 0, "C", True)
     pdf.cell(col_w[2], 8, "Unit Rate Used", 1, 0, "R", True)
     pdf.cell(col_w[3], 8, "Disc %", 1, 0, "C", True)
-    pdf.cell(col_w[4], 8, "Hire Total", 1, 1, "R", True)  # Changed header text
+    pdf.cell(col_w[4], 8, "Hire Total", 1, 1, "R", True)
     
     pdf.set_text_color(0, 0, 0); pdf.set_font("Arial", "", 9)
     for item in final_pdf_items:
@@ -306,6 +306,7 @@ elif selected_cat == "flooring":
     target_item = st.selectbox("Select Flooring Type Options:", floor_options, key="floor_res")
     f_input_method = st.radio("Input Calculation Method", ["Enter Dimensions (Width x Length)", "Enter Total SQM Directly"], horizontal=True)
     
+    f_w_input = 0.0
     if f_input_method == "Enter Dimensions (Width x Length)":
         f_w_input = st.number_input("Width (m)", min_value=0.0, value=None, placeholder="Type width in meters...", key="f_width_cell")
         f_l_input = st.number_input("Length (m)", min_value=0.0, value=None, placeholder="Type length in meters...", key="f_length_cell")
@@ -330,6 +331,7 @@ elif selected_cat == "flooring":
                 num_sheets_needed = math.ceil(cov_input / 3.0)
                 actual_supplied_sqm = num_sheets_needed * 3.0  
                 
+                # FIXED UPGRADE v75.0: Calculate mathematically true "Per Sheet" rates 
                 per_sheet_1wk = (actual_supplied_sqm * f_rate) / num_sheets_needed
                 per_sheet_block = (actual_supplied_sqm * f_block) / num_sheets_needed
                 per_sheet_lab = (actual_supplied_sqm * f_lab) / num_sheets_needed
@@ -337,7 +339,7 @@ elif selected_cat == "flooring":
                 
                 final_billing_qty = num_sheets_needed
                 final_item_label_name = f"{target_item} (3 SQM Sheets)"
-                lab_desc = f"{num_sheets_needed:,.0f} Sheets (supplying {actual_supplied_sqm:,.2f} SQM) x ${per_sheet_lab:.2f}/sheet"
+                lab_desc = f"Supa-Trac Matrix: {num_sheets_needed:,.0f} Sheets (supplying {actual_supplied_sqm:,.2f} SQM) x ${per_sheet_lab:.2f}/sheet"
                 
                 new_f_df = pd.DataFrame([{
                     "Qty": final_billing_qty, "Product": final_item_label_name, "Unit Rate": per_sheet_1wk, "Min_Lab": 0, "Raw_Lab": final_billing_qty * per_sheet_lab,
@@ -345,6 +347,36 @@ elif selected_cat == "flooring":
                     "Discount": 0.0, "Lab_Per_Unit": 0, "Base_Hire": per_sheet_1wk, "Anchoring": "", "Override_Rate": 0.0, "Is_Flooring": True,
                     "Base_1Wk_Rate": per_sheet_1wk, "Base_Block_Rate": per_sheet_block
                 }])
+                st.session_state.df = pd.concat([st.session_state.df, new_f_df], ignore_index=True)
+                
+                # FIXED UPGRADE v75.0: Auto-Append Supa-Trac Front Edging based purely on provided physical Width matrix
+                if f_input_method == "Enter Dimensions (Width x Length)" and f_w_input and f_w_input > 0:
+                    match_e = flooring_db[flooring_db["Product Name"] == "Supa-Trac Edging"]
+                    if not match_e.empty:
+                        e_rate_per_m = float(match_e.iloc[0]["1-Week Rate"])
+                        e_block_per_m = float(match_e.iloc[0]["4-Week Block"])
+                        e_lab_per_m = float(match_e.iloc[0]["Labour"])
+                        e_kg_per_m = float(match_e.iloc[0]["Weight"])
+                        
+                        num_e_pieces = math.ceil(f_w_input / 0.22)
+                        e_actual_lm = num_e_pieces * 0.22
+                        
+                        per_pce_1wk = e_rate_per_m * 0.22
+                        per_pce_block = e_block_per_m * 0.22
+                        per_pce_lab = e_lab_per_m * 0.22
+                        per_pce_kg = e_kg_per_m * 0.22
+                        
+                        e_label = f"Supa-Trac Edging ({num_e_pieces:,.0f} Pieces)"
+                        e_desc = f"Front Width Edging: {num_e_pieces:,.0f} Pieces ({e_actual_lm:,.2f} L/M) x ${e_rate_per_m:.2f}/m"
+                        
+                        e_df = pd.DataFrame([{
+                            "Qty": num_e_pieces, "Product": e_label, "Unit Rate": per_pce_1wk, "Min_Lab": 0, "Raw_Lab": num_e_pieces * per_pce_lab,
+                            "Lab_Math": e_desc, "KG": num_e_pieces * per_pce_kg, "Is_Marquee": False,
+                            "Discount": 0.0, "Lab_Per_Unit": 0, "Base_Hire": per_pce_1wk, "Anchoring": "", "Override_Rate": 0.0, "Is_Flooring": True,
+                            "Base_1Wk_Rate": per_pce_1wk, "Base_Block_Rate": per_pce_block
+                        }])
+                        st.session_state.df = pd.concat([st.session_state.df, e_df], ignore_index=True)
+
             else:
                 final_billing_qty = cov_input
                 final_item_label_name = target_item
@@ -356,7 +388,7 @@ elif selected_cat == "flooring":
                     "Discount": 0.0, "Lab_Per_Unit": 0, "Base_Hire": f_rate, "Anchoring": "", "Override_Rate": 0.0, "Is_Flooring": True,
                     "Base_1Wk_Rate": f_rate, "Base_Block_Rate": f_block
                 }])
-            st.session_state.df = pd.concat([st.session_state.df, new_f_df], ignore_index=True)
+                st.session_state.df = pd.concat([st.session_state.df, new_f_df], ignore_index=True)
             st.rerun()
 
 elif selected_cat == "grandstands":
@@ -402,7 +434,6 @@ if st.session_state.df is not None and not st.session_state.df.empty:
         qty, dm = row["Qty"], (1 - (row["Discount"]/100))
         total_kg += row["KG"]
         
-        # FIXED UPGRADE v74.0: Calculates the true total duration unit rate for UI and PDF alignment
         if override > 0:
             term_unit_rate = override
         elif row.get("Is_Flooring"):
@@ -424,7 +455,6 @@ if st.session_state.df is not None and not st.session_state.df.empty:
         prod_display = str(row['Product'])
         if row.get('Anchoring'): prod_display += f" ({row['Anchoring']})"
         
-        # Populates the cleaned items explicitly to transfer to PDF
         final_pdf_items.append({
             "Product": prod_display,
             "Qty": qty,
@@ -570,12 +600,11 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     structural_math_dict["DAMAGE WAIVER"].append(f"${h_tot_c:,.2f} x 7% = ${final_waiver_sum:,.2f}")
 
 # ==============================================================================
-# 10. DOWNLOAD ZONE 
+# 10. DOWNLOAD ZONE
 # ==============================================================================
     st.markdown("")  
     action_col_1, action_col_2 = st.columns(2)
             
-    # Submitting the dynamically matched live total variables exactly to PDF output
     pdf_b = create_calculation_pdf(h_tot_c, final_labour_pool_sum, final_waiver_sum, final_cartage_sum, grand_total_calc, weeks, final_pdf_items, structural_math_dict, job_name_input)
     action_col_1.download_button("📥 DOWNLOAD DETAILED AUDIT PDF", pdf_b, file_name=f"{job_name_input.replace(' ', '_')}_Analysis.pdf", mime="application/pdf", use_container_width=True)
 
