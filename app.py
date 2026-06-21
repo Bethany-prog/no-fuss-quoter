@@ -56,7 +56,6 @@ NATIVE_STRUCTURES = [
     {"Configuration": "20m x 40m", "Type": "Structure", "Hire Unit Rate": 15960.00, "Labour Total": 6384.00, "Total Weight (kg)": 20000.0, "Total Number of weights": 56.0, "Weight Size (KG)": 1200.0, "Cost per weight": 88.20, "Labour Per Weight": 22.05}
 ]
 
-# UPGRADED v73.0: New Updated Grandstands Matrix
 NATIVE_GRANDSTANDS = [
     {"Low": 0, "High": 40, "Total": 2000.0},
     {"Low": 41, "High": 100, "Total": 3300.0},
@@ -94,22 +93,17 @@ def matches_smart_query(config_name, query_str):
         return True
     c_clean = str(config_name).lower().replace(" ", "")
     q_clean = str(query_str).lower().replace(" ", "")
-    
     if q_clean in c_clean:
         return True
-        
     c_norm = re.sub(r'(\d+)m?x(\d+)m?', r'\1x\2', c_clean)
-    q_norm = re.sub(r'(\d+)m?x(\d+)m?', r'\1x\2', q_norm)
-    
+    q_norm = re.sub(r'(\d+)m?x(\d+)m?', r'\1x\2', q_clean)
     if q_norm in c_norm:
         return True
-        
     q_digits = re.findall(r'\d+', q_clean)
     c_digits = re.findall(r'\d+', c_clean)
     if len(q_digits) >= 2 and len(c_digits) >= 2:
         if q_digits[0] == c_digits[0] and q_digits[1] == c_digits[1]:
             return True
-            
     return False
 
 def get_item_property(config_name, column_target, fallback_val=0.0):
@@ -125,7 +119,6 @@ def get_item_property(config_name, column_target, fallback_val=0.0):
 def calculate_dynamic_grandstand_rate(seats_input):
     if seats_input <= 0:
         return 0.0, "0 seats allocation"
-        
     for idx, row in grandstand_db.iterrows():
         try:
             low = int(row["Low"])
@@ -135,11 +128,10 @@ def calculate_dynamic_grandstand_rate(seats_input):
                 per_seat_rate = total_labour_cost / seats_input
                 return round(per_seat_rate, 2), f"Seating Matrix Flat Booking: ${total_labour_cost:,.2f} / {seats_input} seats"
         except: pass
-            
     return 19.19, f"Standard base per-seat fallback calculation applied"
 
 # ==============================================================================
-# 3. PDF AUDIT ENGINE
+# 3. PDF AUDIT ENGINE (UPGRADED LINE RENDERER v74.0)
 # ==============================================================================
 def clean_text(txt):
     if not txt: return ""
@@ -149,7 +141,7 @@ def clean_text(txt):
         cleaned = cleaned.replace(char, rep)
     return cleaned.encode('latin-1', 'replace').decode('latin-1')
 
-def create_calculation_pdf(subtotal, labour, waiver, cartage, grand, weeks, item_items_list, structural_math_dict, job_name):
+def create_calculation_pdf(subtotal, labour, waiver, cartage, grand, weeks, final_pdf_items, structural_math_dict, job_name):
     pdf = FPDF()
     pdf.add_page()
     
@@ -168,18 +160,15 @@ def create_calculation_pdf(subtotal, labour, waiver, cartage, grand, weeks, item
     pdf.cell(col_w[1], 8, "Qty", 1, 0, "C", True)
     pdf.cell(col_w[2], 8, "Unit Rate Used", 1, 0, "R", True)
     pdf.cell(col_w[3], 8, "Disc %", 1, 0, "C", True)
-    pdf.cell(col_w[4], 8, "Weekly Total", 1, 1, "R", True)
+    pdf.cell(col_w[4], 8, "Hire Total", 1, 1, "R", True)  # Changed header text
     
     pdf.set_text_color(0, 0, 0); pdf.set_font("Arial", "", 9)
-    for item in item_items_list:
-        dm = (1 - (item.get('Discount', 0.0)/100))
-        display_unit_rate = item.get('Override_Rate', 0.0) if item.get('Override_Rate', 0.0) > 0 else item['Unit Rate']
-        w1_total = (item['Qty'] * display_unit_rate) * dm
-        pdf.cell(col_w[0], 8, clean_text(f" {item['Product']} (Wk 1 Base)"), 1, 0, "L")
+    for item in final_pdf_items:
+        pdf.cell(col_w[0], 8, clean_text(f" {item['Product']}"), 1, 0, "L")
         pdf.cell(col_w[1], 8, f"{item['Qty']:,.0f}", 1, 0, "C")
-        pdf.cell(col_w[2], 8, f"${display_unit_rate:,.2f}", 1, 0, "R")
-        pdf.cell(col_w[3], 8, f"{item.get('Discount', 0.0):.1f}%", 1, 0, "C")
-        pdf.cell(col_w[4], 8, f"${w1_total:,.2f}", 1, 1, "R")
+        pdf.cell(col_w[2], 8, f"${item['Unit Rate']:,.2f}", 1, 0, "R")
+        pdf.cell(col_w[3], 8, f"{item['Discount']:.1f}%", 1, 0, "C")
+        pdf.cell(col_w[4], 8, f"${item['Line Total']:,.2f}", 1, 1, "R")
 
     pdf.ln(5)
     categories = ["LABOUR", "LOGISTICS", "DAMAGE WAIVER"]
@@ -400,37 +389,49 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     h_col0, h_col1, h_col2, h_col3, h_col4, h_col4b, h_col5 = st.columns([0.4, 3.2, 1.0, 1.2, 1.2, 1.2, 1.4])
     h_col1.markdown("<div class='summary-hdr'>Item Description</div>", unsafe_allow_html=True)
     h_col2.markdown("<div class='summary-hdr'>Qty (Editable)</div>", unsafe_allow_html=True)
-    h_col3.markdown("<div class='summary-hdr'>Gross Unit</div>", unsafe_allow_html=True)
+    h_col3.markdown("<div class='summary-hdr'>Term Unit Rate</div>", unsafe_allow_html=True)
     h_col4.markdown("<div class='summary-hdr'>Disc %</div>", unsafe_allow_html=True)
     h_col4b.markdown("<div class='summary-hdr'>Override Rate</div>", unsafe_allow_html=True)
     h_col5.markdown("<div class='summary-hdr' style='text-align: right;'>Subtotal</div>", unsafe_allow_html=True)
 
-    h_tot_c, h_wk1_gear, total_kg = 0.0, 0.0, 0.0
+    h_tot_c, total_kg = 0.0, 0.0
+    final_pdf_items = []
+    
     for idx, row in st.session_state.df.iterrows():
         override = row.get("Override_Rate", 0.0)
         qty, dm = row["Qty"], (1 - (row["Discount"]/100))
         total_kg += row["KG"]
         
+        # FIXED UPGRADE v74.0: Calculates the true total duration unit rate for UI and PDF alignment
         if override > 0:
-            active_base_rate = override
-            wk1_t = (qty * override) * dm
+            term_unit_rate = override
         elif row.get("Is_Flooring"):
             if weeks >= 4 and row.get("Base_Block_Rate", 0) > 0:
-                calculated_weekly_rate = row["Base_Block_Rate"] / 4.0
-                active_base_rate = calculated_weekly_rate
-                wk1_t = (qty * calculated_weekly_rate * weeks) * dm
+                blocks = math.ceil(weeks / 4.0)
+                term_unit_rate = row["Base_Block_Rate"] * blocks
             else:
-                active_base_rate = row["Base_1Wk_Rate"]
-                wk1_t = (qty * row["Base_1Wk_Rate"] * weeks) * dm
+                term_unit_rate = row["Base_1Wk_Rate"] * weeks
         else:
-            active_base_rate = row["Unit Rate"]
-            if row["Is_Marquee"] and weeks > 1:
-                wk1_t = (qty * row["Unit Rate"] + (qty * (row["Unit Rate"] * 0.5) * (weeks - 1))) * dm
+            base = row["Unit Rate"]
+            if row.get("Is_Marquee", False) and weeks > 1:
+                term_unit_rate = base + (base * 0.5 * (weeks - 1))
             else:
-                wk1_t = (qty * row["Unit Rate"] * weeks) * dm
+                term_unit_rate = base * weeks
 
-        h_wk1_gear += (qty * active_base_rate)
+        wk1_t = qty * term_unit_rate * dm
         h_tot_c += wk1_t
+        
+        prod_display = str(row['Product'])
+        if row.get('Anchoring'): prod_display += f" ({row['Anchoring']})"
+        
+        # Populates the cleaned items explicitly to transfer to PDF
+        final_pdf_items.append({
+            "Product": prod_display,
+            "Qty": qty,
+            "Unit Rate": term_unit_rate,
+            "Discount": row["Discount"],
+            "Line Total": wk1_t
+        })
         
         c0, c1, c2, c3, c4, c4b, c5 = st.columns([0.4, 3.2, 1.0, 1.2, 1.2, 1.2, 1.4])
         if c0.button("🗑️", key=f"sdel_{idx}"):
@@ -438,21 +439,19 @@ if st.session_state.df is not None and not st.session_state.df.empty:
             st.session_state.df.reset_index(drop=True, inplace=True)
             st.rerun()
             
-        prod_display = str(row['Product'])
-        if row.get('Anchoring'): prod_display += f" ({row['Anchoring']})"
         c1.markdown(f"<div class='item-text'>{prod_display}</div>", unsafe_allow_html=True)
         
         new_qty = c2.number_input("QtyBox", min_value=0.0, value=float(qty), key=f"sqty_{idx}", label_visibility="collapsed")
         if new_qty != float(qty):
             st.session_state.df.at[idx, "Qty"] = new_qty
-            if row["Is_Marquee"]:
+            if row.get("Is_Marquee"):
                 for w_idx, w_row in st.session_state.df.iterrows():
                     if "Weights" in w_row["Product"]:
                         num_weights_factor = get_item_property(row["Product"], "Total Number of weights")
                         st.session_state.df.at[w_idx, "Qty"] = int(num_weights_factor * new_qty)
             st.rerun()
             
-        c3.write(f"${active_base_rate:,.2f}")
+        c3.write(f"${term_unit_rate:,.2f}")
         new_disc = c4.number_input("Disc %", 0.0, 100.0, float(row["Discount"]), key=f"sd_{idx}", label_visibility="collapsed")
         if new_disc != row["Discount"]: st.session_state.df.at[idx, "Discount"] = new_disc; st.rerun()
             
@@ -571,13 +570,13 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     structural_math_dict["DAMAGE WAIVER"].append(f"${h_tot_c:,.2f} x 7% = ${final_waiver_sum:,.2f}")
 
 # ==============================================================================
-# 10. DOWNLOAD ZONE (FIXED PDF TARGET MAP ARGUMENTS)
+# 10. DOWNLOAD ZONE 
 # ==============================================================================
     st.markdown("")  
     action_col_1, action_col_2 = st.columns(2)
             
-    cleaned_pdf_items = st.session_state.df.to_dict('records')
-    pdf_b = create_calculation_pdf(h_tot_c, final_labour_pool_sum, final_waiver_sum, final_cartage_sum, grand_total_calc, weeks, cleaned_pdf_items, structural_math_dict, job_name_input)
+    # Submitting the dynamically matched live total variables exactly to PDF output
+    pdf_b = create_calculation_pdf(h_tot_c, final_labour_pool_sum, final_waiver_sum, final_cartage_sum, grand_total_calc, weeks, final_pdf_items, structural_math_dict, job_name_input)
     action_col_1.download_button("📥 DOWNLOAD DETAILED AUDIT PDF", pdf_b, file_name=f"{job_name_input.replace(' ', '_')}_Analysis.pdf", mime="application/pdf", use_container_width=True)
 
     excel_df = struct_db.copy()
