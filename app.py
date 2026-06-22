@@ -56,15 +56,16 @@ NATIVE_STRUCTURES = [
     {"Configuration": "20m x 40m", "Type": "Structure", "Hire Unit Rate": 15960.00, "Labour Total": 6384.00, "Total Weight (kg)": 20000.0, "Total Number of weights": 56.0, "Weight Size (KG)": 1200.0, "Cost per weight": 88.20, "Labour Per Weight": 22.05}
 ]
 
+# UPGRADED v79.0: Explicit Crew & Hours Framework for Grandstands
 NATIVE_GRANDSTANDS = [
-    {"Low": 0, "High": 40, "Total": 2000.0},
-    {"Low": 41, "High": 100, "Total": 3300.0},
-    {"Low": 101, "High": 149, "Total": 4840.0},
-    {"Low": 150, "High": 199, "Total": 6600.0},
-    {"Low": 200, "High": 249, "Total": 7700.0},
-    {"Low": 250, "High": 299, "Total": 10560.0},
-    {"Low": 300, "High": 349, "Total": 11880.0},
-    {"Low": 350, "High": 400, "Total": 13200.0}
+    {"Low": 0, "High": 40, "Staff": 2, "Hours": 4.0, "Total": 1760.0},
+    {"Low": 41, "High": 100, "Staff": 3, "Hours": 5.0, "Total": 3300.0},
+    {"Low": 101, "High": 149, "Staff": 4, "Hours": 5.5, "Total": 4840.0},
+    {"Low": 150, "High": 199, "Staff": 5, "Hours": 6.0, "Total": 6600.0},
+    {"Low": 200, "High": 249, "Staff": 5, "Hours": 7.0, "Total": 7700.0},
+    {"Low": 250, "High": 299, "Staff": 6, "Hours": 8.0, "Total": 10560.0},
+    {"Low": 300, "High": 349, "Staff": 6, "Hours": 9.0, "Total": 11880.0},
+    {"Low": 350, "High": 400, "Staff": 6, "Hours": 10.0, "Total": 13200.0}
 ]
 
 NATIVE_FLOORING = [
@@ -125,13 +126,17 @@ def calculate_dynamic_grandstand_rate(seats_input):
             high = int(row["High"])
             if low <= seats_input <= high:
                 total_labour_cost = float(row["Total"])
+                staff = int(row.get("Staff", 0))
+                hours = float(row.get("Hours", 0.0))
                 per_seat_rate = total_labour_cost / seats_input
-                return round(per_seat_rate, 2), f"Seating Matrix Flat Booking: ${total_labour_cost:,.2f} / {seats_input} seats"
+                # Math string securely built to reflect crew size explicitly
+                math_desc = f"{staff} Crew x {hours:g} Hrs @ Base Total ${total_labour_cost:,.2f}"
+                return round(per_seat_rate, 2), math_desc
         except: pass
     return 19.19, f"Standard base per-seat fallback calculation applied"
 
 # ==============================================================================
-# 3. PDF AUDIT ENGINE
+# 3. PDF AUDIT ENGINE 
 # ==============================================================================
 def clean_text(txt):
     if not txt: return ""
@@ -155,20 +160,30 @@ def create_calculation_pdf(subtotal, labour, waiver, cartage, grand, weeks, fina
     pdf.cell(0, 10, " 1. HIRE CALCULATIONS SCHEDULE", 0, 1, "L", True)
     
     pdf.set_fill_color(240, 242, 245); pdf.set_text_color(50, 50, 50); pdf.set_font("Arial", "B", 9)
-    col_w = [85, 20, 28, 22, 35]
+    col_w = [75, 15, 22, 18, 20, 40]
     pdf.cell(col_w[0], 8, " Item Description", 1, 0, "L", True)
     pdf.cell(col_w[1], 8, "Qty", 1, 0, "C", True)
-    pdf.cell(col_w[2], 8, "Unit Rate Used", 1, 0, "R", True)
-    pdf.cell(col_w[3], 8, "Disc %", 1, 0, "C", True)
-    pdf.cell(col_w[4], 8, "Hire Total", 1, 1, "R", True)
+    pdf.cell(col_w[2], 8, "Base Rate", 1, 0, "R", True)
+    pdf.cell(col_w[3], 8, "Factor", 1, 0, "C", True)
+    pdf.cell(col_w[4], 8, "Disc %", 1, 0, "C", True)
+    pdf.cell(col_w[5], 8, "Line Total", 1, 1, "R", True)
     
-    pdf.set_text_color(0, 0, 0); pdf.set_font("Arial", "", 9)
+    pdf.set_text_color(0, 0, 0)
     for item in final_pdf_items:
+        pdf.set_font("Arial", "", 9)
         pdf.cell(col_w[0], 8, clean_text(f" {item['Product']}"), 1, 0, "L")
         pdf.cell(col_w[1], 8, f"{item['Qty']:,.0f}", 1, 0, "C")
         pdf.cell(col_w[2], 8, f"${item['Unit Rate']:,.2f}", 1, 0, "R")
-        pdf.cell(col_w[3], 8, f"{item['Discount']:.1f}%", 1, 0, "C")
-        pdf.cell(col_w[4], 8, f"${item['Line Total']:,.2f}", 1, 1, "R")
+        pdf.cell(col_w[3], 8, f"{item['Factor']:g}", 1, 0, "C")
+        pdf.cell(col_w[4], 8, f"{item['Discount']:.1f}%", 1, 0, "C")
+        pdf.cell(col_w[5], 8, f"${item['Line Total']:,.2f}", 1, 1, "R")
+        
+        # UPGRADE v79.0: Injects explicit sub-row into the schedule table for Grandstand Crew Transparency
+        if item.get("Is_Grandstand"):
+            pdf.set_font("Arial", "I", 8)
+            pdf.set_text_color(80, 80, 80)
+            pdf.cell(sum(col_w), 6, clean_text(f"    ↳ Pricing Breakdown: {item['Lab_Math']}"), 1, 1, "L")
+            pdf.set_text_color(0, 0, 0)
 
     pdf.ln(5)
     categories = ["LABOUR", "LOGISTICS", "DAMAGE WAIVER"]
@@ -196,7 +211,7 @@ def create_calculation_pdf(subtotal, labour, waiver, cartage, grand, weeks, fina
 # 5. STREAMLIT INTERNAL STORAGE PERSISTENCE
 # ==============================================================================
 if 'df' not in st.session_state: 
-    st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Total", "Min_Lab", "Raw_Lab", "KG", "Is_Marquee", "Discount", "Lab_Math", "Lab_Per_Unit", "Base_Hire", "Anchoring", "Override_Rate", "Is_Flooring", "Base_1Wk_Rate", "Base_Block_Rate"])
+    st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Total", "Min_Lab", "Raw_Lab", "KG", "Is_Marquee", "Discount", "Lab_Math", "Lab_Per_Unit", "Base_Hire", "Anchoring", "Override_Rate", "Is_Flooring", "Base_1Wk_Rate", "Base_Block_Rate", "Is_Grandstand"])
 if 'km' not in st.session_state: st.session_state.km = 0.0
 if 'truck_override' not in st.session_state: st.session_state.truck_override = 0
 if 'start_date_val' not in st.session_state: st.session_state.start_date_val = date.today()
@@ -279,7 +294,7 @@ if selected_cat == "marquees":
                     "Raw_Lab": raw_labour_pool * qty_input, "Lab_Math": f"{target_item}: Layout installation setup matrix",
                     "KG": total_w * qty_input, "Is_Marquee": True, "Discount": 0.0, "Lab_Per_Unit": raw_labour_pool,
                     "Base_Hire": b_hire, "Anchoring": anch_type, "Override_Rate": 0.0, "Is_Flooring": False,
-                    "Base_1Wk_Rate": b_hire, "Base_Block_Rate": b_hire
+                    "Base_1Wk_Rate": b_hire, "Base_Block_Rate": b_hire, "Is_Grandstand": False
                 }])
                 st.session_state.df = pd.concat([st.session_state.df, new_df], ignore_index=True)
                 
@@ -295,7 +310,7 @@ if selected_cat == "marquees":
                         "Raw_Lab": calc_w * w_lab, "Lab_Math": f"Ballast weights stacking: {calc_w} units x ${w_lab:.2f}",
                         "KG": calc_w * w_size, "Is_Marquee": False, "Discount": 0.0, "Lab_Per_Unit": w_lab,
                         "Base_Hire": w_cost, "Anchoring": "", "Override_Rate": 0.0, "Is_Flooring": False,
-                        "Base_1Wk_Rate": w_cost, "Base_Block_Rate": w_cost
+                        "Base_1Wk_Rate": w_cost, "Base_Block_Rate": w_cost, "Is_Grandstand": False
                     }])
                     st.session_state.df = pd.concat([st.session_state.df, weight_df], ignore_index=True)
                 st.rerun()
@@ -331,7 +346,6 @@ elif selected_cat == "flooring":
                 num_sheets_needed = math.ceil(cov_input / 3.0)
                 actual_supplied_sqm = num_sheets_needed * 3.0  
                 
-                # FIXED UPGRADE v75.0: Calculate mathematically true "Per Sheet" rates 
                 per_sheet_1wk = (actual_supplied_sqm * f_rate) / num_sheets_needed
                 per_sheet_block = (actual_supplied_sqm * f_block) / num_sheets_needed
                 per_sheet_lab = (actual_supplied_sqm * f_lab) / num_sheets_needed
@@ -345,11 +359,10 @@ elif selected_cat == "flooring":
                     "Qty": final_billing_qty, "Product": final_item_label_name, "Unit Rate": per_sheet_1wk, "Min_Lab": 0, "Raw_Lab": final_billing_qty * per_sheet_lab,
                     "Lab_Math": lab_desc, "KG": final_billing_qty * per_sheet_kg, "Is_Marquee": False,
                     "Discount": 0.0, "Lab_Per_Unit": 0, "Base_Hire": per_sheet_1wk, "Anchoring": "", "Override_Rate": 0.0, "Is_Flooring": True,
-                    "Base_1Wk_Rate": per_sheet_1wk, "Base_Block_Rate": per_sheet_block
+                    "Base_1Wk_Rate": per_sheet_1wk, "Base_Block_Rate": per_sheet_block, "Is_Grandstand": False
                 }])
                 st.session_state.df = pd.concat([st.session_state.df, new_f_df], ignore_index=True)
                 
-                # FIXED UPGRADE v75.0: Auto-Append Supa-Trac Front Edging based purely on provided physical Width matrix
                 if f_input_method == "Enter Dimensions (Width x Length)" and f_w_input and f_w_input > 0:
                     match_e = flooring_db[flooring_db["Product Name"] == "Supa-Trac Edging"]
                     if not match_e.empty:
@@ -373,7 +386,7 @@ elif selected_cat == "flooring":
                             "Qty": num_e_pieces, "Product": e_label, "Unit Rate": per_pce_1wk, "Min_Lab": 0, "Raw_Lab": num_e_pieces * per_pce_lab,
                             "Lab_Math": e_desc, "KG": num_e_pieces * per_pce_kg, "Is_Marquee": False,
                             "Discount": 0.0, "Lab_Per_Unit": 0, "Base_Hire": per_pce_1wk, "Anchoring": "", "Override_Rate": 0.0, "Is_Flooring": True,
-                            "Base_1Wk_Rate": per_pce_1wk, "Base_Block_Rate": per_pce_block
+                            "Base_1Wk_Rate": per_pce_1wk, "Base_Block_Rate": per_pce_block, "Is_Grandstand": False
                         }])
                         st.session_state.df = pd.concat([st.session_state.df, e_df], ignore_index=True)
 
@@ -386,7 +399,7 @@ elif selected_cat == "flooring":
                     "Qty": final_billing_qty, "Product": final_item_label_name, "Unit Rate": f_rate, "Min_Lab": 0, "Raw_Lab": final_billing_qty * f_lab,
                     "Lab_Math": lab_desc, "KG": final_billing_qty * f_kg, "Is_Marquee": False,
                     "Discount": 0.0, "Lab_Per_Unit": 0, "Base_Hire": f_rate, "Anchoring": "", "Override_Rate": 0.0, "Is_Flooring": True,
-                    "Base_1Wk_Rate": f_rate, "Base_Block_Rate": f_block
+                    "Base_1Wk_Rate": f_rate, "Base_Block_Rate": f_block, "Is_Grandstand": False
                 }])
                 st.session_state.df = pd.concat([st.session_state.df, new_f_df], ignore_index=True)
             st.rerun()
@@ -404,7 +417,7 @@ elif selected_cat == "grandstands":
                 "Qty": seats_input, "Product": f"Standard Seating Grandstand ({seats_input} Seats)", "Unit Rate": per_seat_rate, "Min_Lab": 0,
                 "Raw_Lab": 0.0, "Lab_Math": math_desc_str, "KG": seats_input * 25.0, "Is_Marquee": False,
                 "Discount": 0.0, "Lab_Per_Unit": 0.0, "Base_Hire": per_seat_rate, "Anchoring": "", "Override_Rate": 0.0, "Is_Flooring": False,
-                "Base_1Wk_Rate": per_seat_rate, "Base_Block_Rate": per_seat_rate
+                "Base_1Wk_Rate": per_seat_rate, "Base_Block_Rate": per_seat_rate, "Is_Grandstand": True
             }])
             st.session_state.df = pd.concat([st.session_state.df, new_df], ignore_index=True)
             st.rerun()
@@ -418,10 +431,11 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     
     st.session_state.df.reset_index(drop=True, inplace=True)
     
-    h_col0, h_col1, h_col2, h_col3, h_col4, h_col4b, h_col5 = st.columns([0.4, 3.2, 1.0, 1.2, 1.2, 1.2, 1.4])
+    h_col0, h_col1, h_col2, h_col3, h_col_f, h_col4, h_col4b, h_col5 = st.columns([0.4, 2.6, 0.9, 1.1, 0.8, 1.0, 1.1, 1.3])
     h_col1.markdown("<div class='summary-hdr'>Item Description</div>", unsafe_allow_html=True)
     h_col2.markdown("<div class='summary-hdr'>Qty (Editable)</div>", unsafe_allow_html=True)
-    h_col3.markdown("<div class='summary-hdr'>Term Unit Rate</div>", unsafe_allow_html=True)
+    h_col3.markdown("<div class='summary-hdr'>Base Rate</div>", unsafe_allow_html=True)
+    h_col_f.markdown("<div class='summary-hdr'>Factor</div>", unsafe_allow_html=True)
     h_col4.markdown("<div class='summary-hdr'>Disc %</div>", unsafe_allow_html=True)
     h_col4b.markdown("<div class='summary-hdr'>Override Rate</div>", unsafe_allow_html=True)
     h_col5.markdown("<div class='summary-hdr' style='text-align: right;'>Subtotal</div>", unsafe_allow_html=True)
@@ -434,22 +448,28 @@ if st.session_state.df is not None and not st.session_state.df.empty:
         qty, dm = row["Qty"], (1 - (row["Discount"]/100))
         total_kg += row["KG"]
         
-        if override > 0:
-            term_unit_rate = override
-        elif row.get("Is_Flooring"):
+        if row.get("Is_Flooring"):
             if weeks >= 4 and row.get("Base_Block_Rate", 0) > 0:
-                blocks = math.ceil(weeks / 4.0)
-                term_unit_rate = row["Base_Block_Rate"] * blocks
+                factor = float(math.ceil(weeks / 4.0))
+                display_rate = row["Base_Block_Rate"]
             else:
-                term_unit_rate = row["Base_1Wk_Rate"] * weeks
+                factor = float(weeks)
+                display_rate = row["Base_1Wk_Rate"]
+        elif row.get("Is_Marquee", False) or row.get("Is_Grandstand", False):
+            display_rate = row["Unit Rate"]
+            if weeks > 1:
+                factor = 1.0 + 0.5 * (weeks - 1)
+            else:
+                factor = 1.0
         else:
-            base = row["Unit Rate"]
-            if row.get("Is_Marquee", False) and weeks > 1:
-                term_unit_rate = base + (base * 0.5 * (weeks - 1))
-            else:
-                term_unit_rate = base * weeks
+            display_rate = row["Unit Rate"]
+            factor = float(weeks)
 
-        wk1_t = qty * term_unit_rate * dm
+        if override > 0:
+            display_rate = override
+            factor = 1.0
+
+        wk1_t = qty * display_rate * factor * dm
         h_tot_c += wk1_t
         
         prod_display = str(row['Product'])
@@ -458,12 +478,15 @@ if st.session_state.df is not None and not st.session_state.df.empty:
         final_pdf_items.append({
             "Product": prod_display,
             "Qty": qty,
-            "Unit Rate": term_unit_rate,
+            "Unit Rate": display_rate,
+            "Factor": factor,
             "Discount": row["Discount"],
-            "Line Total": wk1_t
+            "Line Total": wk1_t,
+            "Is_Grandstand": row.get("Is_Grandstand", False),
+            "Lab_Math": row.get("Lab_Math", "")
         })
         
-        c0, c1, c2, c3, c4, c4b, c5 = st.columns([0.4, 3.2, 1.0, 1.2, 1.2, 1.2, 1.4])
+        c0, c1, c2, c3, c_f, c4, c4b, c5 = st.columns([0.4, 2.6, 0.9, 1.1, 0.8, 1.0, 1.1, 1.3])
         if c0.button("🗑️", key=f"sdel_{idx}"):
             st.session_state.df.drop(idx, inplace=True)
             st.session_state.df.reset_index(drop=True, inplace=True)
@@ -481,7 +504,8 @@ if st.session_state.df is not None and not st.session_state.df.empty:
                         st.session_state.df.at[w_idx, "Qty"] = int(num_weights_factor * new_qty)
             st.rerun()
             
-        c3.write(f"${term_unit_rate:,.2f}")
+        c3.write(f"${display_rate:,.2f}")
+        c_f.write(f"{factor:g}")
         new_disc = c4.number_input("Disc %", 0.0, 100.0, float(row["Discount"]), key=f"sd_{idx}", label_visibility="collapsed")
         if new_disc != row["Discount"]: st.session_state.df.at[idx, "Discount"] = new_disc; st.rerun()
             
