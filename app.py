@@ -56,7 +56,6 @@ NATIVE_STRUCTURES = [
     {"Configuration": "20m x 40m", "Type": "Structure", "Hire Unit Rate": 15960.00, "Labour Total": 6384.00, "Total Weight (kg)": 20000.0, "Total Number of weights": 56.0, "Weight Size (KG)": 1200.0, "Cost per weight": 88.20, "Labour Per Weight": 22.05}
 ]
 
-# UPGRADED v79.0: Explicit Crew & Hours Framework for Grandstands
 NATIVE_GRANDSTANDS = [
     {"Low": 0, "High": 40, "Staff": 2, "Hours": 4.0, "Total": 1760.0},
     {"Low": 41, "High": 100, "Staff": 3, "Hours": 5.0, "Total": 3300.0},
@@ -129,14 +128,13 @@ def calculate_dynamic_grandstand_rate(seats_input):
                 staff = int(row.get("Staff", 0))
                 hours = float(row.get("Hours", 0.0))
                 per_seat_rate = total_labour_cost / seats_input
-                # Math string securely built to reflect crew size explicitly
                 math_desc = f"{staff} Crew x {hours:g} Hrs @ Base Total ${total_labour_cost:,.2f}"
                 return round(per_seat_rate, 2), math_desc
         except: pass
     return 19.19, f"Standard base per-seat fallback calculation applied"
 
 # ==============================================================================
-# 3. PDF AUDIT ENGINE 
+# 3. PDF AUDIT ENGINE
 # ==============================================================================
 def clean_text(txt):
     if not txt: return ""
@@ -178,7 +176,6 @@ def create_calculation_pdf(subtotal, labour, waiver, cartage, grand, weeks, fina
         pdf.cell(col_w[4], 8, f"{item['Discount']:.1f}%", 1, 0, "C")
         pdf.cell(col_w[5], 8, f"${item['Line Total']:,.2f}", 1, 1, "R")
         
-        # UPGRADE v79.0: Injects explicit sub-row into the schedule table for Grandstand Crew Transparency
         if item.get("Is_Grandstand"):
             pdf.set_font("Arial", "I", 8)
             pdf.set_text_color(80, 80, 80)
@@ -441,6 +438,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     h_col5.markdown("<div class='summary-hdr' style='text-align: right;'>Subtotal</div>", unsafe_allow_html=True)
 
     h_tot_c, total_kg = 0.0, 0.0
+    waiver_eligible_total = 0.0  # UPGRADE v80.0: Isolates costs allowed to trigger damage waivers
     final_pdf_items = []
     
     for idx, row in st.session_state.df.iterrows():
@@ -472,6 +470,10 @@ if st.session_state.df is not None and not st.session_state.df.empty:
         wk1_t = qty * display_rate * factor * dm
         h_tot_c += wk1_t
         
+        # Explicit blacklist: Do not charge damage waiver purely on Grandstand revenue
+        if not row.get("Is_Grandstand", False):
+            waiver_eligible_total += wk1_t
+            
         prod_display = str(row['Product'])
         if row.get('Anchoring'): prod_display += f" ({row['Anchoring']})"
         
@@ -519,7 +521,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
 
     raw_lab_pool = st.session_state.df["Raw_Lab"].sum()
     auto_cartage_total = trks * st.session_state.km * 4 * 3.50 if cartage_mode == "Charge" else 0
-    auto_waiver_total = h_tot_c * 0.07 if waiver_mode == "Charge" else 0
+    auto_waiver_total = waiver_eligible_total * 0.07 if waiver_mode == "Charge" else 0
 
     # ==============================================================================
     # 9. MANUAL OVERRIDES GRID
@@ -583,7 +585,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     waiv_key = "damage_waiver_insurance_global"
     saved_waiv_override = st.session_state.overrides_dict.get(waiv_key, -1.0)
     r_w0, r_w1, r_w2, r_w3 = st.columns([0.4, 3.2, 2.2, 1.4])
-    r_w1.markdown(f"<div class='item-text'>Waiver: Equipment Damage Indemnity</div><div class='sub-math-hint'>default: ${h_tot_c:,.2f} total product hire cost x 7%</div>", unsafe_allow_html=True)
+    r_w1.markdown(f"<div class='item-text'>Waiver: Equipment Damage Indemnity</div><div class='sub-math-hint'>default: ${waiver_eligible_total:,.2f} eligible product hire x 7%</div>", unsafe_allow_html=True)
     new_waiv_val = r_w2.number_input("InputW", min_value=0.0, value=None if saved_waiv_override < 0 else float(saved_waiv_override), placeholder=f"book: ${auto_waiver_total:,.2f}", key="f_w_global", label_visibility="collapsed")
     final_waiver_sum = new_waiv_val if new_waiv_val is not None else auto_waiver_total
     r_w3.markdown(f"<div style='text-align: right; font-size: 20px; font-weight: 700;'>${final_waiver_sum:,.2f}</div>", unsafe_allow_html=True)
@@ -621,7 +623,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
         structural_math_dict["LABOUR"].append("Minimum Floor Buffer Adjustment top-up applied")
     structural_math_dict["LABOUR"].append(f"Total Applied = ${final_labour_pool_sum:,.2f}")
     structural_math_dict["LOGISTICS"].append(f"{trks} Trucks x {st.session_state.km}km x 4 x $3.50 = ${final_cartage_sum:,.2f}")
-    structural_math_dict["DAMAGE WAIVER"].append(f"${h_tot_c:,.2f} x 7% = ${final_waiver_sum:,.2f}")
+    structural_math_dict["DAMAGE WAIVER"].append(f"${waiver_eligible_total:,.2f} x 7% = ${final_waiver_sum:,.2f}")
 
 # ==============================================================================
 # 10. DOWNLOAD ZONE
