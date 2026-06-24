@@ -56,17 +56,6 @@ NATIVE_STRUCTURES = [
     {"Configuration": "20m x 40m", "Type": "Structure", "Hire Unit Rate": 15960.00, "Labour Total": 6384.00, "Total Weight (kg)": 20000.0, "Total Number of weights": 56.0, "Weight Size (KG)": 1200.0, "Cost per weight": 88.20, "Labour Per Weight": 22.05}
 ]
 
-NATIVE_GRANDSTANDS = [
-    {"Low": 0, "High": 40, "Staff": 2, "Hours": 4.0, "Total": 1760.0},
-    {"Low": 41, "High": 100, "Staff": 3, "Hours": 5.0, "Total": 3300.0},
-    {"Low": 101, "High": 149, "Staff": 4, "Hours": 5.5, "Total": 4840.0},
-    {"Low": 150, "High": 199, "Staff": 5, "Hours": 6.0, "Total": 6600.0},
-    {"Low": 200, "High": 249, "Staff": 5, "Hours": 7.0, "Total": 7700.0},
-    {"Low": 250, "High": 299, "Staff": 6, "Hours": 8.0, "Total": 10560.0},
-    {"Low": 300, "High": 349, "Staff": 6, "Hours": 9.0, "Total": 11880.0},
-    {"Low": 350, "High": 400, "Staff": 6, "Hours": 10.0, "Total": 13200.0}
-]
-
 NATIVE_FLOORING = [
     {"Product Name": "I-Trac", "1-Week Rate": 23.40, "4-Week Block": 46.80, "Labour": 4.65, "Weight": 15.0},
     {"Product Name": "I-Trac Ramps (1.07 x1.18)", "1-Week Rate": 42.00, "4-Week Block": 84.00, "Labour": 0.00, "Weight": 0.0},
@@ -82,7 +71,6 @@ NATIVE_FLOORING = [
 ]
 
 struct_db = pd.DataFrame(NATIVE_STRUCTURES)
-grandstand_db = pd.DataFrame(NATIVE_GRANDSTANDS)
 flooring_db = pd.DataFrame(NATIVE_FLOORING)
 
 # ==============================================================================
@@ -116,22 +104,50 @@ def get_item_property(config_name, column_target, fallback_val=0.0):
             return val if not pd.isna(val) else fallback_val
     return fallback_val
 
+# UPGRADED v81.0: Full Algorithmic Model Implementation replacing the static lists
 def calculate_dynamic_grandstand_rate(seats_input):
     if seats_input <= 0:
         return 0.0, "0 seats allocation"
-    for idx, row in grandstand_db.iterrows():
-        try:
-            low = int(row["Low"])
-            high = int(row["High"])
-            if low <= seats_input <= high:
-                total_labour_cost = float(row["Total"])
-                staff = int(row.get("Staff", 0))
-                hours = float(row.get("Hours", 0.0))
-                per_seat_rate = total_labour_cost / seats_input
-                math_desc = f"{staff} Crew x {hours:g} Hrs @ Base Total ${total_labour_cost:,.2f}"
-                return round(per_seat_rate, 2), math_desc
-        except: pass
-    return 19.19, f"Standard base per-seat fallback calculation applied"
+        
+    CHARGE_OUT_RATE = 220.0
+
+    if seats_input <= 50: multiplier = 0.20
+    elif seats_input <= 100: multiplier = 0.18
+    elif seats_input <= 350: multiplier = 0.16
+    else: multiplier = 0.18
+
+    raw_labor_hours = seats_input * multiplier
+
+    if seats_input <= 54: staff = 2
+    elif seats_input <= 100: staff = 3
+    elif seats_input <= 175: staff = 4
+    elif seats_input <= 250: staff = 5
+    elif seats_input <= 350: staff = 6
+    elif seats_input <= 400: staff = 8
+    elif seats_input <= 450: staff = 9
+    elif seats_input <= 500: staff = 10
+    elif seats_input <= 600: staff = 12
+    elif seats_input <= 750: staff = 14
+    elif seats_input <= 850: staff = 8
+    elif seats_input <= 950: staff = 9
+    else: staff = 10
+
+    days = 2 if seats_input >= 800 else 1
+
+    if days == 2:
+        shift_length = math.ceil(((raw_labor_hours / staff) / 2) * 2) / 2
+    else:
+        shift_length = math.ceil((raw_labor_hours / staff) * 2) / 2
+
+    total_price = staff * shift_length * days * CHARGE_OUT_RATE
+    per_seat_rate = total_price / seats_input
+
+    if days > 1:
+        math_desc = f"{staff} Crew x {shift_length:g} Hrs/Day ({days} Days) @ Base Total ${total_price:,.2f}"
+    else:
+        math_desc = f"{staff} Crew x {shift_length:g} Hrs @ Base Total ${total_price:,.2f}"
+
+    return round(per_seat_rate, 2), math_desc
 
 # ==============================================================================
 # 3. PDF AUDIT ENGINE
@@ -438,7 +454,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     h_col5.markdown("<div class='summary-hdr' style='text-align: right;'>Subtotal</div>", unsafe_allow_html=True)
 
     h_tot_c, total_kg = 0.0, 0.0
-    waiver_eligible_total = 0.0  # UPGRADE v80.0: Isolates costs allowed to trigger damage waivers
+    waiver_eligible_total = 0.0
     final_pdf_items = []
     
     for idx, row in st.session_state.df.iterrows():
@@ -470,7 +486,6 @@ if st.session_state.df is not None and not st.session_state.df.empty:
         wk1_t = qty * display_rate * factor * dm
         h_tot_c += wk1_t
         
-        # Explicit blacklist: Do not charge damage waiver purely on Grandstand revenue
         if not row.get("Is_Grandstand", False):
             waiver_eligible_total += wk1_t
             
