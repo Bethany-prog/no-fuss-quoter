@@ -74,95 +74,31 @@ struct_db = pd.DataFrame(NATIVE_STRUCTURES)
 flooring_db = pd.DataFrame(NATIVE_FLOORING)
 
 # ==============================================================================
-# SMART RE REGEX DIMENSION MATCHING HOOK
+# PERFORMANCE CACHED PROCESSING ENGINES
 # ==============================================================================
-def matches_smart_query(config_name, query_str):
-    if not query_str:
-        return True
-    c_clean = str(config_name).lower().replace(" ", "")
-    q_clean = str(query_str).lower().replace(" ", "")
-    if q_clean in c_clean:
-        return True
-    c_norm = re.sub(r'(\d+)m?x(\d+)m?', r'\1x\2', c_clean)
-    q_norm = re.sub(r'(\d+)m?x(\d+)m?', r'\1x\2', q_clean)
-    if q_norm in c_norm:
-        return True
-    q_digits = re.findall(r'\d+', q_clean)
-    c_digits = re.findall(r'\d+', c_clean)
-    if len(q_digits) >= 2 and len(c_digits) >= 2:
-        if q_digits[0] == c_digits[0] and q_digits[1] == c_digits[1]:
-            return True
-    return False
+@st.cache_data(show_spinner=False)
+def fetch_depot_distance(address_string):
+    from geopy.geocoders import Nominatim
+    from geopy.distance import geodesic
+    try:
+        geolocator = Nominatim(user_agent="louis_quoter_v57", timeout=5)
+        loc_data = geolocator.geocode(address_string + ", Victoria, Australia")
+        if loc_data:
+            return round(geodesic((DEPOT_LAT, DEPOT_LON), (loc_data.latitude, loc_data.longitude)).kilometers * 1.15, 1)
+    except: pass
+    return None
 
-def get_item_property(config_name, column_target, fallback_val=0.0):
-    matched_row = struct_db[struct_db["Configuration"] == str(config_name).strip()]
-    if not matched_row.empty:
-        val = matched_row.iloc[0].get(column_target, fallback_val)
-        try:
-            return float(val) if not pd.isna(val) else fallback_val
-        except:
-            return val if not pd.isna(val) else fallback_val
-    return fallback_val
+@st.cache_data(show_spinner=False)
+def cached_pdf_generator(subtotal, labour, waiver, cartage, grand, weeks, final_pdf_items, structural_math_dict, job_name):
+    def clean_text(txt):
+        if not txt: return ""
+        replacements = {"®": "(R)", "™": "(TM)", "©": "(C)", "└": "->", "—": "-", "–": "-"}
+        cleaned = str(txt)
+        for char, rep in replacements.items(): cleaned = cleaned.replace(char, rep)
+        return cleaned.encode('latin-1', 'replace').decode('latin-1')
 
-def calculate_dynamic_grandstand_rate(seats_input):
-    if seats_input <= 0:
-        return 0.0, "0 seats allocation"
-        
-    CHARGE_OUT_RATE = 220.0
-
-    if seats_input <= 50: multiplier = 0.20
-    elif seats_input <= 100: multiplier = 0.18
-    elif seats_input <= 350: multiplier = 0.16
-    else: multiplier = 0.18
-
-    raw_labor_hours = seats_input * multiplier
-
-    if seats_input <= 54: staff = 2
-    elif seats_input <= 100: staff = 3
-    elif seats_input <= 175: staff = 4
-    elif seats_input <= 250: staff = 5
-    elif seats_input <= 350: staff = 6
-    elif seats_input <= 400: staff = 8
-    elif seats_input <= 450: staff = 9
-    elif seats_input <= 500: staff = 10
-    elif seats_input <= 600: staff = 12
-    elif seats_input <= 750: staff = 14
-    elif seats_input <= 850: staff = 8
-    elif seats_input <= 950: staff = 9
-    else: staff = 10
-
-    days = 2 if seats_input >= 800 else 1
-
-    if days == 2:
-        shift_length = math.ceil(((raw_labor_hours / staff) / 2) * 2) / 2
-    else:
-        shift_length = math.ceil((raw_labor_hours / staff) * 2) / 2
-
-    total_price = staff * shift_length * days * CHARGE_OUT_RATE
-    per_seat_rate = total_price / seats_input
-
-    if days > 1:
-        math_desc = f"{staff} Crew x {shift_length:g} Hrs/Day ({days} Days) @ Base Total ${total_price:,.2f}"
-    else:
-        math_desc = f"{staff} Crew x {shift_length:g} Hrs @ Base Total ${total_price:,.2f}"
-
-    return round(per_seat_rate, 2), math_desc
-
-# ==============================================================================
-# 3. PDF AUDIT ENGINE
-# ==============================================================================
-def clean_text(txt):
-    if not txt: return ""
-    replacements = {"®": "(R)", "™": "(TM)", "©": "(C)", "└": "->", "—": "-", "–": "-"}
-    cleaned = str(txt)
-    for char, rep in replacements.items():
-        cleaned = cleaned.replace(char, rep)
-    return cleaned.encode('latin-1', 'replace').decode('latin-1')
-
-def create_calculation_pdf(subtotal, labour, waiver, cartage, grand, weeks, final_pdf_items, structural_math_dict, job_name):
     pdf = FPDF()
     pdf.add_page()
-    
     pdf.set_font("Arial", "B", 16)
     pdf.cell(0, 10, clean_text("Louis Quoting Tool - Detailed Calculation Audit"), ln=True, align="C")
     pdf.set_font("Arial", "B", 10)
@@ -190,10 +126,8 @@ def create_calculation_pdf(subtotal, labour, waiver, cartage, grand, weeks, fina
         pdf.cell(col_w[3], 8, f"{item['Factor']:g}", 1, 0, "C")
         pdf.cell(col_w[4], 8, f"{item['Discount']:.1f}%", 1, 0, "C")
         pdf.cell(col_w[5], 8, f"${item['Line Total']:,.2f}", 1, 1, "R")
-        
         if item.get("Is_Grandstand"):
-            pdf.set_font("Arial", "I", 8)
-            pdf.set_text_color(80, 80, 80)
+            pdf.set_font("Arial", "I", 8); pdf.set_text_color(80, 80, 80)
             pdf.cell(sum(col_w), 6, clean_text(f"    ↳ Pricing Breakdown: {item['Lab_Math']}"), 1, 1, "L")
             pdf.set_text_color(0, 0, 0)
 
@@ -212,12 +146,79 @@ def create_calculation_pdf(subtotal, labour, waiver, cartage, grand, weeks, fina
     pdf.cell(0, 14, f" GRAND TOTAL (EX GST): ${grand:,.2f} ", 0, 1, "R", True)
     
     try:
-        raw_pdf_data = pdf.output(dest='S')
-        if isinstance(raw_pdf_data, str):
-            return raw_pdf_data.encode('latin-1', 'replace')
-        return bytes(raw_pdf_data)
+        raw_pd = pdf.output(dest='S')
+        return raw_pd.encode('latin-1', 'replace') if isinstance(raw_pd, str) else bytes(raw_pd)
     except:
         return bytes(pdf.output())
+
+@st.cache_data(show_spinner=False)
+def cached_excel_generator(data_dict_list):
+    excel_df = pd.DataFrame(data_dict_list)
+    try:
+        excel_buffer = io.BytesIO()
+        with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
+            excel_df.to_excel(writer, index=False, sheet_name='Database_Backup')
+        return excel_buffer.getvalue(), "xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    except:
+        return excel_df.to_csv(index=False).encode('utf-8'), "csv", "text/csv"
+
+# ==============================================================================
+# SMART LOGIC HOOKS
+# ==============================================================================
+def matches_smart_query(config_name, query_str):
+    if not query_str: return True
+    c_clean = str(config_name).lower().replace(" ", "")
+    q_clean = str(query_str).lower().replace(" ", "")
+    if q_clean in c_clean: return True
+    c_norm = re.sub(r'(\d+)m?x(\d+)m?', r'\1x\2', c_clean)
+    q_norm = re.sub(r'(\d+)m?x(\d+)m?', r'\1x\2', q_clean)
+    if q_norm in c_norm: return True
+    q_digits = re.findall(r'\d+', q_clean)
+    c_digits = re.findall(r'\d+', c_clean)
+    if len(q_digits) >= 2 and len(c_digits) >= 2:
+        if q_digits[0] == c_digits[0] and q_digits[1] == c_digits[1]: return True
+    return False
+
+def get_item_property(config_name, column_target, fallback_val=0.0):
+    matched_row = struct_db[struct_db["Configuration"] == str(config_name).strip()]
+    if not matched_row.empty:
+        val = matched_row.iloc[0].get(column_target, fallback_val)
+        try: return float(val) if not pd.isna(val) else fallback_val
+        except: return val if not pd.isna(val) else fallback_val
+    return fallback_val
+
+def calculate_dynamic_grandstand_rate(seats_input):
+    if seats_input <= 0: return 0.0, "0 seats allocation"
+    CHARGE_OUT_RATE = 220.0
+    if seats_input <= 50: multiplier = 0.20
+    elif seats_input <= 100: multiplier = 0.18
+    elif seats_input <= 350: multiplier = 0.16
+    else: multiplier = 0.18
+
+    raw_labor_hours = seats_input * multiplier
+
+    if seats_input <= 54: staff = 2
+    elif seats_input <= 100: staff = 3
+    elif seats_input <= 175: staff = 4
+    elif seats_input <= 250: staff = 5
+    elif seats_input <= 350: staff = 6
+    elif seats_input <= 400: staff = 8
+    elif seats_input <= 450: staff = 9
+    elif seats_input <= 500: staff = 10
+    elif seats_input <= 600: staff = 12
+    elif seats_input <= 750: staff = 14
+    elif seats_input <= 850: staff = 8
+    elif seats_input <= 950: staff = 9
+    else: staff = 10
+
+    days = 2 if seats_input >= 800 else 1
+    shift_length = math.ceil(((raw_labor_hours / staff) / (2 if days==2 else 1)) * 2) / 2
+    total_price = staff * shift_length * days * CHARGE_OUT_RATE
+    per_seat_rate = total_price / seats_input
+
+    if days > 1: math_desc = f"{staff} Crew x {shift_length:g} Hrs/Day ({days} Days) @ Base Total ${total_price:,.2f}"
+    else: math_desc = f"{staff} Crew x {shift_length:g} Hrs @ Base Total ${total_price:,.2f}"
+    return round(per_seat_rate, 2), math_desc
 
 # ==============================================================================
 # 5. STREAMLIT INTERNAL STORAGE PERSISTENCE
@@ -225,7 +226,6 @@ def create_calculation_pdf(subtotal, labour, waiver, cartage, grand, weeks, fina
 if 'df' not in st.session_state: 
     st.session_state.df = pd.DataFrame(columns=["Qty", "Product", "Unit Rate", "Total", "Min_Lab", "Raw_Lab", "KG", "Is_Marquee", "Discount", "Lab_Math", "Lab_Per_Unit", "Base_Hire", "Anchoring", "Override_Rate", "Is_Flooring", "Base_1Wk_Rate", "Base_Block_Rate", "Is_Grandstand"])
 if 'km' not in st.session_state: st.session_state.km = 0.0
-if 'truck_override' not in st.session_state: st.session_state.truck_override = 0
 if 'start_date_val' not in st.session_state: st.session_state.start_date_val = date.today()
 if 'reset_key_seed' not in st.session_state: st.session_state.reset_key_seed = 0
 if 'site_address_str' not in st.session_state: st.session_state.site_address_str = ""
@@ -248,17 +248,12 @@ weeks = math.ceil(((end_d - start_d).days) / 7) or 1
 
 input_addr = st.text_input("🏠 Delivery Site Address", placeholder="Type venue address or suburb (e.g. Cranbourne, Victoria)...", key="address_input_box")
 if input_addr and input_addr.strip() != st.session_state.site_address_str:
-    from geopy.geocoders import Nominatim
-    from geopy.distance import geodesic
-    try:
-        geolocator = Nominatim(user_agent="louis_quoter_v57", timeout=5)
-        loc_data = geolocator.geocode(input_addr.strip() + ", Victoria, Australia")
-        if loc_data:
-            st.session_state.km = round(geodesic((DEPOT_LAT, DEPOT_LON), (loc_data.latitude, loc_data.longitude)).kilometers * 1.15, 1)
-            st.session_state.site_address_str = input_addr.strip()
-            st.toast(f"📍 Target verified: {st.session_state.km} KM", icon="✅")
-            st.rerun()
-    except: pass
+    new_dist = fetch_depot_distance(input_addr.strip())
+    if new_dist is not None:
+        st.session_state.km = new_dist
+        st.session_state.site_address_str = input_addr.strip()
+        st.toast(f"📍 Target verified: {st.session_state.km} KM", icon="✅")
+        st.rerun()
 
 st.markdown("**🚛 Active Transport Routing Distance**")
 c_km1, c_km2 = st.columns([1, 4])
@@ -284,9 +279,7 @@ selected_cat = st.selectbox("Choose Category to Load", ["marquees", "flooring", 
 if selected_cat == "marquees":
     search_query = st.text_input("🔍 Smart Search Marquee Size (e.g. 4x3, 6x3, 15x15):", placeholder="Type structure dimensions here...", key="marq_search_box")
     filtered_df = struct_db.copy()
-    
-    if search_query:
-        filtered_df = filtered_df[filtered_df["Configuration"].apply(lambda x: matches_smart_query(x, search_query))]
+    if search_query: filtered_df = filtered_df[filtered_df["Configuration"].apply(lambda x: matches_smart_query(x, search_query))]
         
     if not filtered_df.empty:
         target_item = st.selectbox("Discovered configuration options:", filtered_df["Configuration"].tolist(), key="marq_res")
@@ -315,7 +308,6 @@ if selected_cat == "marquees":
                     w_size = get_item_property(target_item, "Weight Size (KG)")
                     w_cost = get_item_property(target_item, "Cost per weight")
                     w_lab = get_item_property(target_item, "Labour Per Weight")
-                    
                     calc_w = int(num_weights * qty_input)
                     weight_df = pd.DataFrame([{
                         "Qty": calc_w, "Product": f"{int(w_size)}kg Weights", "Unit Rate": w_cost, "Min_Lab": 0,
@@ -338,8 +330,7 @@ elif selected_cat == "flooring":
         f_w_input = st.number_input("Width (m)", min_value=0.0, value=None, placeholder="Type width in meters...", key="f_width_cell")
         f_l_input = st.number_input("Length (m)", min_value=0.0, value=None, placeholder="Type length in meters...", key="f_length_cell")
         calculated_sqm = (f_w_input * f_l_input) if (f_w_input and f_l_input) else None
-        if calculated_sqm:
-            st.caption(f"💡 Calculated Area Coverage Target = **{calculated_sqm:,.2f} SQM**")
+        if calculated_sqm: st.caption(f"💡 Calculated Area Coverage Target = **{calculated_sqm:,.2f} SQM**")
         cov_input = calculated_sqm
     else:
         cov_input = st.number_input("Total Area Square Metres Coverage", min_value=0.0, value=None, placeholder="Type raw SQM area metric...", key="floor_raw_sqm")
@@ -357,19 +348,15 @@ elif selected_cat == "flooring":
             if "supa" in target_item.lower() and "edging" not in target_item.lower():
                 num_sheets_needed = math.ceil(cov_input / 3.0)
                 actual_supplied_sqm = num_sheets_needed * 3.0  
-                
                 per_sheet_1wk = (actual_supplied_sqm * f_rate) / num_sheets_needed
                 per_sheet_block = (actual_supplied_sqm * f_block) / num_sheets_needed
                 per_sheet_lab = (actual_supplied_sqm * f_lab) / num_sheets_needed
                 per_sheet_kg = (actual_supplied_sqm * f_kg) / num_sheets_needed
                 
-                final_billing_qty = num_sheets_needed
-                final_item_label_name = f"{target_item} (3 SQM Sheets)"
-                lab_desc = f"Supa-Trac Matrix: {num_sheets_needed:,.0f} Sheets (supplying {actual_supplied_sqm:,.2f} SQM) x ${per_sheet_lab:.2f}/sheet"
-                
                 new_f_df = pd.DataFrame([{
-                    "Qty": final_billing_qty, "Product": final_item_label_name, "Unit Rate": per_sheet_1wk, "Min_Lab": 0, "Raw_Lab": final_billing_qty * per_sheet_lab,
-                    "Lab_Math": lab_desc, "KG": final_billing_qty * per_sheet_kg, "Is_Marquee": False,
+                    "Qty": num_sheets_needed, "Product": f"{target_item} (3 SQM Sheets)", "Unit Rate": per_sheet_1wk, "Min_Lab": 0, "Raw_Lab": num_sheets_needed * per_sheet_lab,
+                    "Lab_Math": f"Supa-Trac Matrix: {num_sheets_needed:,.0f} Sheets (supplying {actual_supplied_sqm:,.2f} SQM) x ${per_sheet_lab:.2f}/sheet", 
+                    "KG": num_sheets_needed * per_sheet_kg, "Is_Marquee": False,
                     "Discount": 0.0, "Lab_Per_Unit": 0, "Base_Hire": per_sheet_1wk, "Anchoring": "", "Override_Rate": 0.0, "Is_Flooring": True,
                     "Base_1Wk_Rate": per_sheet_1wk, "Base_Block_Rate": per_sheet_block, "Is_Grandstand": False
                 }])
@@ -385,31 +372,24 @@ elif selected_cat == "flooring":
                         
                         num_e_pieces = math.ceil(f_w_input / 0.22)
                         e_actual_lm = num_e_pieces * 0.22
-                        
                         per_pce_1wk = e_rate_per_m * 0.22
                         per_pce_block = e_block_per_m * 0.22
                         per_pce_lab = e_lab_per_m * 0.22
                         per_pce_kg = e_kg_per_m * 0.22
                         
-                        e_label = f"Supa-Trac Edging ({num_e_pieces:,.0f} Pieces)"
-                        e_desc = f"Front Width Edging: {num_e_pieces:,.0f} Pieces ({e_actual_lm:,.2f} L/M) x ${e_rate_per_m:.2f}/m"
-                        
                         e_df = pd.DataFrame([{
-                            "Qty": num_e_pieces, "Product": e_label, "Unit Rate": per_pce_1wk, "Min_Lab": 0, "Raw_Lab": num_e_pieces * per_pce_lab,
-                            "Lab_Math": e_desc, "KG": num_e_pieces * per_pce_kg, "Is_Marquee": False,
+                            "Qty": num_e_pieces, "Product": f"Supa-Trac Edging ({num_e_pieces:,.0f} Pieces)", "Unit Rate": per_pce_1wk, "Min_Lab": 0, "Raw_Lab": num_e_pieces * per_pce_lab,
+                            "Lab_Math": f"Front Width Edging: {num_e_pieces:,.0f} Pieces ({e_actual_lm:,.2f} L/M) x ${e_rate_per_m:.2f}/m", 
+                            "KG": num_e_pieces * per_pce_kg, "Is_Marquee": False,
                             "Discount": 0.0, "Lab_Per_Unit": 0, "Base_Hire": per_pce_1wk, "Anchoring": "", "Override_Rate": 0.0, "Is_Flooring": True,
                             "Base_1Wk_Rate": per_pce_1wk, "Base_Block_Rate": per_pce_block, "Is_Grandstand": False
                         }])
                         st.session_state.df = pd.concat([st.session_state.df, e_df], ignore_index=True)
 
             else:
-                final_billing_qty = cov_input
-                final_item_label_name = target_item
-                lab_desc = f"{target_item}: {cov_input:,.0f} SQM area x ${f_lab:.2f}"
-                
                 new_f_df = pd.DataFrame([{
-                    "Qty": final_billing_qty, "Product": final_item_label_name, "Unit Rate": f_rate, "Min_Lab": 0, "Raw_Lab": final_billing_qty * f_lab,
-                    "Lab_Math": lab_desc, "KG": final_billing_qty * f_kg, "Is_Marquee": False,
+                    "Qty": cov_input, "Product": target_item, "Unit Rate": f_rate, "Min_Lab": 0, "Raw_Lab": cov_input * f_lab,
+                    "Lab_Math": f"{target_item}: {cov_input:,.0f} SQM area x ${f_lab:.2f}", "KG": cov_input * f_kg, "Is_Marquee": False,
                     "Discount": 0.0, "Lab_Per_Unit": 0, "Base_Hire": f_rate, "Anchoring": "", "Override_Rate": 0.0, "Is_Flooring": True,
                     "Base_1Wk_Rate": f_rate, "Base_Block_Rate": f_block, "Is_Grandstand": False
                 }])
@@ -424,7 +404,6 @@ elif selected_cat == "grandstands":
             st.error("Please supply a valid seat capacity count first.")
         else:
             per_seat_rate, math_desc_str = calculate_dynamic_grandstand_rate(seats_input)
-            
             new_df = pd.DataFrame([{
                 "Qty": seats_input, "Product": f"Standard Seating Grandstand ({seats_input} Seats)", "Unit Rate": per_seat_rate, "Min_Lab": 0,
                 "Raw_Lab": 0.0, "Lab_Math": math_desc_str, "KG": seats_input * 25.0, "Is_Marquee": False,
@@ -461,33 +440,22 @@ if st.session_state.df is not None and not st.session_state.df.empty:
         qty, dm = row["Qty"], (1 - (row["Discount"]/100))
         total_kg += row["KG"]
         
-        # UPGRADE v82.0: Distinct multiplier boundaries for Marquee vs. Grandstand logic
         if row.get("Is_Flooring"):
             if weeks >= 4 and row.get("Base_Block_Rate", 0) > 0:
-                factor = float(math.ceil(weeks / 4.0))
-                display_rate = row["Base_Block_Rate"]
+                factor = float(math.ceil(weeks / 4.0)); display_rate = row["Base_Block_Rate"]
             else:
-                factor = float(weeks)
-                display_rate = row["Base_1Wk_Rate"]
+                factor = float(weeks); display_rate = row["Base_1Wk_Rate"]
         elif row.get("Is_Marquee", False):
             display_rate = row["Unit Rate"]
-            if weeks > 1:
-                factor = 1.0 + 0.5 * (weeks - 1)
-            else:
-                factor = 1.0
+            factor = 1.0 + 0.5 * (weeks - 1) if weeks > 1 else 1.0
         elif row.get("Is_Grandstand", False):
             display_rate = row["Unit Rate"]
-            if weeks > 2:
-                factor = 1.0 + 0.5 * (weeks - 2)
-            else:
-                factor = 1.0
+            factor = 1.0 + 0.5 * (weeks - 2) if weeks > 2 else 1.0
         else:
-            display_rate = row["Unit Rate"]
-            factor = float(weeks)
+            display_rate = row["Unit Rate"]; factor = float(weeks)
 
         if override > 0:
-            display_rate = override
-            factor = 1.0
+            display_rate = override; factor = 1.0
 
         wk1_t = qty * display_rate * factor * dm
         h_tot_c += wk1_t
@@ -499,14 +467,9 @@ if st.session_state.df is not None and not st.session_state.df.empty:
         if row.get('Anchoring'): prod_display += f" ({row['Anchoring']})"
         
         final_pdf_items.append({
-            "Product": prod_display,
-            "Qty": qty,
-            "Unit Rate": display_rate,
-            "Factor": factor,
-            "Discount": row["Discount"],
-            "Line Total": wk1_t,
-            "Is_Grandstand": row.get("Is_Grandstand", False),
-            "Lab_Math": row.get("Lab_Math", "")
+            "Product": prod_display, "Qty": qty, "Unit Rate": display_rate,
+            "Factor": factor, "Discount": row["Discount"], "Line Total": wk1_t,
+            "Is_Grandstand": row.get("Is_Grandstand", False), "Lab_Math": row.get("Lab_Math", "")
         })
         
         c0, c1, c2, c3, c_f, c4, c4b, c5 = st.columns([0.4, 2.6, 0.9, 1.1, 0.8, 1.0, 1.1, 1.3])
@@ -517,24 +480,32 @@ if st.session_state.df is not None and not st.session_state.df.empty:
             
         c1.markdown(f"<div class='item-text'>{prod_display}</div>", unsafe_allow_html=True)
         
+        # UPGRADED v83.0: Consolidated interaction checks to prevent double reruns on inputs
+        col_has_changes = False
         new_qty = c2.number_input("QtyBox", min_value=0.0, value=float(qty), key=f"sqty_{idx}", label_visibility="collapsed")
+        c3.write(f"${display_rate:,.2f}")
+        c_f.write(f"{factor:g}")
+        new_disc = c4.number_input("Disc %", 0.0, 100.0, float(row["Discount"]), key=f"sd_{idx}", label_visibility="collapsed")
+        new_override = c4b.number_input("Override", 0.0, 5000.0, value=None if float(row.get("Override_Rate", 0.0)) == 0.0 else float(row.get("Override_Rate", 0.0)), placeholder="Override...", key=f"so_{idx}", label_visibility="collapsed")
+        c5.markdown(f"<div style='text-align: right; font-size: 20px; font-weight: 700;'>${wk1_t:,.2f}</div>", unsafe_allow_html=True)
+
         if new_qty != float(qty):
             st.session_state.df.at[idx, "Qty"] = new_qty
             if row.get("Is_Marquee"):
                 for w_idx, w_row in st.session_state.df.iterrows():
                     if "Weights" in w_row["Product"]:
-                        num_weights_factor = get_item_property(row["Product"], "Total Number of weights")
-                        st.session_state.df.at[w_idx, "Qty"] = int(num_weights_factor * new_qty)
-            st.rerun()
+                        st.session_state.df.at[w_idx, "Qty"] = int(get_item_property(row["Product"], "Total Number of weights") * new_qty)
+            col_has_changes = True
+
+        if new_disc != row["Discount"]:
+            st.session_state.df.at[idx, "Discount"] = new_disc
+            col_has_changes = True
             
-        c3.write(f"${display_rate:,.2f}")
-        c_f.write(f"{factor:g}")
-        new_disc = c4.number_input("Disc %", 0.0, 100.0, float(row["Discount"]), key=f"sd_{idx}", label_visibility="collapsed")
-        if new_disc != row["Discount"]: st.session_state.df.at[idx, "Discount"] = new_disc; st.rerun()
+        if (new_override or 0.0) != row.get("Override_Rate", 0.0):
+            st.session_state.df.at[idx, "Override_Rate"] = (new_override or 0.0)
+            col_has_changes = True
             
-        new_override = c4b.number_input("Override", 0.0, 5000.0, value=None if float(row.get("Override_Rate", 0.0)) == 0.0 else float(row.get("Override_Rate", 0.0)), placeholder="Override...", key=f"so_{idx}", label_visibility="collapsed")
-        if (new_override or 0.0) != row.get("Override_Rate", 0.0): st.session_state.df.at[idx, "Override_Rate"] = new_override or 0.0; st.rerun()
-        c5.markdown(f"<div style='text-align: right; font-size: 20px; font-weight: 700;'>${wk1_t:,.2f}</div>", unsafe_allow_html=True)
+        if col_has_changes: st.rerun()
 
     min_trucks = math.ceil(total_kg / 6000) or 1
     saved_trk_count = st.session_state.overrides_dict.get("logistics_truck_allocation_count_scalar", float(min_trucks))
@@ -627,7 +598,6 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     grand_total_calc = h_tot_c + final_labour_pool_sum + final_waiver_sum + final_cartage_sum
     st.markdown(f"<div class='gt-banner'>GRAND TOTAL (EX GST): ${grand_total_calc:,.2f}</div>", unsafe_allow_html=True)
     
-    # Document compilation lines text mapping for black header PDF logs
     structural_math_dict = {"LABOUR": [], "LOGISTICS": [], "DAMAGE WAIVER": []}
     for idx, row in st.session_state.df.iterrows():
         if row.get('Raw_Lab', 0.0) > 0.0:
@@ -635,10 +605,8 @@ if st.session_state.df is not None and not st.session_state.df.empty:
             saved_val = st.session_state.overrides_dict.get(lbl_key, -1.0)
             l_val = saved_val if saved_val >= 0 else float(row['Raw_Lab'])
             math_hint = row.get("Lab_Math", "")
-            if math_hint:
-                structural_math_dict["LABOUR"].append(f"{row['Product']} | {math_hint} = ${l_val:,.2f}")
-            else:
-                structural_math_dict["LABOUR"].append(f"{row['Product']} = ${l_val:,.2f}")
+            if math_hint: structural_math_dict["LABOUR"].append(f"{row['Product']} | {math_hint} = ${l_val:,.2f}")
+            else: structural_math_dict["LABOUR"].append(f"{row['Product']} = ${l_val:,.2f}")
                 
     if final_labour_pool_sum == 350.00 and raw_lab_pool < 350.00:
         structural_math_dict["LABOUR"].append("Minimum Floor Buffer Adjustment top-up applied")
@@ -647,21 +615,13 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     structural_math_dict["DAMAGE WAIVER"].append(f"${waiver_eligible_total:,.2f} x 7% = ${final_waiver_sum:,.2f}")
 
 # ==============================================================================
-# 10. DOWNLOAD ZONE
+# 10. DOWNLOAD ZONE (UPGRADED v83.0: High-Performance Caching Hooks)
 # ==============================================================================
     st.markdown("")  
     action_col_1, action_col_2 = st.columns(2)
             
-    pdf_b = create_calculation_pdf(h_tot_c, final_labour_pool_sum, final_waiver_sum, final_cartage_sum, grand_total_calc, weeks, final_pdf_items, structural_math_dict, job_name_input)
+    pdf_b = cached_pdf_generator(h_tot_c, final_labour_pool_sum, final_waiver_sum, final_cartage_sum, grand_total_calc, weeks, final_pdf_items, structural_math_dict, job_name_input)
     action_col_1.download_button("📥 DOWNLOAD DETAILED AUDIT PDF", pdf_b, file_name=f"{job_name_input.replace(' ', '_')}_Analysis.pdf", mime="application/pdf", use_container_width=True)
 
-    excel_df = struct_db.copy()
-    try:
-        excel_buffer = io.BytesIO()
-        with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
-            excel_df.to_excel(writer, index=False, sheet_name='Database_Backup')
-        excel_data_bytes, ext, mt = excel_buffer.getvalue(), "xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    except:
-        excel_data_bytes, ext, mt = excel_df.to_csv(index=False).encode('utf-8'), "csv", "text/csv"
-
-    action_col_2.download_button(label="📊 DOWNLOAD NATIVE DATA ARCHIVE", data=excel_data_bytes, file_name="Louis_Current_Database_Template.xlsx", mime=mt, use_container_width=True)
+    excel_bytes, ext, mt = cached_excel_generator(struct_db.to_dict('records'))
+    action_col_2.download_button(label="📊 DOWNLOAD NATIVE DATA ARCHIVE", data=excel_bytes, file_name="Louis_Current_Database_Template.xlsx", mime=mt, use_container_width=True)
