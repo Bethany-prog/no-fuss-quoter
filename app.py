@@ -104,7 +104,6 @@ def get_item_property(config_name, column_target, fallback_val=0.0):
             return val if not pd.isna(val) else fallback_val
     return fallback_val
 
-# UPGRADED v81.0: Full Algorithmic Model Implementation replacing the static lists
 def calculate_dynamic_grandstand_rate(seats_input):
     if seats_input <= 0:
         return 0.0, "0 seats allocation"
@@ -462,6 +461,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
         qty, dm = row["Qty"], (1 - (row["Discount"]/100))
         total_kg += row["KG"]
         
+        # UPGRADE v82.0: Distinct multiplier boundaries for Marquee vs. Grandstand logic
         if row.get("Is_Flooring"):
             if weeks >= 4 and row.get("Base_Block_Rate", 0) > 0:
                 factor = float(math.ceil(weeks / 4.0))
@@ -469,10 +469,16 @@ if st.session_state.df is not None and not st.session_state.df.empty:
             else:
                 factor = float(weeks)
                 display_rate = row["Base_1Wk_Rate"]
-        elif row.get("Is_Marquee", False) or row.get("Is_Grandstand", False):
+        elif row.get("Is_Marquee", False):
             display_rate = row["Unit Rate"]
             if weeks > 1:
                 factor = 1.0 + 0.5 * (weeks - 1)
+            else:
+                factor = 1.0
+        elif row.get("Is_Grandstand", False):
+            display_rate = row["Unit Rate"]
+            if weeks > 2:
+                factor = 1.0 + 0.5 * (weeks - 2)
             else:
                 factor = 1.0
         else:
