@@ -151,17 +151,6 @@ def cached_pdf_generator(subtotal, labour, waiver, cartage, grand, weeks, final_
     except:
         return bytes(pdf.output())
 
-@st.cache_data(show_spinner=False)
-def cached_excel_generator(data_dict_list):
-    excel_df = pd.DataFrame(data_dict_list)
-    try:
-        excel_buffer = io.BytesIO()
-        with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
-            excel_df.to_excel(writer, index=False, sheet_name='Database_Backup')
-        return excel_buffer.getvalue(), "xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    except:
-        return excel_df.to_csv(index=False).encode('utf-8'), "csv", "text/csv"
-
 # ==============================================================================
 # SMART LOGIC HOOKS
 # ==============================================================================
@@ -241,9 +230,9 @@ if 'overrides_dict' not in st.session_state: st.session_state.overrides_dict = {
 job_name_input = st.text_input("📝 Active Project / Job Name Reference", value="New Project Estimate", placeholder="Type reference label name...")
 
 c_dt1, c_km_sep = st.columns([1, 1])
-start_d = c_dt1.date_input("Start Date", value=st.session_state.start_date_val, key=f"sd_base_{st.session_state.reset_key_seed}")
+start_d = c_dt1.date_input("Start Date", value=st.session_state.start_date_val, format="DD/MM/YYYY", key=f"sd_base_{st.session_state.reset_key_seed}")
 st.session_state.start_date_val = start_d
-end_d = c_km_sep.date_input("End Date", value=start_d, key=f"ed_base_{st.session_state.reset_key_seed}")
+end_d = c_km_sep.date_input("End Date", value=start_d, format="DD/MM/YYYY", key=f"ed_base_{st.session_state.reset_key_seed}")
 weeks = math.ceil(((end_d - start_d).days) / 7) or 1
 
 input_addr = st.text_input("🏠 Delivery Site Address", placeholder="Type venue address or suburb (e.g. Cranbourne, Victoria)...", key="address_input_box")
@@ -480,7 +469,6 @@ if st.session_state.df is not None and not st.session_state.df.empty:
             
         c1.markdown(f"<div class='item-text'>{prod_display}</div>", unsafe_allow_html=True)
         
-        # UPGRADED v83.0: Consolidated interaction checks to prevent double reruns on inputs
         col_has_changes = False
         new_qty = c2.number_input("QtyBox", min_value=0.0, value=float(qty), key=f"sqty_{idx}", label_visibility="collapsed")
         c3.write(f"${display_rate:,.2f}")
@@ -615,13 +603,8 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     structural_math_dict["DAMAGE WAIVER"].append(f"${waiver_eligible_total:,.2f} x 7% = ${final_waiver_sum:,.2f}")
 
 # ==============================================================================
-# 10. DOWNLOAD ZONE (UPGRADED v83.0: High-Performance Caching Hooks)
+# 10. DOWNLOAD ZONE
 # ==============================================================================
     st.markdown("")  
-    action_col_1, action_col_2 = st.columns(2)
-            
     pdf_b = cached_pdf_generator(h_tot_c, final_labour_pool_sum, final_waiver_sum, final_cartage_sum, grand_total_calc, weeks, final_pdf_items, structural_math_dict, job_name_input)
-    action_col_1.download_button("📥 DOWNLOAD DETAILED AUDIT PDF", pdf_b, file_name=f"{job_name_input.replace(' ', '_')}_Analysis.pdf", mime="application/pdf", use_container_width=True)
-
-    excel_bytes, ext, mt = cached_excel_generator(struct_db.to_dict('records'))
-    action_col_2.download_button(label="📊 DOWNLOAD NATIVE DATA ARCHIVE", data=excel_bytes, file_name="Louis_Current_Database_Template.xlsx", mime=mt, use_container_width=True)
+    st.download_button("📥 DOWNLOAD DETAILED AUDIT PDF", pdf_b, file_name=f"{job_name_input.replace(' ', '_')}_Analysis.pdf", mime="application/pdf", use_container_width=True)
