@@ -4,9 +4,6 @@ import pandas as pd
 from datetime import date, datetime, timedelta
 from fpdf import FPDF
 import re
-import json
-import os
-import io
 
 # ==============================================================================
 # 0. NATIVE INTEGRATED MASTER DATA ARCHIVE (ZERO EXTERNAL FILE DEPENDENCY)
@@ -227,7 +224,7 @@ if 'overrides_dict' not in st.session_state: st.session_state.overrides_dict = {
 # ==============================================================================
 # 6. GLOBAL BASE CONTROLS MOUNT
 # ==============================================================================
-job_name_input = st.text_input("📝 Active Project / Job Name Reference", value="New Project Estimate", placeholder="Type reference label name...")
+job_name_input = st.text_input("📝 Active Project / Job Name Reference", value=None, placeholder="Type reference label name...")
 
 c_dt1, c_km_sep = st.columns([1, 1])
 start_d = c_dt1.date_input("Start Date", value=st.session_state.start_date_val, format="DD/MM/YYYY", key=f"sd_base_{st.session_state.reset_key_seed}")
@@ -246,8 +243,9 @@ if input_addr and input_addr.strip() != st.session_state.site_address_str:
 
 st.markdown("**🚛 Active Transport Routing Distance**")
 c_km1, c_km2 = st.columns([1, 4])
-new_manual_km = c_km1.number_input("One-Way KM", min_value=0.0, value=float(st.session_state.km))
-if new_manual_km != float(st.session_state.km): 
+# UPGRADED v85.0: Defaults strictly to None/blank unless an exact km target exists. 
+new_manual_km = c_km1.number_input("One-Way KM", min_value=0.0, value=float(st.session_state.km) if st.session_state.km > 0 else None, placeholder="0.0")
+if new_manual_km is not None and new_manual_km != float(st.session_state.km): 
     st.session_state.km = new_manual_km
     st.session_state.site_address_str = "Custom Set Coordinate"
 c_km2.info(f"Routing evaluations active at **{st.session_state.km} One-Way KM** tracing from source depot. Duration: {weeks} Week(s).")
@@ -263,9 +261,10 @@ waiver_mode = l3.segmented_control("Damage Waiver", ["Charge", "Free"], default=
 st.divider()
 st.markdown("### ➕ CATALOG COMPONENT HUB")
 
-selected_cat = st.selectbox("Choose Category to Load", ["marquees", "flooring", "grandstands"])
+# UPGRADED v85.0: Forced Uppercase Category Names 
+selected_cat = st.selectbox("Choose Category to Load", ["Marquees", "Flooring", "Grandstands"])
 
-if selected_cat == "marquees":
+if selected_cat == "Marquees":
     search_query = st.text_input("🔍 Smart Search Marquee Size (e.g. 4x3, 6x3, 15x15):", placeholder="Type structure dimensions here...", key="marq_search_box")
     filtered_df = struct_db.copy()
     if search_query: filtered_df = filtered_df[filtered_df["Configuration"].apply(lambda x: matches_smart_query(x, search_query))]
@@ -309,7 +308,7 @@ if selected_cat == "marquees":
                 st.rerun()
     else: st.info("No matching configuration marquee sizes found.")
 
-elif selected_cat == "flooring":
+elif selected_cat == "Flooring":
     floor_options = flooring_db["Product Name"].tolist()
     target_item = st.selectbox("Select Flooring Type Options:", floor_options, key="floor_res")
     f_input_method = st.radio("Input Calculation Method", ["Enter Dimensions (Width x Length)", "Enter Total SQM Directly"], horizontal=True)
@@ -385,7 +384,7 @@ elif selected_cat == "flooring":
                 st.session_state.df = pd.concat([st.session_state.df, new_f_df], ignore_index=True)
             st.rerun()
 
-elif selected_cat == "grandstands":
+elif selected_cat == "Grandstands":
     seats_input = st.number_input("Total Seat Capacity Requirements Count", min_value=1, value=None, placeholder="Type total quantity of seats...", key="gs_qty")
     
     if st.button("Add Grandstand Configuration Layout"):
@@ -473,7 +472,9 @@ if st.session_state.df is not None and not st.session_state.df.empty:
         new_qty = c2.number_input("QtyBox", min_value=0.0, value=float(qty), key=f"sqty_{idx}", label_visibility="collapsed")
         c3.write(f"${display_rate:,.2f}")
         c_f.write(f"{factor:g}")
-        new_disc = c4.number_input("Disc %", 0.0, 100.0, float(row["Discount"]), key=f"sd_{idx}", label_visibility="collapsed")
+        
+        # UPGRADED v85.0: Input logic defaults perfectly to None/Blanks for empty fields.
+        new_disc = c4.number_input("Disc %", 0.0, 100.0, value=None if float(row["Discount"]) == 0.0 else float(row["Discount"]), placeholder="0%", key=f"sd_{idx}", label_visibility="collapsed")
         new_override = c4b.number_input("Override", 0.0, 5000.0, value=None if float(row.get("Override_Rate", 0.0)) == 0.0 else float(row.get("Override_Rate", 0.0)), placeholder="Override...", key=f"so_{idx}", label_visibility="collapsed")
         c5.markdown(f"<div style='text-align: right; font-size: 20px; font-weight: 700;'>${wk1_t:,.2f}</div>", unsafe_allow_html=True)
 
@@ -485,12 +486,14 @@ if st.session_state.df is not None and not st.session_state.df.empty:
                         st.session_state.df.at[w_idx, "Qty"] = int(get_item_property(row["Product"], "Total Number of weights") * new_qty)
             col_has_changes = True
 
-        if new_disc != row["Discount"]:
-            st.session_state.df.at[idx, "Discount"] = new_disc
+        eval_disc = new_disc if new_disc is not None else 0.0
+        if eval_disc != row["Discount"]:
+            st.session_state.df.at[idx, "Discount"] = eval_disc
             col_has_changes = True
             
-        if (new_override or 0.0) != row.get("Override_Rate", 0.0):
-            st.session_state.df.at[idx, "Override_Rate"] = (new_override or 0.0)
+        eval_ovr = new_override if new_override is not None else 0.0
+        if eval_ovr != row.get("Override_Rate", 0.0):
+            st.session_state.df.at[idx, "Override_Rate"] = eval_ovr
             col_has_changes = True
             
         if col_has_changes: st.rerun()
@@ -504,13 +507,9 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     auto_waiver_total = waiver_eligible_total * 0.07 if waiver_mode == "Charge" else 0
 
     # ==============================================================================
-    # 9. MANUAL OVERRIDES GRID
+    # 9. MANUAL OVERRIDES GRID (UPGRADED v85.0: Visual Containers & Clean Cards)
     # ==============================================================================
     st.divider(); st.markdown("### 🛠️ MANUAL LOGISTICS OVERRIDES")
-    h_adj0, h_adj1, h_adj2, h_adj3 = st.columns([0.4, 3.2, 2.2, 1.4])
-    h_adj1.markdown("<div class='summary-hdr'>Item Description</div>", unsafe_allow_html=True)
-    h_adj2.markdown("<div class='summary-hdr'>Override Rate (Editable)</div>", unsafe_allow_html=True)
-    h_adj3.markdown("<div class='summary-hdr' style='text-align: right;'>Subtotal</div>", unsafe_allow_html=True)
     
     final_labour_pool_sum = 0.0
     has_changes_detected = False
@@ -522,55 +521,59 @@ if st.session_state.df is not None and not st.session_state.df.empty:
                 lbl_key = f"lab_ovr_{p_label}_{idx}"
                 auto_val = float(row['Raw_Lab'])
                 math_hint_str = row['Lab_Math']
-                
                 saved_override_val = st.session_state.overrides_dict.get(lbl_key, -1.0)
                 
-                r_c0, r_c1, r_c2, r_c3 = st.columns([0.4, 3.2, 2.2, 1.4])
-                r_c1.markdown(f"<div class='item-text'>Labour: {p_label}</div><div class='sub-math-hint'>{math_hint_str.lower()}</div>", unsafe_allow_html=True)
-                
-                new_input_val = r_c2.number_input("InputL", min_value=0.0, value=None if saved_override_val < 0 else float(saved_override_val), placeholder=f"book: ${auto_val:,.2f}", key=f"f_l_{idx}", label_visibility="collapsed")
-                actual_l_val = new_input_val if new_input_val is not None else auto_val
-                r_c3.markdown(f"<div style='text-align: right; font-size: 20px; font-weight: 700;'>${actual_l_val:,.2f}</div>", unsafe_allow_html=True)
-                
-                final_labour_pool_sum += actual_l_val
-                target_saved_flag = new_input_val if new_input_val is not None else -1.0
-                if target_saved_flag != saved_override_val:
-                    st.session_state.overrides_dict[lbl_key] = target_saved_flag; has_changes_detected = True
+                with st.container(border=True):
+                    r_c1, r_c2, r_c3 = st.columns([3, 1.5, 1.5])
+                    r_c1.markdown(f"**👷 Labour: {p_label}**<br><span style='color:gray; font-size:14px;'>{math_hint_str}</span>", unsafe_allow_html=True)
+                    new_input_val = r_c2.number_input("Override", min_value=0.0, value=None if saved_override_val < 0 else float(saved_override_val), placeholder=f"Auto: ${auto_val:,.2f}", key=f"f_l_{idx}", label_visibility="collapsed")
+                    actual_l_val = new_input_val if new_input_val is not None else auto_val
+                    r_c3.markdown(f"<h3 style='text-align: right; margin-top: 0; color: #1E88E5;'>${actual_l_val:,.2f}</h3>", unsafe_allow_html=True)
+                    
+                    final_labour_pool_sum += actual_l_val
+                    target_saved_flag = new_input_val if new_input_val is not None else -1.0
+                    if target_saved_flag != saved_override_val:
+                        st.session_state.overrides_dict[lbl_key] = target_saved_flag; has_changes_detected = True
 
         if final_labour_pool_sum < 350.00 and final_labour_pool_sum > 0:
             floor_topup = 350.00 - final_labour_pool_sum
-            r_f0, r_f1, r_f2, r_f3 = st.columns([0.4, 3.2, 2.2, 1.4])
-            r_f1.markdown("<div class='item-text'>Labour Minimum Floor Buffer</div>", unsafe_allow_html=True)
-            r_f3.markdown(f"<div style='text-align: right; font-size: 20px; font-weight: 700; color: grey;'>${floor_topup:,.2f}</div>", unsafe_allow_html=True)
+            with st.container(border=True):
+                r_f1, r_f2, r_f3 = st.columns([3, 1.5, 1.5])
+                r_f1.markdown("**🛡️ Labour Minimum Floor Buffer**<br><span style='color:gray; font-size:14px;'>Automatic margin top-up</span>", unsafe_allow_html=True)
+                r_f3.markdown(f"<h3 style='text-align: right; margin-top: 0; color: #757575;'>${floor_topup:,.2f}</h3>", unsafe_allow_html=True)
             final_labour_pool_sum = 350.00
     else: final_labour_pool_sum = 0.0
 
-    r_trk0, r_trk1, r_trk2, r_trk3 = st.columns([0.4, 3.2, 2.2, 1.4])
-    r_trk1.markdown(f"<div class='item-text'>Logistics: Active Truck Count</div><div class='sub-math-hint'>calculated requirement: {min_trucks} truck(s)</div>", unsafe_allow_html=True)
-    new_trk_count = r_trk2.number_input("TruckInputBox", min_value=float(min_trucks), step=1.0, value=float(trks), key="f_trk_scalar_cell", label_visibility="collapsed")
-    r_trk3.markdown(f"<div style='text-align: right; font-size: 16px; font-weight: 600; color: grey; margin-top: 14px;'>{int(new_trk_count)} Truck(s)</div>", unsafe_allow_html=True)
-    if new_trk_count != float(trks):
-        st.session_state.overrides_dict["logistics_truck_allocation_count_scalar"] = new_trk_count; has_changes_detected = True
+    with st.container(border=True):
+        r_trk1, r_trk2, r_trk3 = st.columns([3, 1.5, 1.5])
+        r_trk1.markdown(f"**🚛 Logistics: Active Truck Count**<br><span style='color:gray; font-size:14px;'>Calculated spatial requirement: {min_trucks} truck(s)</span>", unsafe_allow_html=True)
+        new_trk_count = r_trk2.number_input("TruckInputBox", min_value=float(min_trucks), step=1.0, value=None if saved_trk_count == float(min_trucks) else float(trks), placeholder=f"Auto: {min_trucks}", key="f_trk_scalar_cell", label_visibility="collapsed")
+        eval_trks = new_trk_count if new_trk_count is not None else float(min_trucks)
+        r_trk3.markdown(f"<h3 style='text-align: right; margin-top: 0; color: #1E88E5;'>{int(eval_trks)} Truck(s)</h3>", unsafe_allow_html=True)
+        if eval_trks != float(trks):
+            st.session_state.overrides_dict["logistics_truck_allocation_count_scalar"] = eval_trks; has_changes_detected = True
 
     cart_key = "logistics_cartage_freight_global"
     saved_cart_override = st.session_state.overrides_dict.get(cart_key, -1.0)
-    r_t0, r_t1, r_t2, r_t3 = st.columns([0.4, 3.2, 2.2, 1.4])
-    r_t1.markdown(f"<div class='item-text'>Logistics: Cartage Freight Fee</div><div class='sub-math-hint'>default: {trks} trucks x {st.session_state.km}km x 4 x $3.50</div>", unsafe_allow_html=True)
-    new_cart_val = r_t2.number_input("InputC", min_value=0.0, value=None if saved_cart_override < 0 else float(saved_cart_override), placeholder=f"book: ${auto_cartage_total:,.2f}", key="f_c_global", label_visibility="collapsed")
-    final_cartage_sum = new_cart_val if new_cart_val is not None else auto_cartage_total
-    r_t3.markdown(f"<div style='text-align: right; font-size: 20px; font-weight: 700;'>${final_cartage_sum:,.2f}</div>", unsafe_allow_html=True)
-    target_cart_flag = new_cart_val if new_cart_val is not None else -1.0
-    if target_cart_flag != saved_cart_override: st.session_state.overrides_dict[cart_key] = target_cart_flag; has_changes_detected = True
+    with st.container(border=True):
+        r_t1, r_t2, r_t3 = st.columns([3, 1.5, 1.5])
+        r_t1.markdown(f"**📦 Logistics: Cartage Freight Fee**<br><span style='color:gray; font-size:14px;'>Base rate: {trks} trucks x {st.session_state.km}km x 4 trips x $3.50/km</span>", unsafe_allow_html=True)
+        new_cart_val = r_t2.number_input("InputC", min_value=0.0, value=None if saved_cart_override < 0 else float(saved_cart_override), placeholder=f"Auto: ${auto_cartage_total:,.2f}", key="f_c_global", label_visibility="collapsed")
+        final_cartage_sum = new_cart_val if new_cart_val is not None else auto_cartage_total
+        r_t3.markdown(f"<h3 style='text-align: right; margin-top: 0; color: #1E88E5;'>${final_cartage_sum:,.2f}</h3>", unsafe_allow_html=True)
+        target_cart_flag = new_cart_val if new_cart_val is not None else -1.0
+        if target_cart_flag != saved_cart_override: st.session_state.overrides_dict[cart_key] = target_cart_flag; has_changes_detected = True
 
     waiv_key = "damage_waiver_insurance_global"
     saved_waiv_override = st.session_state.overrides_dict.get(waiv_key, -1.0)
-    r_w0, r_w1, r_w2, r_w3 = st.columns([0.4, 3.2, 2.2, 1.4])
-    r_w1.markdown(f"<div class='item-text'>Waiver: Equipment Damage Indemnity</div><div class='sub-math-hint'>default: ${waiver_eligible_total:,.2f} eligible product hire x 7%</div>", unsafe_allow_html=True)
-    new_waiv_val = r_w2.number_input("InputW", min_value=0.0, value=None if saved_waiv_override < 0 else float(saved_waiv_override), placeholder=f"book: ${auto_waiver_total:,.2f}", key="f_w_global", label_visibility="collapsed")
-    final_waiver_sum = new_waiv_val if new_waiv_val is not None else auto_waiver_total
-    r_w3.markdown(f"<div style='text-align: right; font-size: 20px; font-weight: 700;'>${final_waiver_sum:,.2f}</div>", unsafe_allow_html=True)
-    target_waiv_flag = new_waiv_val if new_waiv_val is not None else -1.0
-    if target_waiv_flag != saved_waiv_override: st.session_state.overrides_dict[waiv_key] = target_waiv_flag; has_changes_detected = True
+    with st.container(border=True):
+        r_w1, r_w2, r_w3 = st.columns([3, 1.5, 1.5])
+        r_w1.markdown(f"**🛡️ Waiver: Equipment Damage Indemnity**<br><span style='color:gray; font-size:14px;'>Default: ${waiver_eligible_total:,.2f} eligible product hire x 7%</span>", unsafe_allow_html=True)
+        new_waiv_val = r_w2.number_input("InputW", min_value=0.0, value=None if saved_waiv_override < 0 else float(saved_waiv_override), placeholder=f"Auto: ${auto_waiver_total:,.2f}", key="f_w_global", label_visibility="collapsed")
+        final_waiver_sum = new_waiv_val if new_waiv_val is not None else auto_waiver_total
+        r_w3.markdown(f"<h3 style='text-align: right; margin-top: 0; color: #1E88E5;'>${final_waiver_sum:,.2f}</h3>", unsafe_allow_html=True)
+        target_waiv_flag = new_waiv_val if new_waiv_val is not None else -1.0
+        if target_waiv_flag != saved_waiv_override: st.session_state.overrides_dict[waiv_key] = target_waiv_flag; has_changes_detected = True
 
     if has_changes_detected: st.rerun()
 
@@ -603,8 +606,8 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     structural_math_dict["DAMAGE WAIVER"].append(f"${waiver_eligible_total:,.2f} x 7% = ${final_waiver_sum:,.2f}")
 
 # ==============================================================================
-# 10. DOWNLOAD ZONE
+# 10. DOWNLOAD ZONE (UPGRADED v85.0: EXCLUSIVE FULL-WIDTH PDF OUTPUT)
 # ==============================================================================
     st.markdown("")  
-    pdf_b = cached_pdf_generator(h_tot_c, final_labour_pool_sum, final_waiver_sum, final_cartage_sum, grand_total_calc, weeks, final_pdf_items, structural_math_dict, job_name_input)
-    st.download_button("📥 DOWNLOAD DETAILED AUDIT PDF", pdf_b, file_name=f"{job_name_input.replace(' ', '_')}_Analysis.pdf", mime="application/pdf", use_container_width=True)
+    pdf_b = cached_pdf_generator(h_tot_c, final_labour_pool_sum, final_waiver_sum, final_cartage_sum, grand_total_calc, weeks, final_pdf_items, structural_math_dict, job_name_input or "Project_Quote")
+    st.download_button("📥 DOWNLOAD DETAILED AUDIT PDF", pdf_b, file_name=f"{(job_name_input or 'Quote').replace(' ', '_')}_Analysis.pdf", mime="application/pdf", use_container_width=True)
