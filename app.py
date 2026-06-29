@@ -243,7 +243,6 @@ if input_addr and input_addr.strip() != st.session_state.site_address_str:
 
 st.markdown("**🚛 Active Transport Routing Distance**")
 c_km1, c_km2 = st.columns([1, 4])
-# UPGRADED v85.0: Defaults strictly to None/blank unless an exact km target exists. 
 new_manual_km = c_km1.number_input("One-Way KM", min_value=0.0, value=float(st.session_state.km) if st.session_state.km > 0 else None, placeholder="0.0")
 if new_manual_km is not None and new_manual_km != float(st.session_state.km): 
     st.session_state.km = new_manual_km
@@ -261,7 +260,6 @@ waiver_mode = l3.segmented_control("Damage Waiver", ["Charge", "Free"], default=
 st.divider()
 st.markdown("### ➕ CATALOG COMPONENT HUB")
 
-# UPGRADED v85.0: Forced Uppercase Category Names 
 selected_cat = st.selectbox("Choose Category to Load", ["Marquees", "Flooring", "Grandstands"])
 
 if selected_cat == "Marquees":
@@ -473,7 +471,6 @@ if st.session_state.df is not None and not st.session_state.df.empty:
         c3.write(f"${display_rate:,.2f}")
         c_f.write(f"{factor:g}")
         
-        # UPGRADED v85.0: Input logic defaults perfectly to None/Blanks for empty fields.
         new_disc = c4.number_input("Disc %", 0.0, 100.0, value=None if float(row["Discount"]) == 0.0 else float(row["Discount"]), placeholder="0%", key=f"sd_{idx}", label_visibility="collapsed")
         new_override = c4b.number_input("Override", 0.0, 5000.0, value=None if float(row.get("Override_Rate", 0.0)) == 0.0 else float(row.get("Override_Rate", 0.0)), placeholder="Override...", key=f"so_{idx}", label_visibility="collapsed")
         c5.markdown(f"<div style='text-align: right; font-size: 20px; font-weight: 700;'>${wk1_t:,.2f}</div>", unsafe_allow_html=True)
@@ -507,7 +504,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     auto_waiver_total = waiver_eligible_total * 0.07 if waiver_mode == "Charge" else 0
 
     # ==============================================================================
-    # 9. MANUAL OVERRIDES GRID (UPGRADED v85.0: Visual Containers & Clean Cards)
+    # 9. MANUAL OVERRIDES GRID
     # ==============================================================================
     st.divider(); st.markdown("### 🛠️ MANUAL LOGISTICS OVERRIDES")
     
@@ -542,6 +539,21 @@ if st.session_state.df is not None and not st.session_state.df.empty:
                 r_f1.markdown("**🛡️ Labour Minimum Floor Buffer**<br><span style='color:gray; font-size:14px;'>Automatic margin top-up</span>", unsafe_allow_html=True)
                 r_f3.markdown(f"<h3 style='text-align: right; margin-top: 0; color: #757575;'>${floor_topup:,.2f}</h3>", unsafe_allow_html=True)
             final_labour_pool_sum = 350.00
+
+        # UPGRADED v86.0: Global Master Labour Override 
+        lab_global_key = "labour_total_global_override"
+        saved_lab_global = st.session_state.overrides_dict.get(lab_global_key, -1.0)
+        with st.container(border=True):
+            rl1, rl2, rl3 = st.columns([3, 1.5, 1.5])
+            rl1.markdown(f"**🏗️ Total Master Labour Override**<br><span style='color:gray; font-size:14px;'>Overrides all item labour & minimum floors. Default: ${final_labour_pool_sum:,.2f}</span>", unsafe_allow_html=True)
+            new_lab_global = rl2.number_input("InputLabGlobal", min_value=0.0, value=None if saved_lab_global < 0 else float(saved_lab_global), placeholder=f"Auto: ${final_labour_pool_sum:,.2f}", key="f_lab_global", label_visibility="collapsed")
+            if new_lab_global is not None:
+                final_labour_pool_sum = new_lab_global
+            rl3.markdown(f"<h3 style='text-align: right; margin-top: 0; color: #1E88E5;'>${final_labour_pool_sum:,.2f}</h3>", unsafe_allow_html=True)
+            target_lab_global = new_lab_global if new_lab_global is not None else -1.0
+            if target_lab_global != saved_lab_global:
+                st.session_state.overrides_dict[lab_global_key] = target_lab_global; has_changes_detected = True
+
     else: final_labour_pool_sum = 0.0
 
     with st.container(border=True):
@@ -589,24 +601,32 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     grand_total_calc = h_tot_c + final_labour_pool_sum + final_waiver_sum + final_cartage_sum
     st.markdown(f"<div class='gt-banner'>GRAND TOTAL (EX GST): ${grand_total_calc:,.2f}</div>", unsafe_allow_html=True)
     
+    # Document compilation lines text mapping for black header PDF logs
     structural_math_dict = {"LABOUR": [], "LOGISTICS": [], "DAMAGE WAIVER": []}
-    for idx, row in st.session_state.df.iterrows():
-        if row.get('Raw_Lab', 0.0) > 0.0:
-            lbl_key = f"lab_ovr_{row['Product']}_{idx}"
-            saved_val = st.session_state.overrides_dict.get(lbl_key, -1.0)
-            l_val = saved_val if saved_val >= 0 else float(row['Raw_Lab'])
-            math_hint = row.get("Lab_Math", "")
-            if math_hint: structural_math_dict["LABOUR"].append(f"{row['Product']} | {math_hint} = ${l_val:,.2f}")
-            else: structural_math_dict["LABOUR"].append(f"{row['Product']} = ${l_val:,.2f}")
-                
-    if final_labour_pool_sum == 350.00 and raw_lab_pool < 350.00:
-        structural_math_dict["LABOUR"].append("Minimum Floor Buffer Adjustment top-up applied")
-    structural_math_dict["LABOUR"].append(f"Total Applied = ${final_labour_pool_sum:,.2f}")
+    
+    # UPGRADED v86.0: Master override PDF routing logic
+    if st.session_state.overrides_dict.get("labour_total_global_override", -1.0) >= 0:
+        structural_math_dict["LABOUR"].append("Custom Master Labour Override Applied")
+        structural_math_dict["LABOUR"].append(f"Total Applied = ${final_labour_pool_sum:,.2f}")
+    else:
+        for idx, row in st.session_state.df.iterrows():
+            if row.get('Raw_Lab', 0.0) > 0.0:
+                lbl_key = f"lab_ovr_{row['Product']}_{idx}"
+                saved_val = st.session_state.overrides_dict.get(lbl_key, -1.0)
+                l_val = saved_val if saved_val >= 0 else float(row['Raw_Lab'])
+                math_hint = row.get("Lab_Math", "")
+                if math_hint: structural_math_dict["LABOUR"].append(f"{row['Product']} | {math_hint} = ${l_val:,.2f}")
+                else: structural_math_dict["LABOUR"].append(f"{row['Product']} = ${l_val:,.2f}")
+                    
+        if final_labour_pool_sum == 350.00 and raw_lab_pool < 350.00:
+            structural_math_dict["LABOUR"].append("Minimum Floor Buffer Adjustment top-up applied")
+        structural_math_dict["LABOUR"].append(f"Total Applied = ${final_labour_pool_sum:,.2f}")
+        
     structural_math_dict["LOGISTICS"].append(f"{trks} Trucks x {st.session_state.km}km x 4 x $3.50 = ${final_cartage_sum:,.2f}")
     structural_math_dict["DAMAGE WAIVER"].append(f"${waiver_eligible_total:,.2f} x 7% = ${final_waiver_sum:,.2f}")
 
 # ==============================================================================
-# 10. DOWNLOAD ZONE (UPGRADED v85.0: EXCLUSIVE FULL-WIDTH PDF OUTPUT)
+# 10. DOWNLOAD ZONE
 # ==============================================================================
     st.markdown("")  
     pdf_b = cached_pdf_generator(h_tot_c, final_labour_pool_sum, final_waiver_sum, final_cartage_sum, grand_total_calc, weeks, final_pdf_items, structural_math_dict, job_name_input or "Project_Quote")
