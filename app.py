@@ -4,7 +4,6 @@ import pandas as pd
 from datetime import date, datetime, timedelta
 from fpdf import FPDF
 import re
-import time
 
 # ==============================================================================
 # 0. NATIVE INTEGRATED MASTER DATA ARCHIVE (ZERO EXTERNAL FILE DEPENDENCY)
@@ -54,17 +53,6 @@ NATIVE_STRUCTURES = [
     {"Configuration": "20m x 40m", "Type": "Structure", "Hire Unit Rate": 15960.00, "Labour Total": 6384.00, "Total Weight (kg)": 20000.0, "Total Number of weights": 56.0, "Weight Size (KG)": 1200.0, "Cost per weight": 88.20, "Labour Per Weight": 22.05}
 ]
 
-NATIVE_GRANDSTANDS = [
-    {"Low": 0, "High": 40, "Staff": 2, "Hours": 4.0, "Total": 1760.0},
-    {"Low": 41, "High": 100, "Staff": 3, "Hours": 5.0, "Total": 3300.0},
-    {"Low": 101, "High": 149, "Staff": 4, "Hours": 5.5, "Total": 4840.0},
-    {"Low": 150, "High": 199, "Staff": 5, "Hours": 6.0, "Total": 6600.0},
-    {"Low": 200, "High": 249, "Staff": 5, "Hours": 7.0, "Total": 7700.0},
-    {"Low": 250, "High": 299, "Staff": 6, "Hours": 8.0, "Total": 10560.0},
-    {"Low": 300, "High": 349, "Staff": 6, "Hours": 9.0, "Total": 11880.0},
-    {"Low": 350, "High": 400, "Staff": 6, "Hours": 10.0, "Total": 13200.0}
-]
-
 NATIVE_FLOORING = [
     {"Product Name": "I-Trac", "1-Week Rate": 23.40, "4-Week Block": 46.80, "Labour": 4.65, "Weight": 15.0},
     {"Product Name": "I-Trac Ramps (1.07 x1.18)", "1-Week Rate": 42.00, "4-Week Block": 84.00, "Labour": 0.00, "Weight": 0.0},
@@ -83,19 +71,21 @@ struct_db = pd.DataFrame(NATIVE_STRUCTURES)
 flooring_db = pd.DataFrame(NATIVE_FLOORING)
 
 # ==============================================================================
-# PERFORMANCE CACHED PROCESSING ENGINES
+# PERFORMANCE CACHED PROCESSING ENGINES (HARDENED ROUTING HOOK)
 # ==============================================================================
 @st.cache_data(show_spinner=False, ttl=300)
 def fetch_depot_distance(address_string):
-    from geopy.geocoders import Nominatim
-    from geopy.distance import geodesic
     try:
-        custom_agent = f"louis_quoter_v87_{int(time.time())}"
-        geolocator = Nominatim(user_agent=custom_agent, timeout=10)
+        import time
+        from geopy.geocoders import Nominatim
+        from geopy.distance import geodesic
+        custom_agent = f"louis_quoter_v88_{int(time.time())}"
+        geolocator = Nominatim(user_agent=custom_agent, timeout=4)
         loc_data = geolocator.geocode(address_string + ", Victoria, Australia")
         if loc_data:
             return round(geodesic((DEPOT_LAT, DEPOT_LON), (loc_data.latitude, loc_data.longitude)).kilometers * 1.15, 1)
-    except: pass
+    except Exception:
+        pass
     return None
 
 @st.cache_data(show_spinner=False)
@@ -245,20 +235,21 @@ st.session_state.start_date_val = start_d
 end_d = c_km_sep.date_input("End Date", value=start_d, format="DD/MM/YYYY", key=f"ed_base_{st.session_state.reset_key_seed}")
 weeks = math.ceil(((end_d - start_d).days) / 7) or 1
 
-# UPGRADED v87.0: Spinner execution with exception fallback handling so UI never locks up on timeout
 input_addr = st.text_input("🏠 Delivery Site Address", placeholder="Type venue address or suburb (e.g. Cranbourne, Victoria)...", key="address_input_box")
 if input_addr and input_addr.strip() != st.session_state.site_address_str:
-    with st.spinner("🛰️ Pinging routing satellite..."):
+    try:
         new_dist = fetch_depot_distance(input_addr.strip())
-        
-    if new_dist is not None:
-        st.session_state.km = new_dist
+        if new_dist is not None:
+            st.session_state.km = new_dist
+            st.session_state.site_address_str = input_addr.strip()
+            st.toast(f"📍 Target verified: {st.session_state.km} KM", icon="✅")
+        else:
+            st.warning("⚠️ Auto-routing server is busy. Please manually enter the One-Way KM below.")
+            st.session_state.site_address_str = input_addr.strip()
+    except Exception:
+        st.warning("⚠️ Auto-routing server is busy. Please manually enter the One-Way KM below.")
         st.session_state.site_address_str = input_addr.strip()
-        st.toast(f"📍 Target verified: {st.session_state.km} KM", icon="✅")
-        st.rerun()
-    else:
-        st.error("⚠️ **Satellite Lookup Failed:** The free mapping server is currently busy or rate-limiting your connection. Please type the distance into the **One-Way KM** box below manually to continue.")
-        st.session_state.site_address_str = input_addr.strip() 
+    st.rerun()
 
 st.markdown("**🚛 Active Transport Routing Distance**")
 c_km1, c_km2 = st.columns([1, 4])
@@ -445,19 +436,13 @@ if st.session_state.df is not None and not st.session_state.df.empty:
         qty, dm = row["Qty"], (1 - (row["Discount"]/100))
         total_kg += row["KG"]
         
-        if row.get("Is_Flooring"):
-            if weeks >= 4 and row.get("Base_Block_Rate", 0) > 0:
-                factor = float(math.ceil(weeks / 4.0)); display_rate = row["Base_Block_Rate"]
-            else:
-                factor = float(weeks); display_rate = row["Base_1Wk_Rate"]
-        elif row.get("Is_Marquee", False):
-            display_rate = row["Unit Rate"]
-            factor = 1.0 + 0.5 * (weeks - 1) if weeks > 1 else 1.0
-        elif row.get("Is_Grandstand", False):
-            display_rate = row["Unit Rate"]
-            factor = 1.0 + 0.5 * (weeks - 2) if weeks > 2 else 1.0
+        # UPGRADED v88.0: The Boss Rule - Universal 0.5x Multiplier Framework 
+        if row.get("Is_Flooring") and weeks >= 4 and row.get("Base_Block_Rate", 0) > 0:
+            factor = float(math.ceil(weeks / 4.0))
+            display_rate = row["Base_Block_Rate"]
         else:
-            display_rate = row["Unit Rate"]; factor = float(weeks)
+            factor = 1.0 + 0.5 * (weeks - 1) if weeks > 1 else 1.0
+            display_rate = row.get("Base_1Wk_Rate", row.get("Unit Rate"))
 
         if override > 0:
             display_rate = override; factor = 1.0
@@ -619,6 +604,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     grand_total_calc = h_tot_c + final_labour_pool_sum + final_waiver_sum + final_cartage_sum
     st.markdown(f"<div class='gt-banner'>GRAND TOTAL (EX GST): ${grand_total_calc:,.2f}</div>", unsafe_allow_html=True)
     
+    # Document compilation lines text mapping for black header PDF logs
     structural_math_dict = {"LABOUR": [], "LOGISTICS": [], "DAMAGE WAIVER": []}
     
     if st.session_state.overrides_dict.get("labour_total_global_override", -1.0) >= 0:
