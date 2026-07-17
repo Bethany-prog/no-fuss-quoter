@@ -71,7 +71,7 @@ struct_db = pd.DataFrame(NATIVE_STRUCTURES)
 flooring_db = pd.DataFrame(NATIVE_FLOORING)
 
 # ==============================================================================
-# PERFORMANCE CACHED PROCESSING ENGINES (HARDENED ROUTING HOOK)
+# PERFORMANCE CACHED PROCESSING ENGINES
 # ==============================================================================
 @st.cache_data(show_spinner=False, ttl=300)
 def fetch_depot_distance(address_string):
@@ -79,7 +79,7 @@ def fetch_depot_distance(address_string):
         import time
         from geopy.geocoders import Nominatim
         from geopy.distance import geodesic
-        custom_agent = f"louis_quoter_v88_{int(time.time())}"
+        custom_agent = f"louis_quoter_v89_{int(time.time())}"
         geolocator = Nominatim(user_agent=custom_agent, timeout=4)
         loc_data = geolocator.geocode(address_string + ", Victoria, Australia")
         if loc_data:
@@ -349,6 +349,7 @@ elif selected_cat == "Flooring":
                 per_sheet_lab = (actual_supplied_sqm * f_lab) / num_sheets_needed
                 per_sheet_kg = (actual_supplied_sqm * f_kg) / num_sheets_needed
                 
+                # UPGRADED v89.0: Strict singular sheet append pipeline execution with zero automatic child additions
                 new_f_df = pd.DataFrame([{
                     "Qty": num_sheets_needed, "Product": f"{target_item} (3 SQM Sheets)", "Unit Rate": per_sheet_1wk, "Min_Lab": 0, "Raw_Lab": num_sheets_needed * per_sheet_lab,
                     "Lab_Math": f"Supa-Trac Matrix: {num_sheets_needed:,.0f} Sheets (supplying {actual_supplied_sqm:,.2f} SQM) x ${per_sheet_lab:.2f}/sheet", 
@@ -357,30 +358,6 @@ elif selected_cat == "Flooring":
                     "Base_1Wk_Rate": per_sheet_1wk, "Base_Block_Rate": per_sheet_block, "Is_Grandstand": False
                 }])
                 st.session_state.df = pd.concat([st.session_state.df, new_f_df], ignore_index=True)
-                
-                if f_input_method == "Enter Dimensions (Width x Length)" and f_w_input and f_w_input > 0:
-                    match_e = flooring_db[flooring_db["Product Name"] == "Supa-Trac Edging"]
-                    if not match_e.empty:
-                        e_rate_per_m = float(match_e.iloc[0]["1-Week Rate"])
-                        e_block_per_m = float(match_e.iloc[0]["4-Week Block"])
-                        e_lab_per_m = float(match_e.iloc[0]["Labour"])
-                        e_kg_per_m = float(match_e.iloc[0]["Weight"])
-                        
-                        num_e_pieces = math.ceil(f_w_input / 0.22)
-                        e_actual_lm = num_e_pieces * 0.22
-                        per_pce_1wk = e_rate_per_m * 0.22
-                        per_pce_block = e_block_per_m * 0.22
-                        per_pce_lab = e_lab_per_m * 0.22
-                        per_pce_kg = e_kg_per_m * 0.22
-                        
-                        e_df = pd.DataFrame([{
-                            "Qty": num_e_pieces, "Product": f"Supa-Trac Edging ({num_e_pieces:,.0f} Pieces)", "Unit Rate": per_pce_1wk, "Min_Lab": 0, "Raw_Lab": num_e_pieces * per_pce_lab,
-                            "Lab_Math": f"Front Width Edging: {num_e_pieces:,.0f} Pieces ({e_actual_lm:,.2f} L/M) x ${e_rate_per_m:.2f}/m", 
-                            "KG": num_e_pieces * per_pce_kg, "Is_Marquee": False,
-                            "Discount": 0.0, "Lab_Per_Unit": 0, "Base_Hire": per_pce_1wk, "Anchoring": "", "Override_Rate": 0.0, "Is_Flooring": True,
-                            "Base_1Wk_Rate": per_pce_1wk, "Base_Block_Rate": per_pce_block, "Is_Grandstand": False
-                        }])
-                        st.session_state.df = pd.concat([st.session_state.df, e_df], ignore_index=True)
 
             else:
                 new_f_df = pd.DataFrame([{
@@ -436,7 +413,6 @@ if st.session_state.df is not None and not st.session_state.df.empty:
         qty, dm = row["Qty"], (1 - (row["Discount"]/100))
         total_kg += row["KG"]
         
-        # UPGRADED v88.0: The Boss Rule - Universal 0.5x Multiplier Framework 
         if row.get("Is_Flooring") and weeks >= 4 and row.get("Base_Block_Rate", 0) > 0:
             factor = float(math.ceil(weeks / 4.0))
             display_rate = row["Base_Block_Rate"]
