@@ -218,7 +218,6 @@ st.session_state.start_date_val = start_d
 end_d = c_km_sep.date_input("End Date", value=start_d, format="DD/MM/YYYY", key=f"ed_base_{st.session_state.reset_key_seed}")
 weeks = math.ceil(((end_d - start_d).days) / 7) or 1
 
-# UPGRADED v95.0: Streamlined logistics section with explicit focus on core functional inputs
 st.markdown("**🚛 Active Transport Routing Distance**")
 c_km1, c_km2 = st.columns([1, 4])
 new_manual_km = c_km1.number_input("One-Way KM", min_value=0.0, value=float(st.session_state.km) if st.session_state.km > 0 else None, placeholder="0.0")
@@ -235,7 +234,8 @@ waiver_mode = l3.segmented_control("Damage Waiver", ["Charge", "Free"], default=
 # 7. SINGLE HUB COMPONENT WORKSPACE
 # ==============================================================================
 st.divider()
-st.markdown("### ➕ CATALOG COMPONENT HUB")
+# UPGRADED v96.0: Rectified spelling of 'Catalogue' to align with regional standards
+st.markdown("### ➕ CATALOGUE COMPONENT HUB")
 
 selected_cat = st.selectbox("Choose Category to Load", ["Marquees", "Flooring", "Grandstands"])
 
@@ -542,7 +542,7 @@ if st.session_state.df is not None and not st.session_state.df.empty:
     with st.container(border=True):
         r_w1, r_w2, r_w3 = st.columns([3, 1.5, 1.5])
         r_w1.markdown(f"**🛡️ Waiver: Equipment Damage Indemnity**<br><span style='color:gray; font-size:14px;'>Default: ${waiver_eligible_total:,.2f} eligible product hire x 7%</span>", unsafe_allow_html=True)
-        new_waiv_val = r_w2.number_input("InputW", min_value=0.0, value=None if saved_waiv_override < 0 else float(saved_waiv_override), placeholder=f"Auto: ${auto_waiver_total:,.2f}", key="f_w_global", label_visibility="collapsed")
+        new_waiv_val = r_w2.number_input("InputW", min_value=0.0, value=None if saved_waiv_override < 0 else float(saved_waiv_override), placeholder=f"Auto: ${auto_waiver_total:,.2f}", key="f_w_global", fill_value=None, label_visibility="collapsed")
         final_waiver_sum = new_waiv_val if new_waiv_val is not None else auto_waiver_total
         r_w3.markdown(f"<h3 style='text-align: right; margin-top: 0; color: #1E88E5;'>${final_waiver_sum:,.2f}</h3>", unsafe_allow_html=True)
         target_waiv_flag = new_waiv_val if new_waiv_val is not None else -1.0
