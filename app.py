@@ -4,6 +4,7 @@ import pandas as pd
 from datetime import date, datetime, timedelta
 from fpdf import FPDF
 import re
+import io
 
 # ==============================================================================
 # 0. NATIVE INTEGRATED MASTER DATA ARCHIVE (ZERO EXTERNAL FILE DEPENDENCY)
@@ -79,13 +80,12 @@ def fetch_depot_distance(address_string):
         import time
         from geopy.geocoders import Nominatim
         from geopy.distance import geodesic
-        custom_agent = f"louis_quoter_v89_{int(time.time())}"
+        custom_agent = f"louis_quoter_v91_{int(time.time())}"
         geolocator = Nominatim(user_agent=custom_agent, timeout=4)
         loc_data = geolocator.geocode(address_string + ", Victoria, Australia")
         if loc_data:
             return round(geodesic((DEPOT_LAT, DEPOT_LON), (loc_data.latitude, loc_data.longitude)).kilometers * 1.15, 1)
-    except Exception:
-        pass
+    except Exception: pass
     return None
 
 @st.cache_data(show_spinner=False)
@@ -148,8 +148,140 @@ def cached_pdf_generator(subtotal, labour, waiver, cartage, grand, weeks, final_
     try:
         raw_pd = pdf.output(dest='S')
         return raw_pd.encode('latin-1', 'replace') if isinstance(raw_pd, str) else bytes(raw_pd)
-    except:
-        return bytes(pdf.output())
+    except: return bytes(pdf.output())
+
+# UPGRADED v91.0: Excel Template mirroring exact SQM-to-sheet proportional charge mechanics
+@st.cache_data(show_spinner=False)
+def generate_supatrac_formula_sheet():
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    
+    wb = Workbook()
+    
+    ws1 = wb.active
+    ws1.title = "Geometry & Inventory"
+    ws1.views.sheetView[0].showGridLines = True
+    
+    title_font = Font(name="Calibri", size=14, bold=True, color="FFFFFF")
+    header_font = Font(name="Calibri", size=11, bold=True, color="1A1D2D")
+    bold_font = Font(name="Calibri", size=11, bold=True)
+    
+    navy_fill = PatternFill(start_color="1A1D2D", fill_type="solid")
+    light_fill = PatternFill(start_color="F4F6F9", fill_type="solid")
+    accent_fill = PatternFill(start_color="E3F2FD", fill_type="solid")
+    
+    thin_border = Border(left=Side(style='thin', color='D0D4DC'), right=Side(style='thin', color='D0D4DC'),
+                         top=Side(style='thin', color='D0D4DC'), bottom=Side(style='thin', color='D0D4DC'))
+    
+    ws1.merge_cells("A1:D1")
+    ws1["A1"] = "SUPA-TRAC LIVE GEOMETRY & QUANTITY ARCHIVE"
+    ws1["A1"].font = title_font
+    ws1["A1"].fill = navy_fill
+    ws1["A1"].alignment = Alignment(horizontal="center")
+    
+    ws1["A3"] = "Base Item Specifications (Inputs)"
+    ws1["A3"].font = header_font
+    ws1["A3"].fill = light_fill
+    ws1.merge_cells("A3:B3")
+    
+    ws1["C3"] = "Automated Quantity Outputs (Formulas)"
+    ws1["C3"].font = header_font
+    ws1["C3"].fill = accent_fill
+    ws1.merge_cells("C3:D3")
+    
+    ws1["A4"] = "Target Area Coverage Required (SQM)"
+    ws1["B4"] = 50.00
+    ws1["B4"].font = bold_font
+    
+    ws1["A5"] = "Single Physical Sheet Coverage (SQM)"
+    ws1["B5"] = 3.00
+    
+    ws1["A6"] = "Single Physical Sheet Weight (KG)"
+    ws1["B6"] = 4.50
+    
+    ws1["C4"] = "Total Sheets Billable Required"
+    ws1["D4"] = "=CEILING(B4/B5, 1)"
+    ws1["D4"].font = bold_font
+    
+    ws1["C5"] = "Total Quoted Revenue Area (SQM)"
+    ws1["D5"] = "=B4"
+    
+    ws1["C6"] = "Total Physical Floor Mass (KG)"
+    ws1["D6"] = "=D4*B6"
+    
+    for r in range(3, 7):
+        for c in range(1, 5): ws1.cell(row=r, column=c).border = thin_border
+            
+    ws2 = wb.create_sheet(title="Pricing & Multipliers")
+    ws2.views.sheetView[0].showGridLines = True
+    
+    ws2.merge_cells("A1:D1")
+    ws2["A1"] = "SUPA-TRAC FINANCIAL ENGINE & TIME FACTORS"
+    ws2["A1"].font = title_font
+    ws2["A1"].fill = navy_fill
+    ws2["A1"].alignment = Alignment(horizontal="center")
+    
+    ws2["A3"] = "Base Cost Assumptions"
+    ws2["A3"].font = header_font
+    ws2["A3"].fill = light_fill
+    ws2.merge_cells("A3:B3")
+    
+    ws2["C3"] = "Project Multipliers & Timeline"
+    ws2["C3"].font = header_font
+    ws2["C3"].fill = light_fill
+    ws2.merge_cells("C3:D3")
+    
+    ws2["A4"] = "Base Hire Cost (Per SQM / Week 1)"
+    ws2["B4"] = 11.55
+    ws2["A5"] = "Base Block Cost (Per SQM / 4-Wk Block)"
+    ws2["B5"] = 25.00
+    ws2["A6"] = "Dedicated Installation Labour (Per Sheet)"
+    ws2["B6"] = 4.65
+    
+    ws2["C4"] = "Input Project Timeline (Weeks)"
+    ws2["D4"] = 1
+    ws2["D4"].font = bold_font
+    
+    ws2["C5"] = "Calculated Multi-Week Factor"
+    ws2["D5"] = "=IF(D4>=4, CEILING(D4/4,1), 1+(0.5*(D4-1)))"
+    ws2["D5"].font = bold_font
+    
+    ws2["A9"] = "Final Financial Summary Outputs"
+    ws2["A9"].font = header_font
+    ws2["A9"].fill = accent_fill
+    ws2.merge_cells("A9:D9")
+    
+    ws2["A10"] = "Total Revenue Equipment Hire Cost"
+    ws2["D10"] = "='Geometry & Inventory'!B4*IF(D4>=4, B5, B4)*D5"
+    ws2["D10"].font = bold_font
+    
+    ws2["A11"] = "Dynamic Sheet Charge-Out Rate"
+    ws2["D11"] = "=D10/'Geometry & Inventory'!D4"
+    ws2["D11"].font = bold_font
+    
+    ws2["A12"] = "Total Standalone Setup Labour Cost"
+    ws2["D12"] = "='Geometry & Inventory'!D4*B6"
+    
+    ws2["A13"] = "Allocated Damage Waiver Fee (7%)"
+    ws2["D13"] = "=D10*0.07"
+    
+    ws2["A14"] = "GRAND TOTAL ESTIMATE (EX GST)"
+    ws2["D14"] = "=SUM(D10,D12,D13)"
+    ws2["D14"].font = Font(name="Calibri", size=11, bold=True, color="004D40")
+    ws2["D14"].fill = accent_fill
+
+    for r in list(range(3, 7)) + list(range(9, 15)):
+        for c in range(1, 5): ws2.cell(row=r, column=c).border = thin_border
+
+    for ws in [ws1, ws2]:
+        for col in ws.columns:
+            max_len = max(len(str(cell.value or '')) for cell in col)
+            col_letter = re.sub(r'[^A-Z]', '', col[0].coordinate)
+            ws.column_dimensions[col_letter].width = max(max_len + 3, 12)
+            
+    buffer = io.BytesIO()
+    wb.save(buffer)
+    return buffer.getvalue()
 
 # ==============================================================================
 # SMART LOGIC HOOKS
@@ -341,32 +473,38 @@ elif selected_cat == "Flooring":
             f_lab = float(match_f.iloc[0]["Labour"])
             f_kg = float(match_f.iloc[0]["Weight"])
             
-            if "supa" in target_item.lower() and "edging" not in target_item.lower():
-                num_sheets_needed = math.ceil(cov_input / 3.0)
-                actual_supplied_sqm = num_sheets_needed * 3.0  
-                per_sheet_1wk = (actual_supplied_sqm * f_rate) / num_sheets_needed
-                per_sheet_block = (actual_supplied_sqm * f_block) / num_sheets_needed
-                per_sheet_lab = (actual_supplied_sqm * f_lab) / num_sheets_needed
-                per_sheet_kg = (actual_supplied_sqm * f_kg) / num_sheets_needed
-                
-                # UPGRADED v89.0: Strict singular sheet append pipeline execution with zero automatic child additions
-                new_f_df = pd.DataFrame([{
-                    "Qty": num_sheets_needed, "Product": f"{target_item} (3 SQM Sheets)", "Unit Rate": per_sheet_1wk, "Min_Lab": 0, "Raw_Lab": num_sheets_needed * per_sheet_lab,
-                    "Lab_Math": f"Supa-Trac Matrix: {num_sheets_needed:,.0f} Sheets (supplying {actual_supplied_sqm:,.2f} SQM) x ${per_sheet_lab:.2f}/sheet", 
-                    "KG": num_sheets_needed * per_sheet_kg, "Is_Marquee": False,
-                    "Discount": 0.0, "Lab_Per_Unit": 0, "Base_Hire": per_sheet_1wk, "Anchoring": "", "Override_Rate": 0.0, "Is_Flooring": True,
-                    "Base_1Wk_Rate": per_sheet_1wk, "Base_Block_Rate": per_sheet_block, "Is_Grandstand": False
-                }])
-                st.session_state.df = pd.concat([st.session_state.df, new_f_df], ignore_index=True)
+            # UPGRADED v91.0: Dynamically calculates proportional sheet rate while allocation rounds up to whole count
+            num_sheets_needed = math.ceil(cov_input / 3.0)
+            
+            # Duration selection to get base rate
+            base_sqm_rate = f_block if weeks >= 4 and f_block > 0 else f_rate
+            time_factor = 1.0 + 0.5 * (weeks - 1) if weeks > 1 else 1.0
+            if weeks >= 4 and f_block > 0:
+                time_factor = float(math.ceil(weeks / 4.0))
 
-            else:
-                new_f_df = pd.DataFrame([{
-                    "Qty": cov_input, "Product": target_item, "Unit Rate": f_rate, "Min_Lab": 0, "Raw_Lab": cov_input * f_lab,
-                    "Lab_Math": f"{target_item}: {cov_input:,.0f} SQM area x ${f_lab:.2f}", "KG": cov_input * f_kg, "Is_Marquee": False,
-                    "Discount": 0.0, "Lab_Per_Unit": 0, "Base_Hire": f_rate, "Anchoring": "", "Override_Rate": 0.0, "Is_Flooring": True,
-                    "Base_1Wk_Rate": f_rate, "Base_Block_Rate": f_block, "Is_Grandstand": False
-                }])
-                st.session_state.df = pd.concat([st.session_state.df, new_f_df], ignore_index=True)
+            total_target_revenue = cov_input * base_sqm_rate * time_factor
+            proportional_sheet_rate = total_target_revenue / num_sheets_needed
+
+            new_f_df = pd.DataFrame([{
+                "Qty": num_sheets_needed, 
+                "Product": f"{target_item} (Allocating {num_sheets_needed} Sheets for {cov_input:g} SQM Request)", 
+                "Unit Rate": proportional_sheet_rate, 
+                "Min_Lab": 0, 
+                "Raw_Lab": num_sheets_needed * f_lab,
+                "Lab_Math": f"{target_item}: Layering {num_sheets_needed} sheets x ${f_lab:.2f}", 
+                "KG": num_sheets_needed * f_kg, 
+                "Is_Marquee": False,
+                "Discount": 0.0, 
+                "Lab_Per_Unit": 0, 
+                "Base_Hire": proportional_sheet_rate, 
+                "Anchoring": "", 
+                "Override_Rate": 0.0, 
+                "Is_Flooring": True,
+                "Base_1Wk_Rate": proportional_sheet_rate, 
+                "Base_Block_Rate": proportional_sheet_rate, 
+                "Is_Grandstand": False
+            }])
+            st.session_state.df = pd.concat([st.session_state.df, new_f_df], ignore_index=True)
             st.rerun()
 
 elif selected_cat == "Grandstands":
@@ -413,9 +551,9 @@ if st.session_state.df is not None and not st.session_state.df.empty:
         qty, dm = row["Qty"], (1 - (row["Discount"]/100))
         total_kg += row["KG"]
         
-        if row.get("Is_Flooring") and weeks >= 4 and row.get("Base_Block_Rate", 0) > 0:
-            factor = float(math.ceil(weeks / 4.0))
-            display_rate = row["Base_Block_Rate"]
+        if row.get("Is_Flooring"):
+            factor = 1.0  # Proportional sheet calculation pre-calculates the duration factor
+            display_rate = row["Unit Rate"]
         else:
             factor = 1.0 + 0.5 * (weeks - 1) if weeks > 1 else 1.0
             display_rate = row.get("Base_1Wk_Rate", row.get("Unit Rate"))
@@ -607,5 +745,10 @@ if st.session_state.df is not None and not st.session_state.df.empty:
 # 10. DOWNLOAD ZONE
 # ==============================================================================
     st.markdown("")  
+    action_col_1, action_col_2 = st.columns(2)
+    
     pdf_b = cached_pdf_generator(h_tot_c, final_labour_pool_sum, final_waiver_sum, final_cartage_sum, grand_total_calc, weeks, final_pdf_items, structural_math_dict, job_name_input or "Project_Quote")
-    st.download_button("📥 DOWNLOAD DETAILED AUDIT PDF", pdf_b, file_name=f"{(job_name_input or 'Quote').replace(' ', '_')}_Analysis.pdf", mime="application/pdf", use_container_width=True)
+    action_col_1.download_button("📥 DOWNLOAD DETAILED AUDIT PDF", pdf_b, file_name=f"{(job_name_input or 'Quote').replace(' ', '_')}_Analysis.pdf", mime="application/pdf", use_container_width=True)
+
+    excel_blueprint_bytes = generate_supatrac_formula_sheet()
+    action_col_2.download_button("📊 DOWNLOAD LIVE EXCEL FORMULA SHEET", excel_blueprint_bytes, file_name="SupaTrac_Mathematical_Engine_Blueprint.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
