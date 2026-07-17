@@ -79,7 +79,7 @@ def fetch_depot_distance(address_string):
         import time
         from geopy.geocoders import Nominatim
         from geopy.distance import geodesic
-        custom_agent = f"louis_quoter_v93_{int(time.time())}"
+        custom_agent = f"louis_quoter_v94_{int(time.time())}"
         geolocator = Nominatim(user_agent=custom_agent, timeout=4)
         loc_data = geolocator.geocode(address_string + ", Victoria, Australia")
         if loc_data:
@@ -277,7 +277,9 @@ if selected_cat == "Marquees":
         
     if not filtered_df.empty:
         target_item = st.selectbox("Discovered configuration options:", filtered_df["Configuration"].tolist(), key="marq_res")
-        qty_input = st.number_input("Structure Quantity Count", min_value=1, value=None, placeholder="Type quantity...", key="marq_qty")
+        
+        # UPGRADED v94.0: Set default quantity safely to exactly 1
+        qty_input = st.number_input("Structure Quantity Count", min_value=1, value=1, key="marq_qty")
         anch_type = st.segmented_control("Anchoring Method Selection", ["Pegged", "Weighted"], default="Pegged", key="marq_anch")
         
         if st.button("Add Structural Configuration") and target_item:
@@ -339,7 +341,6 @@ elif selected_cat == "Flooring":
             f_lab = float(match_f.iloc[0]["Labour"])
             f_kg = float(match_f.iloc[0]["Weight"])
             
-            # UPGRADED v93.0: Enforce pure SQM pipeline scaling for non-SupaTrac flexible roll items
             if "supa" in target_item.lower():
                 num_sheets_needed = math.ceil(cov_input / 3.0)
                 base_sqm_rate = f_block if weeks >= 4 and f_block > 0 else f_rate
@@ -361,7 +362,6 @@ elif selected_cat == "Flooring":
                     "Base_1Wk_Rate": proportional_sheet_rate, "Base_Block_Rate": proportional_sheet_rate, "Is_Grandstand": False
                 }])
             else:
-                # Continuous rollout roll items are processed cleanly by true SQM parameters
                 new_f_df = pd.DataFrame([{
                     "Qty": cov_input, 
                     "Product": f"{target_item} (Billed per native SQM)", 
@@ -420,13 +420,11 @@ if st.session_state.df is not None and not st.session_state.df.empty:
         qty, dm = row["Qty"], (1 - (row["Discount"]/100))
         total_kg += row["KG"]
         
-        # Split calculation factors based on pre-compiled values or flexible items
         if row.get("Is_Flooring"):
             if "supa" in str(row["Product"]).lower():
-                factor = 1.0  # Supa-Trac pre-calculates structural sheet values completely
+                factor = 1.0  
                 display_rate = row["Unit Rate"]
             else:
-                # Flexible rollout items follow standard multi-week parameters perfectly
                 if weeks >= 4 and row.get("Base_Block_Rate", 0) > 0:
                     factor = float(math.ceil(weeks / 4.0))
                     display_rate = row["Base_Block_Rate"]
