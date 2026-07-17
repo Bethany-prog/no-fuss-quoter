@@ -73,20 +73,6 @@ flooring_db = pd.DataFrame(NATIVE_FLOORING)
 # ==============================================================================
 # PERFORMANCE CACHED PROCESSING ENGINES
 # ==============================================================================
-@st.cache_data(show_spinner=False, ttl=300)
-def fetch_depot_distance(address_string):
-    try:
-        import time
-        from geopy.geocoders import Nominatim
-        from geopy.distance import geodesic
-        custom_agent = f"louis_quoter_v94_{int(time.time())}"
-        geolocator = Nominatim(user_agent=custom_agent, timeout=4)
-        loc_data = geolocator.geocode(address_string + ", Victoria, Australia")
-        if loc_data:
-            return round(geodesic((DEPOT_LAT, DEPOT_LON), (loc_data.latitude, loc_data.longitude)).kilometers * 1.15, 1)
-    except Exception: pass
-    return None
-
 @st.cache_data(show_spinner=False)
 def cached_pdf_generator(subtotal, labour, waiver, cartage, grand, weeks, final_pdf_items, structural_math_dict, job_name):
     def clean_text(txt):
@@ -215,7 +201,6 @@ if 'df' not in st.session_state:
 if 'km' not in st.session_state: st.session_state.km = 0.0
 if 'start_date_val' not in st.session_state: st.session_state.start_date_val = date.today()
 if 'reset_key_seed' not in st.session_state: st.session_state.reset_key_seed = 0
-if 'site_address_str' not in st.session_state: st.session_state.site_address_str = ""
 
 if 'saved_cartage_mode' not in st.session_state: st.session_state.saved_cartage_mode = "Charge"
 if 'saved_labour_mode' not in st.session_state: st.session_state.saved_labour_mode = "Separate"
@@ -233,28 +218,12 @@ st.session_state.start_date_val = start_d
 end_d = c_km_sep.date_input("End Date", value=start_d, format="DD/MM/YYYY", key=f"ed_base_{st.session_state.reset_key_seed}")
 weeks = math.ceil(((end_d - start_d).days) / 7) or 1
 
-input_addr = st.text_input("🏠 Delivery Site Address", placeholder="Type venue address or suburb (e.g. Cranbourne, Victoria)...", key="address_input_box")
-if input_addr and input_addr.strip() != st.session_state.site_address_str:
-    try:
-        new_dist = fetch_depot_distance(input_addr.strip())
-        if new_dist is not None:
-            st.session_state.km = new_dist
-            st.session_state.site_address_str = input_addr.strip()
-            st.toast(f"📍 Target verified: {st.session_state.km} KM", icon="✅")
-        else:
-            st.warning("⚠️ Auto-routing server is busy. Please manually enter the One-Way KM below.")
-            st.session_state.site_address_str = input_addr.strip()
-    except Exception:
-        st.warning("⚠️ Auto-routing server is busy. Please manually enter the One-Way KM below.")
-        st.session_state.site_address_str = input_addr.strip()
-    st.rerun()
-
+# UPGRADED v95.0: Streamlined logistics section with explicit focus on core functional inputs
 st.markdown("**🚛 Active Transport Routing Distance**")
 c_km1, c_km2 = st.columns([1, 4])
 new_manual_km = c_km1.number_input("One-Way KM", min_value=0.0, value=float(st.session_state.km) if st.session_state.km > 0 else None, placeholder="0.0")
 if new_manual_km is not None and new_manual_km != float(st.session_state.km): 
     st.session_state.km = new_manual_km
-    st.session_state.site_address_str = "Custom Set Coordinate"
 c_km2.info(f"Routing evaluations active at **{st.session_state.km} One-Way KM** tracing from source depot. Duration: {weeks} Week(s).")
 
 l1, l2, l3 = st.columns(3)
@@ -277,8 +246,6 @@ if selected_cat == "Marquees":
         
     if not filtered_df.empty:
         target_item = st.selectbox("Discovered configuration options:", filtered_df["Configuration"].tolist(), key="marq_res")
-        
-        # UPGRADED v94.0: Set default quantity safely to exactly 1
         qty_input = st.number_input("Structure Quantity Count", min_value=1, value=1, key="marq_qty")
         anch_type = st.segmented_control("Anchoring Method Selection", ["Pegged", "Weighted"], default="Pegged", key="marq_anch")
         
